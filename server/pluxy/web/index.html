@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Pluxy · Configuration</title>
+<link rel="icon" type="image/png" href="/favicon.png" />
+<style>
+  :root{--bg:#0d0f14;--card:#161a23;--accent:#e5a00d;--accent2:#46c1ff;--txt:#e7eaf0;--muted:#8a93a6;--ok:#3ad29f;--line:#232938}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--txt)}
+  header{display:flex;align-items:center;gap:14px;padding:20px 28px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--bg);z-index:10}
+  header h1{font-size:22px;margin:0;letter-spacing:.5px}
+  .logo{width:38px;height:38px;object-fit:contain}
+  .badge{font-size:12px;color:var(--muted);border:1px solid var(--line);padding:3px 9px;border-radius:20px}
+  main{max-width:880px;margin:0 auto;padding:28px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:22px 24px;margin-bottom:20px}
+  .card h2{margin:0 0 4px;font-size:16px}
+  .card p.desc{margin:0 0 18px;color:var(--muted);font-size:13px}
+  .row{display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-top:1px solid var(--line)}
+  .row:first-of-type{border-top:none}
+  .row .label{font-size:14px}
+  .row .hint{display:block;color:var(--muted);font-size:12px;margin-top:3px;max-width:520px}
+  /* toggle */
+  .switch{position:relative;width:48px;height:26px;flex:0 0 auto}
+  .switch input{opacity:0;width:0;height:0}
+  .slider{position:absolute;inset:0;background:#39415a;border-radius:26px;transition:.2s;cursor:pointer}
+  .slider:before{content:"";position:absolute;height:20px;width:20px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.2s}
+  input:checked+.slider{background:var(--accent)}
+  input:checked+.slider:before{transform:translateX(22px)}
+  input,select{font-family:inherit}
+  select,input[type=number],input[type=text]{background:#0f1219;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:14px;min-width:120px}
+  .range-wrap{display:flex;align-items:center;gap:12px}
+  input[type=range]{accent-color:var(--accent);width:200px}
+  .val{font-variant-numeric:tabular-nums;color:var(--accent2);min-width:78px;text-align:right;font-size:14px}
+  .actions{position:sticky;bottom:0;display:flex;gap:12px;justify-content:flex-end;padding:16px 0}
+  button{border:none;border-radius:10px;padding:11px 20px;font-size:14px;font-weight:600;cursor:pointer}
+  .save{background:var(--accent);color:#1a1205}
+  .scan{background:#2a3142;color:var(--txt)}
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--ok);color:#06241a;padding:12px 22px;border-radius:10px;font-weight:600;transition:.3s;opacity:0}
+  .toast.show{transform:translateX(-50%) translateY(0);opacity:1}
+  textarea{width:100%;background:#0f1219;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:10px;font-family:Consolas,monospace;font-size:13px;min-height:70px;resize:vertical}
+  .pill{font-size:11px;padding:2px 8px;border-radius:20px;background:#2a3142;color:var(--accent2)}
+</style>
+</head>
+<body>
+<header>
+  <img class="logo" src="/logo.png" alt="Pluxy" />
+  <h1>Pluxy</h1>
+  <span class="badge">Serveur média · RTX 5080 / NVENC</span>
+</header>
+
+<main>
+  <!-- ============ TRANSCODAGE / GPU ============ -->
+  <section class="card">
+    <h2>⚙️ Transcodage matériel (NVENC)</h2>
+    <p class="desc">Pipeline strictement NVIDIA : NVDEC → CUDA → <span class="pill">hevc_nvenc</span></p>
+
+    <div class="row">
+      <div class="label">Accélération matérielle (NVENC/NVDEC)
+        <span class="hint">Désactiver bascule sur encodage logiciel x265 (déconseillé en 4K).</span></div>
+      <label class="switch"><input type="checkbox" id="hw"><span class="slider"></span></label>
+    </div>
+
+    <div class="row">
+      <div class="label">Forcer le transcodage
+        <span class="hint">Ignore Direct Play même si le client supporte le fichier.</span></div>
+      <label class="switch"><input type="checkbox" id="force"><span class="slider"></span></label>
+    </div>
+
+    <div class="row">
+      <div class="label">Preset NVENC
+        <span class="hint">p1 = rapide · p7 = qualité max. p5 = bon compromis 4K temps réel.</span></div>
+      <select id="preset">
+        <option>p1</option><option>p2</option><option>p3</option><option>p4</option>
+        <option>p5</option><option>p6</option><option>p7</option>
+      </select>
+    </div>
+  </section>
+
+  <!-- ============ BITRATE / QUALITÉ ============ -->
+  <section class="card">
+    <h2>📶 Débit & qualité réseau</h2>
+    <p class="desc">Bride la bande passante pour absorber la saturation du Wi-Fi 5 GHz.</p>
+
+    <div class="row">
+      <div class="label">Débit max (Bitrate Cap)
+        <span class="hint">Au-delà, transcodage NVENC automatique vers cette cible.</span></div>
+      <div class="range-wrap">
+        <input type="range" id="bitrate" min="5" max="120" step="5">
+        <span class="val" id="bitrateVal">50 Mbps</span>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="label">Tone Mapping HDR → SDR
+        <span class="hint">Pour les écrans non-HDR. Filtres CUDA + zscale/tonemap.</span></div>
+      <select id="tonemap">
+        <option value="auto">Auto (si client SDR)</option>
+        <option value="always">Toujours</option>
+        <option value="never">Jamais</option>
+      </select>
+    </div>
+
+    <div class="row">
+      <div class="label">Algorithme de tone mapping</div>
+      <select id="tonealgo">
+        <option>hable</option><option>mobius</option>
+        <option>reinhard</option><option>bt2390</option>
+      </select>
+    </div>
+  </section>
+
+  <!-- ============ AUDIO ============ -->
+  <section class="card">
+    <h2>🔊 Audio (Philips 803 · ARC)</h2>
+    <p class="desc">Downmix des pistes lossless (TrueHD/DTS-HD) sans toucher au flux vidéo 4K.</p>
+
+    <div class="row">
+      <div class="label">Downmix automatique lossless
+        <span class="hint">TrueHD / DTS-HD / FLAC → codec compatible ARC.</span></div>
+      <label class="switch"><input type="checkbox" id="downmix"><span class="slider"></span></label>
+    </div>
+
+    <div class="row">
+      <div class="label">Codec audio cible</div>
+      <select id="acodec">
+        <option value="ac3">AC3 (Dolby Digital · universel ARC)</option>
+        <option value="eac3">EAC3 (Dolby Digital+)</option>
+      </select>
+    </div>
+
+    <div class="row">
+      <div class="label">Débit audio</div>
+      <select id="abitrate">
+        <option value="384">384 kbps</option>
+        <option value="448">448 kbps</option>
+        <option value="640">640 kbps</option>
+      </select>
+    </div>
+  </section>
+
+  <!-- ============ BUFFER CLIENT ============ -->
+  <section class="card">
+    <h2>🧊 Pré-buffer client (anti micro-coupures)</h2>
+    <p class="desc">Pré-chargement vidéo en RAM côté Android TV pour absorber le double saut Wi-Fi.</p>
+
+    <div class="row">
+      <div class="label">Taille du cache de pré-lecture
+        <span class="hint">Mémoire tampon visée par ExoPlayer avant lecture.</span></div>
+      <div class="range-wrap">
+        <input type="range" id="bufmb" min="32" max="1024" step="32">
+        <span class="val" id="bufmbVal">256 Mo</span>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="label">Buffer max (durée)
+        <span class="hint">Plafond temporel de mise en cache (ms).</span></div>
+      <div class="range-wrap">
+        <input type="range" id="maxbuf" min="30000" max="300000" step="10000">
+        <span class="val" id="maxbufVal">120 s</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ RÉSEAU / HLS ============ -->
+  <section class="card">
+    <h2>🌐 Livraison réseau</h2>
+    <div class="row">
+      <div class="label">Mode de livraison transcodé</div>
+      <select id="delivery">
+        <option value="hls">HLS segmenté (recommandé Wi-Fi)</option>
+        <option value="direct">Flux direct</option>
+      </select>
+    </div>
+    <div class="row">
+      <div class="label">Durée d'un segment HLS (s)
+        <span class="hint">Court = latence faible · Long = robustesse aux à-coups.</span></div>
+      <select id="seg">
+        <option>2</option><option>3</option><option>4</option><option>6</option>
+      </select>
+    </div>
+  </section>
+
+  <!-- ============ BIBLIOTHÈQUE ============ -->
+  <section class="card">
+    <h2>📁 Bibliothèque</h2>
+    <p class="desc">Un dossier par ligne. Re-scanner après modification.</p>
+    <textarea id="dirs" placeholder="D:/Films&#10;E:/Series"></textarea>
+  </section>
+
+  <div class="actions">
+    <button class="scan" onclick="rescan()">↻ Re-scanner</button>
+    <button class="save" onclick="save()">💾 Enregistrer</button>
+  </div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+let CFG = null;
+
+async function load(){
+  CFG = await (await fetch('/api/settings')).json();
+  const t = CFG.transcoding, a = CFG.audio, b = CFG.client_buffer, n = CFG.network, s = CFG.server;
+  hw.checked = t.hardware_acceleration;
+  force.checked = t.force_transcode;
+  preset.value = t.preset;
+  bitrate.value = t.max_bitrate_mbps; bitrateVal.textContent = t.max_bitrate_mbps+' Mbps';
+  tonemap.value = t.hdr_tone_mapping;
+  tonealgo.value = t.tone_map_algorithm;
+  downmix.checked = a.downmix_lossless;
+  acodec.value = a.target_codec;
+  abitrate.value = String(a.bitrate_kbps);
+  bufmb.value = b.target_buffer_bytes_mb; bufmbVal.textContent = b.target_buffer_bytes_mb+' Mo';
+  maxbuf.value = b.max_buffer_ms; maxbufVal.textContent = Math.round(b.max_buffer_ms/1000)+' s';
+  delivery.value = n.delivery;
+  seg.value = String(n.hls_segment_duration);
+  dirs.value = (s.media_dirs||[]).join('\n');
+}
+
+bitrate.oninput = e => bitrateVal.textContent = e.target.value+' Mbps';
+bufmb.oninput   = e => bufmbVal.textContent = e.target.value+' Mo';
+maxbuf.oninput  = e => maxbufVal.textContent = Math.round(e.target.value/1000)+' s';
+
+async function save(){
+  const patch = {
+    transcoding:{
+      hardware_acceleration: hw.checked,
+      force_transcode: force.checked,
+      preset: preset.value,
+      max_bitrate_mbps: +bitrate.value,
+      hdr_tone_mapping: tonemap.value,
+      tone_map_algorithm: tonealgo.value
+    },
+    audio:{ downmix_lossless: downmix.checked, target_codec: acodec.value, bitrate_kbps: +abitrate.value },
+    client_buffer:{ target_buffer_bytes_mb: +bufmb.value, max_buffer_ms: +maxbuf.value },
+    network:{ delivery: delivery.value, hls_segment_duration: +seg.value },
+    server:{ media_dirs: dirs.value.split('\n').map(s=>s.trim()).filter(Boolean) }
+  };
+  await fetch('/api/settings',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(patch)});
+  toastMsg('Configuration enregistrée ✓');
+}
+
+async function rescan(){
+  toastMsg('Scan en cours…');
+  const r = await (await fetch('/api/library/scan',{method:'POST'})).json();
+  toastMsg(r.indexed+' média(s) indexé(s) ✓');
+}
+
+function toastMsg(m){
+  const el = document.getElementById('toast');
+  el.textContent = m; el.classList.add('show');
+  setTimeout(()=>el.classList.remove('show'),2200);
+}
+
+load();
+</script>
+</body>
+</html>

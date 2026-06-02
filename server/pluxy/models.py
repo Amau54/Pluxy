@@ -1,0 +1,117 @@
+"""Schémas Pydantic : média analysé, capacités client, décision de lecture."""
+from __future__ import annotations
+
+from enum import Enum
+from typing import List, Optional
+
+from pydantic import BaseModel, Field
+
+
+class StreamKind(str, Enum):
+    VIDEO = "video"
+    AUDIO = "audio"
+    SUBTITLE = "subtitle"
+
+
+class MediaStream(BaseModel):
+    index: int
+    kind: StreamKind
+    codec: str
+    # Vidéo
+    width: Optional[int] = None
+    height: Optional[int] = None
+    bit_rate: Optional[int] = None          # bits/s
+    pix_fmt: Optional[str] = None
+    color_transfer: Optional[str] = None    # smpte2084 (PQ/HDR10), arib-std-b67 (HLG)...
+    color_primaries: Optional[str] = None
+    is_hdr: bool = False
+    # Audio
+    channels: Optional[int] = None
+    # Commun
+    language: Optional[str] = None
+    title: Optional[str] = None
+
+
+class MediaInfo(BaseModel):
+    path: str
+    container: str                          # mkv, mp4...
+    duration: float = 0.0                   # secondes
+    size: int = 0                           # octets
+    overall_bitrate: int = 0                # bits/s
+    streams: List[MediaStream] = Field(default_factory=list)
+
+    # Helpers ----------------------------------------------------------------
+    @property
+    def video(self) -> Optional[MediaStream]:
+        return next((s for s in self.streams if s.kind == StreamKind.VIDEO), None)
+
+    @property
+    def audios(self) -> List[MediaStream]:
+        return [s for s in self.streams if s.kind == StreamKind.AUDIO]
+
+    @property
+    def subtitles(self) -> List[MediaStream]:
+        return [s for s in self.streams if s.kind == StreamKind.SUBTITLE]
+
+
+class MediaItem(BaseModel):
+    """Entrée de bibliothèque (vue catalogue)."""
+    id: str
+    title: str
+    path: str
+    container: str
+    size: int
+    duration: float
+    width: Optional[int] = None
+    height: Optional[int] = None
+    video_codec: Optional[str] = None
+    is_hdr: bool = False
+    external_subs: List[str] = Field(default_factory=list)
+
+
+class ClientCapabilities(BaseModel):
+    """
+    Capacités annoncées par le client Android TV (ExoPlayer/MediaCodec).
+    Le Philips 803 supporte HEVC Main10 + HDR10 ; ARC classique => audio limité.
+    """
+    supports_hevc: bool = True
+    supports_h264: bool = True
+    supports_av1: bool = False
+    supports_hdr10: bool = True
+    supports_hdr: bool = True              # tout type HDR (HDR10/HLG/DV)
+    # Conteneurs lisibles directement par ExoPlayer.
+    supported_containers: List[str] = Field(
+        default_factory=lambda: ["mp4", "mkv", "webm", "ts"]
+    )
+    # Codecs audio passables vers l'ampli via ARC (passthrough) ou décodables.
+    supported_audio_codecs: List[str] = Field(
+        default_factory=lambda: ["aac", "ac3", "eac3", "mp3"]
+    )
+    max_audio_channels: int = 6
+    # Débit max que la liaison Wi-Fi du client tolère sans micro-coupures.
+    max_bitrate_mbps: Optional[int] = None
+    screen_width: int = 3840
+    screen_height: int = 2160
+
+
+class PlaybackMode(str, Enum):
+    DIRECT_PLAY = "direct_play"
+    DIRECT_STREAM = "direct_stream"
+    TRANSCODE = "transcode"
+
+
+class PlaybackDecision(BaseModel):
+    mode: PlaybackMode
+    reasons: List[str] = Field(default_factory=list)
+    # Détails effectifs du flux servi.
+    video_action: str = "copy"             # copy | transcode
+    audio_action: str = "copy"             # copy | transcode
+    tone_map: bool = False
+    target_video_codec: Optional[str] = None
+    target_audio_codec: Optional[str] = None
+    target_bitrate_mbps: Optional[int] = None
+    container: str = "mkv"
+    delivery: str = "direct"               # direct | hls
+    # URL relative que le client doit ouvrir.
+    stream_url: str = ""
+    media: Optional[MediaInfo] = None

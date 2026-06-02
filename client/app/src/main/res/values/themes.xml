@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Pluxy" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:colorBackground">#0d0f14</item>
+        <item name="colorPrimary">#e5a00d</item>
+        <item name="colorAccent">#46c1ff</item>
+        <item name="android:windowNoTitle">true</item>
+    </style>
+</resources>

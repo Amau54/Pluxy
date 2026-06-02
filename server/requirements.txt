@@ -1,0 +1,8 @@
+# Python 3.11–3.14. Les versions exactes ci-dessous embarquent des wheels
+# pré-compilés (pas de toolchain Rust requise). Sur Python <=3.12 les versions
+# épinglées d'origine (fastapi 0.115 / pydantic 2.10) conviennent aussi.
+fastapi>=0.136
+uvicorn[standard]>=0.34
+pydantic>=2.13
+aiofiles>=24.1
+python-multipart>=0.0.20

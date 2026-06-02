@@ -1,0 +1,26 @@
+# ---------- Serveur Python ----------
+server/.venv/
+**/__pycache__/
+*.pyc
+server/config.json          # config runtime (specifique a la machine)
+server/.pluxy_cache/        # segments de transcodage temporaires
+.pluxy_cache/
+
+# ---------- Client Android ----------
+client/.gradle/
+client/build/
+client/app/build/
+client/local.properties     # chemin SDK specifique a la machine (regenere par Build-APK.bat)
+client/.idea/
+client/captures/
+*.iml
+
+# ---------- Divers ----------
+.DS_Store
+Thumbs.db
+*.log
+
+# On VERSIONNE volontairement :
+#   - dist/*.apk          (acces direct aux applications)
+#   - client/gradlew*, client/gradle/wrapper/*   (build en un clic)
+#   - assets/*            (logos et generateur d'icones)
