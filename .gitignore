@@ -1,16 +1,24 @@
 # ---------- Serveur Python ----------
+# Environnement virtuel
 server/.venv/
+# Caches Python
 **/__pycache__/
 *.pyc
-server/config.json          # config runtime (specifique a la machine)
-server/.pluxy_cache/        # segments de transcodage temporaires
+# Config runtime (specifique a la machine)
+server/config.json
+# Segments de transcodage temporaires
+server/.pluxy_cache/
 .pluxy_cache/
+# Cache de metadonnees (regenere a la demande)
+server/.pluxy_meta/
+.pluxy_meta/
 
 # ---------- Client Android ----------
 client/.gradle/
 client/build/
 client/app/build/
-client/local.properties     # chemin SDK specifique a la machine (regenere par Build-APK.bat)
+# Chemin SDK specifique a la machine (regenere par Build-APK.bat)
+client/local.properties
 client/.idea/
 client/captures/
 *.iml
@@ -21,6 +29,7 @@ Thumbs.db
 *.log
 
 # On VERSIONNE volontairement :
-#   - dist/*.apk          (acces direct aux applications)
+#   - dist/*.apk                       (acces direct aux applications)
+#   - client/keystore/pluxy.jks        (cle de signature stable -> MAJ sans desinstall)
 #   - client/gradlew*, client/gradle/wrapper/*   (build en un clic)
-#   - assets/*            (logos et generateur d'icones)
+#   - assets/*                         (logos et generateur d'icones)
