@@ -42,6 +42,7 @@ class PlayerActivity : AppCompatActivity() {
 
     private val handler = Handler(Looper.getMainLooper())
     private var retries = 0
+    private var triedDirect = false
     private val aspectModes = listOf(
         AspectRatioFrameLayout.RESIZE_MODE_FIT to "Ajusté",
         AspectRatioFrameLayout.RESIZE_MODE_ZOOM to "Zoom",
@@ -237,7 +238,14 @@ class PlayerActivity : AppCompatActivity() {
         }
 
         override fun onPlayerError(error: PlaybackException) {
-            // Reconnexion automatique (réseau/HTTP) avec backoff, façon Plex.
+            // 1) Premier échec (HLS/transcode/manifeste KO) -> repli Direct Play.
+            if (!triedDirect) {
+                triedDirect = true
+                statusView.text = "Lecture directe (repli)…"
+                playDirect()
+                return
+            }
+            // 2) Sinon : reconnexion automatique avec backoff, façon Plex.
             if (retries < 3) {
                 retries++
                 statusView.text = "Reconnexion… ($retries/3)"
@@ -246,6 +254,16 @@ class PlayerActivity : AppCompatActivity() {
                 statusView.text = "Erreur lecture : ${error.errorCodeName}"
             }
         }
+    }
+
+    /** Repli : relit le fichier brut (Direct Play) sans passer par HLS/transcode. */
+    private fun playDirect() {
+        val p = player ?: return
+        val pos = p.currentPosition.coerceAtLeast(0)
+        p.setMediaItem(buildMediaItem(item, "/stream/direct/${item.id}", "direct"))
+        p.prepare()
+        if (pos > 0) p.seekTo(pos)
+        p.playWhenReady = true
     }
 
     private fun saveProgress() {

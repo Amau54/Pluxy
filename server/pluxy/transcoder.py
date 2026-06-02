@@ -139,9 +139,18 @@ def build_transcode_cmd(
             "-rc-lookahead", "20",
             "-gpu", str(tc.gpu_index),
         ]
-        # Si la source reste HDR (pas de tone map), on conserve le profil 10 bits.
+        # IMPORTANT : ne PAS forcer `-pix_fmt p010le`. Les frames décodées résident
+        # en mémoire CUDA ; un -pix_fmt déclenche une conversion CPU qui échoue
+        # ("Error reinitializing filters / Function not implemented") et empêche
+        # NVENC de démarrer. NVENC consomme directement le format CUDA de la source.
+        # On conserve seulement le profil main10 si la source est 10 bits / HDR
+        # (préserve le HDR sans conversion).
         if not decision.tone_map:
-            cmd += ["-profile:v", "main10", "-pix_fmt", "p010le"]
+            v = media.video
+            pix = (v.pix_fmt or "") if v else ""
+            is_10bit = bool(v and (v.is_hdr or "10" in pix))
+            if is_10bit:
+                cmd += ["-profile:v", "main10"]
     else:
         # Repli logiciel (signalé par le moteur de décision) — x265.
         cmd += [
