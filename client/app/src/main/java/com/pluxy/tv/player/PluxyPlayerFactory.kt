@@ -70,6 +70,9 @@ object PluxyPlayerFactory {
                     // l'afficheur (HDR statique préservé, A/V sync matérielle).
                     .setTunnelingEnabled(true)
                     .setPreferredVideoMimeType(MimeTypes.VIDEO_H265)
+                    // Langues par défaut (audio + sous-titres) : français.
+                    .setPreferredAudioLanguage("fr")
+                    .setPreferredTextLanguage("fr")
                     // 4K natif : aucun bridage de résolution côté client.
                     .clearVideoSizeConstraints()
                     .clearViewportSizeConstraints()
@@ -81,6 +84,9 @@ object PluxyPlayerFactory {
             .setLoadControl(loadControl)
             .setMediaSourceFactory(mediaSourceFactory)
             .setTrackSelector(trackSelector)
+            // Saut avant/arrière de 10 s (boutons natifs du PlayerView).
+            .setSeekBackIncrementMs(10_000)
+            .setSeekForwardIncrementMs(10_000)
             // Surdimensionne le back-buffer audio pour éviter les coupures son ARC.
             .setReleaseTimeoutMs(5000)
             .build()

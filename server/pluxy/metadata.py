@@ -11,48 +11,18 @@ Sans clé API TMDB, le module renvoie des métadonnées minimales déduites du n
 from __future__ import annotations
 
 import json
-import re
 import threading
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional
 
 import httpx
 
 from .config import ConfigManager
+from .filename import parse as parse_name
 from .models import CastMember, MediaItem, MovieMetadata
 
 TMDB_API = "https://api.themoviedb.org/3"
 IMG = "https://image.tmdb.org/t/p"
-
-# Mots-clés de release à retirer du nom de fichier.
-_JUNK = re.compile(
-    r"\b(2160p|1080p|720p|480p|4k|uhd|hdr10\+?|hdr|dolby\s*vision|dv|"
-    r"bluray|blu-ray|brrip|bdrip|web-?dl|webrip|hdtv|remux|"
-    r"x264|x265|h\.?264|h\.?265|hevc|avc|10bit|8bit|"
-    r"truehd|atmos|dts(-hd)?(\.?ma)?|ac3|eac3|aac|ddp?5\.1|dd5\.1|flac|"
-    r"multi|vff|vfq|vostfr|vo|french|truefrench|fr|en)\b",
-    re.IGNORECASE,
-)
-_YEAR = re.compile(r"(?:^|[^0-9])((?:19|20)\d{2})(?:[^0-9]|$)")
-_BRACKETS = re.compile(r"[\[\(\{][^\]\)\}]*[\]\)\}]")
-
-
-def parse_filename(name: str) -> Tuple[str, Optional[int]]:
-    """Extrait un titre propre + une année depuis un nom de fichier brut."""
-    # 1) Année cherchée sur le nom normalisé AVANT tout retrait (gère "(2024)").
-    raw = name.replace(".", " ").replace("_", " ").replace("-", " ")
-    year: Optional[int] = None
-    m = _YEAR.search(raw)
-    if m:
-        year = int(m.group(1))
-        raw = raw[: m.start(1)]               # coupe tout après l'année
-
-    # 2) Nettoyage : crochets/parenthèses puis mots-clés de release.
-    s = _BRACKETS.sub(" ", raw)
-    s = _JUNK.sub(" ", s)
-    s = re.sub(r"[\[\]\(\)\{\}]", " ", s)     # retire crochets/parenthèses orphelins
-    s = re.sub(r"\s{2,}", " ", s).strip(" -·")
-    return (s or name, year)
 
 
 class MetadataProvider:
@@ -87,7 +57,8 @@ class MetadataProvider:
             if c is not None:
                 return c
 
-        title, year = parse_filename(item.title)
+        parsed = parse_name(item.title)
+        title, year = parsed.title, parsed.year
         cfg = self.cfgm.cfg.metadata
         meta: Optional[MovieMetadata] = None
         if cfg.enabled and cfg.tmdb_api_key:
@@ -106,16 +77,30 @@ class MetadataProvider:
     def _fetch_tmdb(self, title: str, year: Optional[int],
                     key: str, lang: str) -> Optional[MovieMetadata]:
         with httpx.Client(timeout=12.0) as cli:
-            params = {"api_key": key, "query": title, "language": lang}
-            if year:
-                params["year"] = year
-            r = cli.get(f"{TMDB_API}/search/movie", params=params)
-            r.raise_for_status()
-            results = r.json().get("results", [])
+            def _search(with_year: bool):
+                params = {"api_key": key, "query": title, "language": lang}
+                if with_year and year:
+                    params["primary_release_year"] = year
+                r = cli.get(f"{TMDB_API}/search/movie", params=params)
+                r.raise_for_status()
+                return r.json().get("results", [])
+
+            # 1) recherche avec année (filtre fort), 2) repli sans année.
+            results = _search(with_year=True)
+            if not results:
+                results = _search(with_year=False)
             if not results:
                 return MovieMetadata(title=title, year=year, matched=False)
 
+            # Si une année est connue, privilégier un résultat à year ±1
+            # (décalages de sortie régionale), sinon le 1er (mieux noté).
             best = results[0]
+            if year:
+                for c in results:
+                    rd = (c.get("release_date") or "")[:4]
+                    if rd.isdigit() and abs(int(rd) - year) <= 1:
+                        best = c
+                        break
             mid = best["id"]
             d = cli.get(
                 f"{TMDB_API}/movie/{mid}",

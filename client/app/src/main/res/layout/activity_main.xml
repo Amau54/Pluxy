@@ -29,21 +29,37 @@
             android:textSize="13sp" />
 
         <Button
+            android:id="@+id/reload"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="8dp"
+            android:text="↻ Actualiser"
+            android:textColor="#1a1205"
+            android:textSize="12sp"
+            android:backgroundTint="#e5a00d" />
+
+        <Button
             android:id="@+id/changeServer"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Changer de serveur"
+            android:text="Serveur"
             android:textColor="#e7eaf0"
             android:textSize="12sp"
             android:backgroundTint="#2a3142" />
     </LinearLayout>
 
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/grid"
+    <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+        android:id="@+id/swipe"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:layout_marginTop="64dp"
-        android:clipToPadding="false" />
+        android:layout_marginTop="64dp">
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/grid"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipToPadding="false" />
+    </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
 
     <TextView
         android:id="@+id/empty"

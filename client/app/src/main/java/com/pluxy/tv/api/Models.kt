@@ -119,3 +119,11 @@ data class ClientRuntime(
     val subtitles: SubtitleConfig,
     @Json(name = "server_name") val serverName: String,
 )
+
+/** Position de reprise (watch-state) renvoyée/poussée par /api/playback/progress */
+@JsonClass(generateAdapter = true)
+data class PlaybackProgress(
+    @Json(name = "position_ms") val positionMs: Long = 0,
+    @Json(name = "duration_ms") val durationMs: Long = 0,
+    val watched: Boolean = false,
+)

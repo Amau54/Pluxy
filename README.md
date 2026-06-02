@@ -53,6 +53,15 @@ que le `versionCode` augmente.
   (broadcast UDP), choix proposé si plusieurs, repli manuel — zéro IP à configurer.
 - **Métadonnées façon Plex** (TMDB) : identification du film, synopsis, casting,
   genres, note, affiches/backdrops et **bande-annonce** YouTube.
+- **Reconnaissance de noms robuste** : parser multi-passes (titres numériques
+  *2012/1917/300*, sagas, scene-names, VOSTFR/MULTI, éditions…) validé sur 16 cas.
+- **Lecteur complet (parité Plex)** : reprise de lecture, sélection piste audio,
+  sélection/désactivation des sous-titres, vitesse (0.5×–2×), format d'image
+  (ajusté/zoom/étiré), saut ±10 s, reconnexion auto, style des sous-titres.
+- **Bibliothèque persistante** : l'index survit aux redémarrages (liste instantanée),
+  scan en arrière-plan, bouton **Actualiser** + pull-to-refresh côté app, et
+  **regroupement des titres similaires** (sagas côte à côte).
+- **Robuste sans FFmpeg** : repli automatique en Direct Play (plus d'erreur de flux).
 - **3 modes de lecture automatiques** : Direct Play / Direct Stream / Transcode.
 - **Transcodage 100 % NVIDIA** : NVDEC → CUDA → `hevc_nvenc` (RTX 5080).
 - **Tone mapping HDR10 → SDR** via filtres CUDA (`zscale`/`tonemap`).

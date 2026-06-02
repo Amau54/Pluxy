@@ -10,14 +10,20 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.Response
+import java.io.IOException
 import java.util.concurrent.TimeUnit
+
+/** Erreur réseau lisible (statut HTTP + détail) — évite les messages opaques. */
+class ApiException(val code: Int, message: String) : IOException(message)
 
 /** Client réseau Pluxy (OkHttp + Moshi). Toutes les méthodes sont suspend. */
 class PluxyApi(private val baseUrl: String) {
 
     private val http = OkHttpClient.Builder()
-        .connectTimeout(10, TimeUnit.SECONDS)
+        .connectTimeout(8, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
+        .retryOnConnectionFailure(true)
         .build()
 
     private val moshi = Moshi.Builder().add(KotlinJsonAdapterFactory()).build()
@@ -26,40 +32,54 @@ class PluxyApi(private val baseUrl: String) {
     fun abs(relative: String): String =
         if (relative.startsWith("http")) relative else baseUrl + relative
 
-    suspend fun listItems(): List<MediaItem> = withContext(Dispatchers.IO) {
-        val req = Request.Builder().url("$baseUrl/api/library/items").build()
-        http.newCall(req).execute().use { resp ->
-            val body = resp.body?.string().orEmpty()
-            val type = Types.newParameterizedType(List::class.java, MediaItem::class.java)
-            moshi.adapter<List<MediaItem>>(type).fromJson(body) ?: emptyList()
+    // --- Helpers --------------------------------------------------------- //
+    private fun Response.bodyOrThrow(): String {
+        val txt = body?.string().orEmpty()
+        if (!isSuccessful) {
+            throw ApiException(code, "Serveur: HTTP $code ${message}".trim())
         }
+        return txt
     }
 
-    suspend fun clientRuntime(): ClientRuntime = withContext(Dispatchers.IO) {
-        val req = Request.Builder().url("$baseUrl/api/settings/client").build()
-        http.newCall(req).execute().use { resp ->
-            moshi.adapter(ClientRuntime::class.java).fromJson(resp.body!!.string())!!
+    private inline fun <reified T> getJson(path: String): T = http
+        .newCall(Request.Builder().url("$baseUrl$path").build())
+        .execute().use { resp ->
+            val body = resp.bodyOrThrow()
+            moshi.adapter(T::class.java).fromJson(body)
+                ?: throw ApiException(resp.code, "Réponse vide pour $path")
         }
+
+    // --- Endpoints ------------------------------------------------------- //
+    suspend fun listItems(): List<MediaItem> = withContext(Dispatchers.IO) {
+        http.newCall(Request.Builder().url("$baseUrl/api/library/items").build())
+            .execute().use { resp ->
+                val body = resp.bodyOrThrow()
+                val type = Types.newParameterizedType(List::class.java, MediaItem::class.java)
+                moshi.adapter<List<MediaItem>>(type).fromJson(body) ?: emptyList()
+            }
     }
+
+    suspend fun rescan(): Unit = withContext(Dispatchers.IO) {
+        http.newCall(
+            Request.Builder().url("$baseUrl/api/library/scan")
+                .post("".toRequestBody(jsonMedia)).build()
+        ).execute().use { it.bodyOrThrow() }
+    }
+
+    suspend fun clientRuntime(): ClientRuntime =
+        withContext(Dispatchers.IO) { getJson("/api/settings/client") }
 
     suspend fun metadata(itemId: String, refresh: Boolean = false): MovieMetadata? =
         withContext(Dispatchers.IO) {
-            val url = "$baseUrl/api/library/items/$itemId/metadata" + if (refresh) "?refresh=true" else ""
-            val req = Request.Builder().url(url).build()
-            http.newCall(req).execute().use { resp ->
-                val body = resp.body?.string() ?: return@withContext null
-                moshi.adapter(MovieMetadata::class.java).fromJson(body)
-            }
+            runCatching {
+                getJson<MovieMetadata>(
+                    "/api/library/items/$itemId/metadata" + if (refresh) "?refresh=true" else ""
+                )
+            }.getOrNull()
         }
 
-    suspend fun serverInfo(): ServerInfo? = withContext(Dispatchers.IO) {
-        runCatching {
-            val req = Request.Builder().url("$baseUrl/api/server/info").build()
-            http.newCall(req).execute().use { resp ->
-                moshi.adapter(ServerInfo::class.java).fromJson(resp.body!!.string())
-            }
-        }.getOrNull()
-    }
+    suspend fun serverInfo(): ServerInfo? =
+        withContext(Dispatchers.IO) { runCatching { getJson<ServerInfo>("/api/server/info") }.getOrNull() }
 
     suspend fun decide(itemId: String): PlaybackDecision = withContext(Dispatchers.IO) {
         val payload = DecideRequest(itemId, DeviceProfile.capabilities())
@@ -69,7 +89,37 @@ class PluxyApi(private val baseUrl: String) {
             .post(json.toRequestBody(jsonMedia))
             .build()
         http.newCall(req).execute().use { resp ->
-            moshi.adapter(PlaybackDecision::class.java).fromJson(resp.body!!.string())!!
+            val body = resp.bodyOrThrow()
+            moshi.adapter(PlaybackDecision::class.java).fromJson(body)
+                ?: throw ApiException(resp.code, "Décision de lecture illisible")
+        }
+    }
+
+    suspend fun getProgress(itemId: String): PlaybackProgress =
+        withContext(Dispatchers.IO) {
+            runCatching { getJson<PlaybackProgress>("/api/playback/progress/$itemId") }
+                .getOrDefault(PlaybackProgress())
+        }
+
+    suspend fun setProgress(itemId: String, positionMs: Long, durationMs: Long) {
+        withContext(Dispatchers.IO) {
+            val json = """{"position_ms":$positionMs,"duration_ms":$durationMs}"""
+            runCatching {
+                http.newCall(
+                    Request.Builder().url("$baseUrl/api/playback/progress/$itemId")
+                        .post(json.toRequestBody(jsonMedia)).build()
+                ).execute().close()
+            }
+        }
+    }
+
+    suspend fun stopHls(itemId: String) {
+        withContext(Dispatchers.IO) {
+            runCatching {
+                http.newCall(
+                    Request.Builder().url("$baseUrl/stream/hls/$itemId").delete().build()
+                ).execute().close()
+            }
         }
     }
 

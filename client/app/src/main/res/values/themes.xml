@@ -6,4 +6,15 @@
         <item name="colorAccent">#46c1ff</item>
         <item name="android:windowNoTitle">true</item>
     </style>
+
+    <style name="PluxyPlayerBtn">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginStart">8dp</item>
+        <item name="android:paddingHorizontal">16dp</item>
+        <item name="android:textColor">#e7eaf0</item>
+        <item name="android:textSize">13sp</item>
+        <item name="android:backgroundTint">#cc2a3142</item>
+        <item name="android:focusable">true</item>
+    </style>
 </resources>

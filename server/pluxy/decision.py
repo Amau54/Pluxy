@@ -14,6 +14,7 @@ from .models import (
     PlaybackDecision,
     PlaybackMode,
 )
+from .tools import ffmpeg_available
 
 # Conteneurs que ExoPlayer remux facilement en Direct Stream.
 _VIDEO_CODEC_OK = {"hevc", "h265", "h264", "avc"}
@@ -123,6 +124,17 @@ def decide(
         mode = PlaybackMode.TRANSCODE
         delivery = cfg.network.delivery
         container = "ts" if delivery == "hls" else "mkv"
+
+    # Garde-fou : sans FFmpeg, ni remux ni transcode possibles -> Direct Play.
+    # Le client (ExoPlayer) tente alors de décoder le fichier brut lui-même.
+    if mode in (PlaybackMode.DIRECT_STREAM, PlaybackMode.TRANSCODE) and not ffmpeg_available(cfg):
+        reasons.append("⚠ FFmpeg introuvable : repli Direct Play (lecture brute par le client).")
+        mode = PlaybackMode.DIRECT_PLAY
+        target_codec = None
+        tone_map = False
+        delivery = "direct"
+        container = media.container
+        audio_needs_transcode = False
 
     return PlaybackDecision(
         mode=mode,

@@ -22,11 +22,16 @@ def _enrich(item: MediaItem, st: AppState) -> MediaItem:
 
 @router.post("/scan")
 def scan(request: Request) -> dict:
+    """Lance un (re)scan en arrière-plan ; renvoie immédiatement."""
     st = get_state(request)
-    count = st.library.scan()
-    if st.cfgm.cfg.metadata.auto_fetch_on_scan:
-        st.enrich_library_async()          # enrichissement TMDB en arrière-plan
-    return {"indexed": count}
+    st.scan_async()
+    return {"status": "scanning", "current_count": len(st.library.all())}
+
+
+@router.get("/scan-status")
+def scan_status(request: Request) -> dict:
+    st = get_state(request)
+    return {"scanning": st.library.is_scanning, "count": len(st.library.all())}
 
 
 @router.get("/items", response_model=list[MediaItem])

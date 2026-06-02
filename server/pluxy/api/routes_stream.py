@@ -16,10 +16,15 @@ import re
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import FileResponse, Response, StreamingResponse
+from fastapi.responses import (
+    FileResponse,
+    RedirectResponse,
+    Response,
+    StreamingResponse,
+)
 
 from ..decision import decide
-from ..models import ClientCapabilities, PlaybackDecision, PlaybackMode
+from ..models import ClientCapabilities, MediaInfo, PlaybackDecision, PlaybackMode
 from ..probe import probe
 from ..state import AppState, get_state
 from ..transcoder import build_direct_stream_cmd, build_transcode_cmd
@@ -28,6 +33,23 @@ import subprocess
 router = APIRouter(tags=["stream"])
 
 _RANGE_RE = re.compile(r"bytes=(\d+)-(\d*)")
+
+
+def _safe_probe(ffprobe_path: str, path: str) -> MediaInfo:
+    """Analyse le média ; en cas d'échec (ffprobe absent/illisible), renvoie un
+    MediaInfo minimal (conteneur déduit de l'extension) pour permettre le Direct Play."""
+    try:
+        return probe(ffprobe_path, path)
+    except Exception:
+        import os as _os
+        return MediaInfo(
+            path=path,
+            container=Path(path).suffix.lstrip(".").lower(),
+            size=_os.path.getsize(path) if _os.path.exists(path) else 0,
+            duration=0.0,
+            overall_bitrate=0,
+            streams=[],
+        )
 
 
 # --------------------------------------------------------------------------- #
@@ -44,7 +66,7 @@ async def playback_decide(request: Request) -> PlaybackDecision:
     if not it:
         raise HTTPException(404, "Média introuvable")
 
-    media = probe(st.cfgm.cfg.ffmpeg.ffprobe_path, it.path)
+    media = _safe_probe(st.cfgm.cfg.ffmpeg.ffprobe_path, it.path)
     dec = decide(media, caps, st.cfgm.cfg)
 
     # URL relative que le client doit ouvrir selon le mode retenu.
@@ -55,6 +77,26 @@ async def playback_decide(request: Request) -> PlaybackDecision:
     else:
         dec.stream_url = f"/stream/hls/{item_id}/index.m3u8"
     return dec
+
+
+# --------------------------------------------------------------------------- #
+#  Reprise de lecture (watch-state façon Plex)                                 #
+# --------------------------------------------------------------------------- #
+@router.get("/api/playback/progress/{item_id}")
+def get_progress(item_id: str, request: Request) -> dict:
+    return get_state(request).watch.get(item_id)
+
+
+@router.post("/api/playback/progress/{item_id}")
+async def set_progress(item_id: str, request: Request) -> dict:
+    body = await request.json()
+    st = get_state(request)
+    st.watch.set(
+        item_id,
+        int(body.get("position_ms", 0)),
+        int(body.get("duration_ms", 0)),
+    )
+    return st.watch.get(item_id)
 
 
 # --------------------------------------------------------------------------- #
@@ -115,11 +157,15 @@ def stream_remux(item_id: str, request: Request):
         raise HTTPException(404, "Média introuvable")
 
     cfg = st.cfgm.cfg
-    media = probe(cfg.ffmpeg.ffprobe_path, it.path)
+    media = _safe_probe(cfg.ffmpeg.ffprobe_path, it.path)
     dec = decide(media, ClientCapabilities(), cfg)
     cmd = build_direct_stream_cmd(media, dec, cfg)
 
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    try:
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    except FileNotFoundError:
+        # FFmpeg absent -> repli Direct Play (fichier brut).
+        return RedirectResponse(url=f"/stream/direct/{item_id}", status_code=302)
 
     def pump(chunk: int = 256 * 1024):
         try:
@@ -148,16 +194,21 @@ def hls_playlist(item_id: str, request: Request):
     cfg = st.cfgm.cfg
     sess = st.transcoder.get(item_id)
     if sess is None:
-        media = probe(cfg.ffmpeg.ffprobe_path, it.path)
+        media = _safe_probe(cfg.ffmpeg.ffprobe_path, it.path)
         dec = decide(media, ClientCapabilities(), cfg)
 
         def builder(out_dir: Path):
             return build_transcode_cmd(media, dec, cfg, out_dir)
 
-        sess = st.transcoder.start(item_id, builder)
+        try:
+            sess = st.transcoder.start(item_id, builder)
+        except FileNotFoundError:
+            return RedirectResponse(url=f"/stream/direct/{item_id}", status_code=302)
         if not sess.wait_for_playlist():
+            # Le transcodage n'a pas démarré (NVENC indisponible, filtre KO…).
+            # On ne renvoie PAS 500 : repli Direct Play pour que la lecture marche.
             st.transcoder.stop(item_id)
-            raise HTTPException(500, "Échec du démarrage du transcodage FFmpeg.")
+            return RedirectResponse(url=f"/stream/direct/{item_id}", status_code=302)
 
     return FileResponse(
         sess.playlist_path(),

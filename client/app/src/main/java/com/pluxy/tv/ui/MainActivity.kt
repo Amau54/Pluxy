@@ -14,6 +14,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.util.UnstableApi
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import coil.load
 import com.pluxy.tv.PluxyApplication
 import com.pluxy.tv.R
@@ -21,52 +22,71 @@ import com.pluxy.tv.api.MediaItem
 import com.pluxy.tv.api.PluxyApi
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-/** Écran d'accueil Android TV : grille des films (affiches TMDB). */
+/** Écran d'accueil Android TV / mobile : grille des films (affiches TMDB). */
 @UnstableApi
 class MainActivity : AppCompatActivity() {
 
     private val moshi = Moshi.Builder().add(KotlinJsonAdapterFactory()).build()
     private lateinit var grid: RecyclerView
     private lateinit var empty: TextView
+    private lateinit var swipe: SwipeRefreshLayout
 
     private val setupLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
-    ) { loadLibrary() }
+    ) { loadItems() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         grid = findViewById(R.id.grid)
         empty = findViewById(R.id.empty)
-        // Colonnes adaptatives : ~1 affiche / 150dp de large (mobile portrait ≈ 2-3, TV ≈ 6+).
+        swipe = findViewById(R.id.swipe)
+
         val dp = resources.displayMetrics.widthPixels / resources.displayMetrics.density
-        val cols = (dp / 150).toInt().coerceIn(2, 8)
-        grid.layoutManager = GridLayoutManager(this, cols)
+        grid.layoutManager = GridLayoutManager(this, (dp / 150).toInt().coerceIn(2, 8))
 
         findViewById<Button>(R.id.changeServer).setOnClickListener { openSetup() }
+        findViewById<Button>(R.id.reload).setOnClickListener { refresh() }
+        swipe.setOnRefreshListener { refresh() }
+        swipe.setColorSchemeColors(0xFFE5A00D.toInt())
 
-        if (!PluxyApplication.isConfigured(this)) {
-            openSetup()                         // 1er lancement : découverte serveur
-        } else {
-            loadLibrary()
+        if (!PluxyApplication.isConfigured(this)) openSetup() else loadItems()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (PluxyApplication.isConfigured(this)) loadItems()   // maj reprise/posters
+    }
+
+    private fun openSetup() = setupLauncher.launch(Intent(this, ServerSetupActivity::class.java))
+
+    /** Relance un scan serveur puis recharge (et re-recharge après le scan). */
+    private fun refresh() {
+        if (!PluxyApplication.isConfigured(this)) { openSetup(); return }
+        swipe.isRefreshing = true
+        val api = PluxyApi.create()
+        lifecycleScope.launch {
+            runCatching { api.rescan() }
+            loadItems(showSpinner = false)
+            delay(3000)                       // laisse le scan progresser
+            loadItems(showSpinner = false)
+            swipe.isRefreshing = false
         }
     }
 
-    private fun openSetup() {
-        setupLauncher.launch(Intent(this, ServerSetupActivity::class.java))
-    }
-
-    private fun loadLibrary() {
+    private fun loadItems(showSpinner: Boolean = false) {
         if (!PluxyApplication.isConfigured(this)) return
         findViewById<TextView>(R.id.serverLabel).text = PluxyApplication.serverName(this)
+        if (showSpinner) swipe.isRefreshing = true
         val api = PluxyApi.create()
         lifecycleScope.launch {
             try {
-                val items = api.listItems()
+                val items = groupSimilar(api.listItems())
                 if (items.isEmpty()) {
-                    empty.text = "Aucun média. Scannez votre bibliothèque depuis l'UI serveur."
+                    empty.text = "Aucun média. Ajoutez des dossiers et scannez depuis l'UI serveur."
                     empty.visibility = View.VISIBLE
                     grid.adapter = null
                 } else {
@@ -76,9 +96,21 @@ class MainActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 empty.text = "Serveur injoignable : ${e.message}"
                 empty.visibility = View.VISIBLE
+            } finally {
+                if (showSpinner) swipe.isRefreshing = false
             }
         }
     }
+
+    /** Trie pour regrouper les titres similaires (sagas, multi-parties) côte à côte. */
+    private fun groupSimilar(items: List<MediaItem>): List<MediaItem> =
+        items.sortedWith(compareBy({ normKey(it.title) }, { it.year ?: 0 }))
+
+    private fun normKey(title: String): String =
+        title.lowercase()
+            .replace(Regex("^(le |la |les |l'|the |a |an |un |une |des )"), "")
+            .replace(Regex("[^a-z0-9 ]"), "")
+            .trim()
 
     private fun open(item: MediaItem) {
         val json = moshi.adapter(MediaItem::class.java).toJson(item)
@@ -113,11 +145,8 @@ private class MediaAdapter(
         h.meta.text = listOfNotNull(media.year?.toString(), media.videoCodec?.uppercase(), res)
             .joinToString(" · ")
         h.hdr.visibility = if (media.isHdr) View.VISIBLE else View.GONE
-        if (media.posterUrl != null) {
-            h.poster.load(media.posterUrl) { crossfade(true) }
-        } else {
-            h.poster.setImageResource(R.drawable.ic_banner)
-        }
+        if (media.posterUrl != null) h.poster.load(media.posterUrl) { crossfade(true) }
+        else h.poster.setImageResource(R.drawable.ic_banner)
         h.itemView.setOnClickListener { onClick(media) }
     }
 }

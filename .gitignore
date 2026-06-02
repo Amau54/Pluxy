@@ -12,6 +12,12 @@ server/.pluxy_cache/
 # Cache de metadonnees (regenere a la demande)
 server/.pluxy_meta/
 .pluxy_meta/
+# Index de bibliotheque persistant (regenere au scan)
+server/.pluxy_library.json
+.pluxy_library.json
+# Etat de lecture (reprise)
+server/.pluxy_watch.json
+.pluxy_watch.json
 
 # ---------- Client Android ----------
 client/.gradle/

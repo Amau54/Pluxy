@@ -12,7 +12,38 @@
         app:resize_mode="fit"
         app:show_buffering="when_playing"
         app:surface_type="surface_view"
-        app:use_controller="true" />
+        app:use_controller="true"
+        app:show_subtitle_button="false" />
+
+    <!-- Barre d'options (audio / sous-titres / vitesse / format) -->
+    <LinearLayout
+        android:id="@+id/optionsBar"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|end"
+        android:layout_margin="20dp"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/btnAudio"
+            style="@style/PluxyPlayerBtn"
+            android:text="Audio" />
+
+        <Button
+            android:id="@+id/btnSubs"
+            style="@style/PluxyPlayerBtn"
+            android:text="Sous-titres" />
+
+        <Button
+            android:id="@+id/btnSpeed"
+            style="@style/PluxyPlayerBtn"
+            android:text="Vitesse" />
+
+        <Button
+            android:id="@+id/btnAspect"
+            style="@style/PluxyPlayerBtn"
+            android:text="Format" />
+    </LinearLayout>
 
     <TextView
         android:id="@+id/status"
