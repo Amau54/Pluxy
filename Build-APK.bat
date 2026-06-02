@@ -5,9 +5,14 @@ chcp 65001 >nul
 cd /d "%~dp0client"
 
 echo ============================================
-echo        PLUXY  -  Build APK Android TV
+echo     PLUXY  -  Build APK (mobile + Android TV)
 echo ============================================
 echo.
+
+rem --- Lit la version depuis build.gradle.kts ---------------------------
+set "VER=1.0.0"
+for /f "tokens=2 delims=^"" %%V in ('findstr /c:"versionName = " app\build.gradle.kts') do set "VER=%%V"
+echo [Pluxy] Version : %VER%
 
 rem --- Localise un JDK 17+ (Temurin/Adoptium ou JAVA_HOME) ---------------
 if defined JAVA_HOME (
@@ -37,7 +42,7 @@ call gradlew.bat assembleDebug --console=plain --warning-mode=none
 if errorlevel 1 ( echo [ERREUR] Build echoue & pause & exit /b 1 )
 
 if not exist "..\dist" mkdir "..\dist"
-copy /y "app\build\outputs\apk\debug\app-debug.apk" "..\dist\Pluxy-TV-1.0.0.apk" >nul
+copy /y "app\build\outputs\apk\debug\app-debug.apk" "..\dist\Pluxy-%VER%.apk" >nul
 
 rem --- Politique de retention : on ne garde que les 3 APK les plus recents -
 echo [Pluxy] Nettoyage : conservation des 3 dernieres versions...
@@ -48,5 +53,6 @@ for /f "delims=" %%F in ('dir /b /o-d "..\dist\*.apk" 2^>nul') do (
 )
 
 echo.
-echo [Pluxy] APK genere : dist\Pluxy-TV-1.0.0.apk
+echo [Pluxy] APK genere : dist\Pluxy-%VER%.apk
+echo [Pluxy] Signee avec la cle stable -^> mise a jour sans desinstallation.
 pause

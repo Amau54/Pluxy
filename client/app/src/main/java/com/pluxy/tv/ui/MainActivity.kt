@@ -40,7 +40,10 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
         grid = findViewById(R.id.grid)
         empty = findViewById(R.id.empty)
-        grid.layoutManager = GridLayoutManager(this, 6)
+        // Colonnes adaptatives : ~1 affiche / 150dp de large (mobile portrait ≈ 2-3, TV ≈ 6+).
+        val dp = resources.displayMetrics.widthPixels / resources.displayMetrics.density
+        val cols = (dp / 150).toInt().coerceIn(2, 8)
+        grid.layoutManager = GridLayoutManager(this, cols)
 
         findViewById<Button>(R.id.changeServer).setOnClickListener { openSetup() }
 

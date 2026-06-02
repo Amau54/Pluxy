@@ -18,8 +18,20 @@ en Wi-Fi 5 GHz double saut.
 
 | Plateforme | Accès |
 |---|---|
-| 📺 **Android TV (APK)** | **[Télécharger la dernière version](../../releases/latest)** · ou [`dist/Pluxy-TV-1.0.0.apk`](dist/Pluxy-TV-1.0.0.apk) |
+| 📱📺 **Android (mobile **et** TV)** | **[Télécharger la dernière version](../../releases/latest)** · ou [`dist/`](dist/) |
 | 💻 **Serveur PC (Windows)** | Double-clic sur **[`Pluxy-Server.bat`](Pluxy-Server.bat)** |
+
+> L'APK fonctionne sur **téléphone/tablette Android (6.0+) ET Android TV** :
+> elle apparaît dans le lanceur des deux (icône standard + bannière TV).
+
+### 🔄 Mises à jour sans désinstaller
+L'app est signée avec une **clé stable** : il suffit d'installer la nouvelle APK
+par-dessus (`adb install -r`, ou ouvrir l'APK depuis l'appareil) — **les données
+et la config serveur sont conservées**, aucune désinstallation nécessaire, tant
+que le `versionCode` augmente.
+> *Migration unique* : si une version **antérieure à la 1.0.1** (signature debug
+> aléatoire) est déjà installée, désinstallez-la **une seule fois** avant de passer
+> à la 1.0.1. Ensuite, toutes les mises à jour se feront par-dessus.
 
 > **PC en un clic** : `Pluxy-Server.bat` crée l'environnement au 1er lancement,
 > démarre le serveur et ouvre l'UI de configuration dans le navigateur.
@@ -118,10 +130,17 @@ UI : `http://<IP_PC>:8420/` · API/docs : `http://<IP_PC>:8420/docs`
 
 ```powershell
 # Pré-requis : JDK 17+, Android SDK (platform 34 + build-tools 34).
-Build-APK.bat        # -> dist\Pluxy-TV-1.0.0.apk
+Build-APK.bat        # -> dist\Pluxy-<version>.apk  (signée clé stable)
 ```
 
 Stack : Gradle 8.9 · AGP 8.7 · Kotlin 2.1 · **Media3 1.4.1** · `compileSdk 34` · `minSdk 23`.
+
+**Signature** : l'APK est signée par `client/keystore/pluxy.jks` (clé fixe, versionnée
+dans le repo) afin que toutes les builds soient interchangeables et permettent la
+mise à jour sans désinstallation. Pour publier une nouvelle version, incrémentez
+`versionCode` (et `versionName`) dans `client/app/build.gradle.kts`.
+> ⚠️ Le keystore est volontairement commité (app perso auto-hébergée). Pour un
+> usage public, sortez-le du repo et gardez le mot de passe secret.
 
 ---
 

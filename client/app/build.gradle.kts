@@ -9,15 +9,30 @@ android {
 
     defaultConfig {
         applicationId = "com.pluxy.tv"
-        minSdk = 23            // Android TV 6.0+ (HEVC/HDR10 dépend du SoC Philips)
+        minSdk = 23            // Android TV 6.0+ ET mobile (Android 6+)
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.0.1"
+    }
+
+    // Clé de signature STABLE et versionnée : permet de mettre à jour l'app
+    // par-dessus l'existante (même signature) sans avoir à la désinstaller.
+    signingConfigs {
+        create("pluxy") {
+            storeFile = rootProject.file("keystore/pluxy.jks")
+            storePassword = "pluxy-pluxy"
+            keyAlias = "pluxy"
+            keyPassword = "pluxy-pluxy"
+        }
     }
 
     buildTypes {
+        getByName("debug") {
+            signingConfig = signingConfigs.getByName("pluxy")
+        }
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("pluxy")
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }

@@ -1,0 +1,93 @@
+{
+  "server": {
+    "name": "Pluxy",
+    "host": "0.0.0.0",
+    "port": 8420,
+    "media_dirs": [
+      "D:/Films",
+      "E:/Series"
+    ],
+    "transcode_temp_dir": "./.pluxy_cache",
+    "scan_extensions": [
+      ".mkv",
+      ".mp4",
+      ".m4v",
+      ".mov",
+      ".avi",
+      ".ts",
+      ".webm"
+    ]
+  },
+  "ffmpeg": {
+    "ffmpeg_path": "ffmpeg",
+    "ffprobe_path": "ffprobe",
+    "log_level": "error"
+  },
+  "transcoding": {
+    "hardware_acceleration": true,
+    "encoder": "hevc_nvenc",
+    "decoder_hwaccel": "cuda",
+    "preset": "p5",
+    "tune": "hq",
+    "rc_mode": "vbr",
+    "force_transcode": false,
+    "max_bitrate_mbps": 50,
+    "vbv_bufsize_factor": 2.0,
+    "gpu_index": 0,
+    "hdr_tone_mapping": "auto",
+    "tone_map_algorithm": "hable",
+    "tone_map_peak_nits": 100
+  },
+  "audio": {
+    "downmix_lossless": true,
+    "lossless_codecs": [
+      "truehd",
+      "dts",
+      "dtshd",
+      "flac",
+      "pcm_s24le",
+      "pcm_s16le",
+      "mlp"
+    ],
+    "target_codec": "ac3",
+    "target_channels": 6,
+    "bitrate_kbps": 640
+  },
+  "network": {
+    "delivery": "hls",
+    "hls_segment_duration": 3,
+    "hls_playlist_size": 0,
+    "hls_flags": "independent_segments",
+    "direct_play_enabled": true,
+    "direct_stream_enabled": true
+  },
+  "client_buffer": {
+    "min_buffer_ms": 50000,
+    "max_buffer_ms": 120000,
+    "buffer_for_playback_ms": 5000,
+    "buffer_for_playback_after_rebuffer_ms": 10000,
+    "target_buffer_bytes_mb": 256,
+    "back_buffer_ms": 30000
+  },
+  "subtitles": {
+    "external_extensions": [
+      ".srt",
+      ".ass",
+      ".ssa",
+      ".vtt"
+    ],
+    "prefer_external": true,
+    "burn_in": false
+  },
+  "metadata": {
+    "enabled": true,
+    "provider": "tmdb",
+    "tmdb_api_key": "c8016550a48180126e9d576f03fbf7e5",
+    "language": "fr-FR",
+    "auto_fetch_on_scan": true
+  },
+  "discovery": {
+    "enabled": true,
+    "udp_port": 8421
+  }
+}
