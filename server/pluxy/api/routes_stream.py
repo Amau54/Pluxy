@@ -75,7 +75,7 @@ async def playback_decide(request: Request) -> PlaybackDecision:
     elif dec.mode == PlaybackMode.DIRECT_STREAM:
         dec.stream_url = f"/stream/remux/{item_id}"
     else:
-        dec.stream_url = f"/stream/hls/{item_id}/index.m3u8"
+        dec.stream_url = f"/stream/hls/{item_id}/main/index.m3u8"
     return dec
 
 
@@ -182,32 +182,32 @@ def stream_remux(item_id: str, request: Request):
 
 
 # --------------------------------------------------------------------------- #
-#  2c. Transcode — HLS NVENC segmenté                                          #
+#  2c. Transcode — HLS NVENC fMP4 (variante main = HEVC ; compat = H.264 1080p)#
 # --------------------------------------------------------------------------- #
-@router.get("/stream/hls/{item_id}/index.m3u8")
-def hls_playlist(item_id: str, request: Request):
+@router.get("/stream/hls/{item_id}/{variant}/index.m3u8")
+def hls_playlist(item_id: str, variant: str, request: Request):
     st: AppState = get_state(request)
     it = st.library.get(item_id)
     if not it:
         raise HTTPException(404, "Média introuvable")
+    compat = variant == "compat"
+    sid = f"{item_id}_{variant}"
 
     cfg = st.cfgm.cfg
-    sess = st.transcoder.get(item_id)
+    sess = st.transcoder.get(sid)
     if sess is None:
         media = _safe_probe(cfg.ffmpeg.ffprobe_path, it.path)
         dec = decide(media, ClientCapabilities(), cfg)
 
         def builder(out_dir: Path):
-            return build_transcode_cmd(media, dec, cfg, out_dir)
+            return build_transcode_cmd(media, dec, cfg, out_dir, compat=compat)
 
         try:
-            sess = st.transcoder.start(item_id, builder)
+            sess = st.transcoder.start(sid, builder)
         except FileNotFoundError:
             return RedirectResponse(url=f"/stream/direct/{item_id}", status_code=302)
         if not sess.wait_for_playlist():
-            # Le transcodage n'a pas démarré (NVENC indisponible, filtre KO…).
-            # On ne renvoie PAS 500 : repli Direct Play pour que la lecture marche.
-            st.transcoder.stop(item_id)
+            st.transcoder.stop(sid)
             return RedirectResponse(url=f"/stream/direct/{item_id}", status_code=302)
 
     return FileResponse(
@@ -217,21 +217,24 @@ def hls_playlist(item_id: str, request: Request):
     )
 
 
-@router.get("/stream/hls/{item_id}/{segment}")
-def hls_segment(item_id: str, segment: str, request: Request):
+@router.get("/stream/hls/{item_id}/{variant}/{segment}")
+def hls_segment(item_id: str, variant: str, segment: str, request: Request):
     st = get_state(request)
-    sess = st.transcoder.get(item_id)
-    if sess is None or not segment.endswith(".ts"):
+    sess = st.transcoder.get(f"{item_id}_{variant}")
+    # Segments fMP4 (.m4s) + segment d'initialisation (init.mp4).
+    if sess is None or not (segment.endswith(".m4s") or segment == "init.mp4"):
         raise HTTPException(404, "Segment indisponible")
     seg_path = sess.out_dir / segment
     if not seg_path.exists():
         raise HTTPException(404, "Segment indisponible")
-    return FileResponse(seg_path, media_type="video/mp2t")
+    return FileResponse(seg_path, media_type="video/mp4")
 
 
 @router.delete("/stream/hls/{item_id}")
 def hls_stop(item_id: str, request: Request) -> dict:
-    get_state(request).transcoder.stop(item_id)
+    tr = get_state(request).transcoder
+    for variant in ("main", "compat"):
+        tr.stop(f"{item_id}_{variant}")
     return {"stopped": item_id}
 
 

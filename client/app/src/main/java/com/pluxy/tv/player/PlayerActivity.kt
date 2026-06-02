@@ -42,7 +42,9 @@ class PlayerActivity : AppCompatActivity() {
 
     private val handler = Handler(Looper.getMainLooper())
     private var retries = 0
-    private var triedDirect = false
+    // Chaîne de repli : (url, delivery). On avance d'un cran à chaque échec.
+    private val attempts = mutableListOf<Pair<String, String>>()
+    private var attemptIdx = 0
     private val aspectModes = listOf(
         AspectRatioFrameLayout.RESIZE_MODE_FIT to "Ajusté",
         AspectRatioFrameLayout.RESIZE_MODE_ZOOM to "Zoom",
@@ -88,16 +90,19 @@ class PlayerActivity : AppCompatActivity() {
                 player = exo
                 playerView.player = exo
                 styleSubtitles()
-
-                exo.setMediaItem(buildMediaItem(item, decision.streamUrl, decision.delivery))
                 exo.addListener(playerListener(decision.mode))
-                exo.prepare()
-                exo.playWhenReady = true
 
-                // Reprise (façon Plex) si position significative et film non terminé.
-                if (progress.positionMs > 10_000 && !progress.watched) {
-                    askResume(progress.positionMs)
-                }
+                // Chaîne de repli en cas d'échec décodage/réseau :
+                //   1) flux décidé  2) Direct Play (brut)  3) H.264 1080p compat.
+                attempts.clear()
+                attempts.add(decision.streamUrl to decision.delivery)
+                if (decision.delivery != "direct")
+                    attempts.add("/stream/direct/${item.id}" to "direct")
+                attempts.add("/stream/hls/${item.id}/compat/index.m3u8" to "hls")
+                attemptIdx = 0
+                loadAttempt(0)
+
+                if (progress.positionMs > 10_000 && !progress.watched) askResume(progress.positionMs)
                 statusView.text = "Mode : ${decision.mode}" + if (decision.toneMap) " · HDR→SDR" else ""
                 handler.postDelayed(saveTick, 10_000)
             } catch (e: Exception) {
@@ -238,14 +243,17 @@ class PlayerActivity : AppCompatActivity() {
         }
 
         override fun onPlayerError(error: PlaybackException) {
-            // 1) Premier échec (HLS/transcode/manifeste KO) -> repli Direct Play.
-            if (!triedDirect) {
-                triedDirect = true
-                statusView.text = "Lecture directe (repli)…"
-                playDirect()
+            // 1) Avance dans la chaîne de repli (décodage/manifeste/HTTP KO).
+            if (attemptIdx + 1 < attempts.size) {
+                val label = when (attempts[attemptIdx + 1].second) {
+                    "direct" -> "Lecture directe (repli)…"
+                    else -> "Conversion compatible H.264 (repli)…"
+                }
+                statusView.text = label
+                loadAttempt(attemptIdx + 1)
                 return
             }
-            // 2) Sinon : reconnexion automatique avec backoff, façon Plex.
+            // 2) Dernier recours épuisé : reconnexion avec backoff.
             if (retries < 3) {
                 retries++
                 statusView.text = "Reconnexion… ($retries/3)"
@@ -256,11 +264,13 @@ class PlayerActivity : AppCompatActivity() {
         }
     }
 
-    /** Repli : relit le fichier brut (Direct Play) sans passer par HLS/transcode. */
-    private fun playDirect() {
+    /** Charge la n-ième tentative de flux (en conservant la position courante). */
+    private fun loadAttempt(idx: Int) {
         val p = player ?: return
+        attemptIdx = idx
+        val (url, delivery) = attempts[idx]
         val pos = p.currentPosition.coerceAtLeast(0)
-        p.setMediaItem(buildMediaItem(item, "/stream/direct/${item.id}", "direct"))
+        p.setMediaItem(buildMediaItem(item, url, delivery))
         p.prepare()
         if (pos > 0) p.seekTo(pos)
         p.playWhenReady = true

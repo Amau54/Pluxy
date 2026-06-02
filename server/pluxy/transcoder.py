@@ -86,6 +86,7 @@ def build_transcode_cmd(
     cfg: PluxyConfig,
     out_dir: Path,
     start_time: float = 0.0,
+    compat: bool = False,
 ) -> List[str]:
     """
     Transcode matériel NVENC -> HLS.
@@ -96,6 +97,8 @@ def build_transcode_cmd(
     tc = cfg.transcoding
     cap_mbps = decision.target_bitrate_mbps or tc.max_bitrate_mbps
     bufsize = int(cap_mbps * tc.vbv_bufsize_factor)
+    v = media.video
+    src_hdr = bool(v and v.is_hdr)
 
     cmd: List[str] = [
         cfg.ffmpeg.ffmpeg_path,
@@ -117,63 +120,72 @@ def build_transcode_cmd(
 
     # ---- Filtres vidéo --------------------------------------------------- #
     vf: List[str] = []
-    if decision.tone_map and tc.hardware_acceleration:
+    if compat:
+        # Mode compatibilité maximale : H.264 1080p 8-bit (décodable partout).
+        # HDR -> tone mapping SDR puis downscale ; sinon downscale GPU.
+        if src_hdr and tc.hardware_acceleration:
+            vf.append(_tone_map_filter(cfg) + ",hwdownload,format=yuv420p,scale=-2:1080")
+        elif tc.hardware_acceleration:
+            vf.append("scale_cuda=-2:1080:format=nv12")
+        else:
+            vf.append("scale=-2:1080,format=yuv420p")
+    elif decision.tone_map and tc.hardware_acceleration:
         vf.append(_tone_map_filter(cfg))
-    # (Pas de scale ici : on conserve la résolution native 4K, on bride le débit.)
+    # (Mode normal sans tone map : résolution native conservée, on bride le débit.)
 
     cmd += ["-map", "0:v:0"]
     if vf:
         cmd += ["-vf", ",".join(vf)]
 
-    # ---- Encodeur NVENC -------------------------------------------------- #
-    if tc.hardware_acceleration:
+    # ---- Encodeur vidéo -------------------------------------------------- #
+    if compat:
+        # H.264 high 8-bit, débit modéré : universellement décodable.
+        comp_mbps = min(cap_mbps, 12)
+        cmd += [
+            "-c:v", "h264_nvenc" if tc.hardware_acceleration else "libx264",
+            "-preset", tc.preset if tc.hardware_acceleration else "veryfast",
+            "-profile:v", "high",
+            "-b:v", f"{comp_mbps}M", "-maxrate", f"{comp_mbps}M",
+            "-bufsize", f"{comp_mbps * 2}M",
+        ]
+        if tc.hardware_acceleration:
+            cmd += ["-gpu", str(tc.gpu_index)]
+    elif tc.hardware_acceleration:
         cmd += [
             "-c:v", tc.encoder,                        # hevc_nvenc
-            "-preset", tc.preset,                      # p1..p7
-            "-tune", tc.tune,                          # hq
-            "-rc", tc.rc_mode,                         # vbr
-            "-b:v", f"{cap_mbps}M",
-            "-maxrate", f"{cap_mbps}M",
-            "-bufsize", f"{bufsize}M",
-            "-spatial_aq", "1",
-            "-rc-lookahead", "20",
-            "-gpu", str(tc.gpu_index),
+            "-preset", tc.preset, "-tune", tc.tune, "-rc", tc.rc_mode,
+            "-b:v", f"{cap_mbps}M", "-maxrate", f"{cap_mbps}M", "-bufsize", f"{bufsize}M",
+            "-spatial_aq", "1", "-rc-lookahead", "20", "-gpu", str(tc.gpu_index),
         ]
-        # IMPORTANT : ne PAS forcer `-pix_fmt p010le`. Les frames décodées résident
-        # en mémoire CUDA ; un -pix_fmt déclenche une conversion CPU qui échoue
-        # ("Error reinitializing filters / Function not implemented") et empêche
-        # NVENC de démarrer. NVENC consomme directement le format CUDA de la source.
-        # On conserve seulement le profil main10 si la source est 10 bits / HDR
-        # (préserve le HDR sans conversion).
+        # PAS de `-pix_fmt p010le` (échec conversion CPU sur frames CUDA).
+        # Profil main10 seulement si HDR/10-bit (préserve le HDR).
         if not decision.tone_map:
-            v = media.video
             pix = (v.pix_fmt or "") if v else ""
-            is_10bit = bool(v and (v.is_hdr or "10" in pix))
-            if is_10bit:
+            if v and (v.is_hdr or "10" in pix):
                 cmd += ["-profile:v", "main10"]
     else:
-        # Repli logiciel (signalé par le moteur de décision) — x265.
         cmd += [
-            "-c:v", "libx265",
-            "-preset", "fast",
-            "-b:v", f"{cap_mbps}M",
-            "-maxrate", f"{cap_mbps}M",
-            "-bufsize", f"{bufsize}M",
+            "-c:v", "libx265", "-preset", "fast",
+            "-b:v", f"{cap_mbps}M", "-maxrate", f"{cap_mbps}M", "-bufsize", f"{bufsize}M",
         ]
 
     # ---- Audio ----------------------------------------------------------- #
-    cmd += _audio_args(decision, cfg)
+    if compat:
+        cmd += ["-map", "0:a:0?", "-c:a", "aac", "-ac", "2", "-b:a", "192k"]
+    else:
+        cmd += _audio_args(decision, cfg)
 
-    # ---- Sortie HLS (segments mpegts) ----------------------------------- #
+    # ---- Sortie HLS fMP4 (CMAF) : bien plus compatible que mpegts pour HEVC #
     seg_dur = cfg.network.hls_segment_duration
     cmd += [
         "-f", "hls",
         "-hls_time", str(seg_dur),
         "-hls_list_size", str(cfg.network.hls_playlist_size),
         "-hls_playlist_type", "event",
-        "-hls_segment_type", "mpegts",
+        "-hls_segment_type", "fmp4",
+        "-hls_fmp4_init_filename", "init.mp4",
         "-hls_flags", cfg.network.hls_flags,
-        "-hls_segment_filename", str(out_dir / "seg_%05d.ts"),
+        "-hls_segment_filename", str(out_dir / "seg_%05d.m4s"),
         "-start_number", "0",
         str(out_dir / "index.m3u8"),
     ]
@@ -194,10 +206,13 @@ class TranscodeSession:
 
     def start(self) -> None:
         self.out_dir.mkdir(parents=True, exist_ok=True)
+        # CWD = dossier de sortie : le segment d'init fMP4 (`init.mp4`, nom relatif)
+        # est ainsi écrit AU BON ENDROIT et non dans le répertoire courant du serveur.
         self.proc = subprocess.Popen(
             self.cmd,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
+            cwd=str(self.out_dir),
         )
 
     def playlist_path(self) -> Path:
