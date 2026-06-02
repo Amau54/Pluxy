@@ -42,6 +42,25 @@ class PluxyApi(private val baseUrl: String) {
         }
     }
 
+    suspend fun metadata(itemId: String, refresh: Boolean = false): MovieMetadata? =
+        withContext(Dispatchers.IO) {
+            val url = "$baseUrl/api/library/items/$itemId/metadata" + if (refresh) "?refresh=true" else ""
+            val req = Request.Builder().url(url).build()
+            http.newCall(req).execute().use { resp ->
+                val body = resp.body?.string() ?: return@withContext null
+                moshi.adapter(MovieMetadata::class.java).fromJson(body)
+            }
+        }
+
+    suspend fun serverInfo(): ServerInfo? = withContext(Dispatchers.IO) {
+        runCatching {
+            val req = Request.Builder().url("$baseUrl/api/server/info").build()
+            http.newCall(req).execute().use { resp ->
+                moshi.adapter(ServerInfo::class.java).fromJson(resp.body!!.string())
+            }
+        }.getOrNull()
+    }
+
     suspend fun decide(itemId: String): PlaybackDecision = withContext(Dispatchers.IO) {
         val payload = DecideRequest(itemId, DeviceProfile.capabilities())
         val json = moshi.adapter(DecideRequest::class.java).toJson(payload)

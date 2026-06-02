@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#0d0f14">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
+        android:paddingHorizontal="80dp"
+        android:paddingVertical="48dp">
+
+        <ImageView
+            android:layout_width="72dp"
+            android:layout_height="72dp"
+            android:src="@drawable/ic_banner"
+            android:adjustViewBounds="true"
+            android:contentDescription="Pluxy" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="Connexion au serveur Pluxy"
+            android:textColor="#e7eaf0"
+            android:textSize="24sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/status"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Recherche du serveur sur le réseau…"
+            android:textColor="#8a93a6"
+            android:textSize="15sp" />
+
+        <ProgressBar
+            android:id="@+id/progress"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:indeterminateTint="#e5a00d" />
+
+        <!-- Liste des serveurs découverts -->
+        <LinearLayout
+            android:id="@+id/serverList"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:orientation="vertical" />
+
+        <Button
+            android:id="@+id/rescan"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="↻ Rechercher à nouveau"
+            android:textColor="#e7eaf0"
+            android:backgroundTint="#2a3142" />
+
+        <!-- Saisie manuelle -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="32dp"
+            android:text="…ou saisir l'adresse manuellement"
+            android:textColor="#8a93a6"
+            android:textSize="14sp" />
+
+        <EditText
+            android:id="@+id/manualIp"
+            android:layout_width="360dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:hint="192.168.1.70  (ou 192.168.1.70:8420)"
+            android:textColorHint="#5a6275"
+            android:inputType="text"
+            android:textColor="#e7eaf0"
+            android:backgroundTint="#39415a" />
+
+        <Button
+            android:id="@+id/connectManual"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="Se connecter"
+            android:textColor="#1a1205"
+            android:backgroundTint="#e5a00d" />
+    </LinearLayout>
+</ScrollView>

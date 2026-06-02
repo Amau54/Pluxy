@@ -49,6 +49,9 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.squareup.moshi:moshi-kotlin:1.15.1")
 
+    // Chargement d'images (affiches/backdrops TMDB)
+    implementation("io.coil-kt:coil:2.7.0")
+
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
 }

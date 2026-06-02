@@ -67,6 +67,38 @@ class MediaItem(BaseModel):
     video_codec: Optional[str] = None
     is_hdr: bool = False
     external_subs: List[str] = Field(default_factory=list)
+    # Renseignés depuis le cache de métadonnées s'il existe (affichage grille).
+    year: Optional[int] = None
+    poster_url: Optional[str] = None
+    has_metadata: bool = False
+
+
+class CastMember(BaseModel):
+    name: str
+    character: Optional[str] = None
+    profile_url: Optional[str] = None
+
+
+class MovieMetadata(BaseModel):
+    """Métadonnées enrichies façon Plex (source TMDB)."""
+    tmdb_id: Optional[int] = None
+    title: str
+    original_title: Optional[str] = None
+    year: Optional[int] = None
+    overview: Optional[str] = None
+    tagline: Optional[str] = None
+    genres: List[str] = Field(default_factory=list)
+    runtime: Optional[int] = None              # minutes
+    rating: Optional[float] = None             # /10
+    poster_url: Optional[str] = None
+    backdrop_url: Optional[str] = None
+    cast: List[CastMember] = Field(default_factory=list)
+    director: Optional[str] = None
+    trailer_youtube_key: Optional[str] = None
+    trailer_url: Optional[str] = None
+    # État de la résolution (utile côté client/UI).
+    matched: bool = False
+    source: str = "tmdb"
 
 
 class ClientCapabilities(BaseModel):

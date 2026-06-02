@@ -29,19 +29,30 @@ en Wi-Fi 5 GHz double saut.
 1. TV → **Paramètres ▸ Système ▸ À propos** : cliquer **7×** sur *Build* (mode développeur),
    puis **Préférences développeur** : activer *Débogage réseau*.
 2. PC → double-clic sur **[`Install-APK-on-TV.bat`](Install-APK-on-TV.bat)**, saisir l'IP de la TV.
-3. Au 1er lancement de l'app, régler l'IP du serveur (PC).
+3. Au 1er lancement, l'app **détecte automatiquement le serveur** sur le réseau
+   (broadcast UDP). Si plusieurs serveurs sont trouvés, elle propose un choix ;
+   sinon l'IP peut être saisie manuellement. **Aucune IP à configurer en dur.**
 
 ---
 
 ## ✨ Fonctionnalités
 
+- **Découverte serveur automatique** : le client trouve le PC serveur sur le LAN
+  (broadcast UDP), choix proposé si plusieurs, repli manuel — zéro IP à configurer.
+- **Métadonnées façon Plex** (TMDB) : identification du film, synopsis, casting,
+  genres, note, affiches/backdrops et **bande-annonce** YouTube.
 - **3 modes de lecture automatiques** : Direct Play / Direct Stream / Transcode.
 - **Transcodage 100 % NVIDIA** : NVDEC → CUDA → `hevc_nvenc` (RTX 5080).
 - **Tone mapping HDR10 → SDR** via filtres CUDA (`zscale`/`tonemap`).
 - **Downmix audio** TrueHD/DTS-HD → AC3/EAC3 5.1 (ARC) **sans toucher au flux 4K**.
 - **Pré-buffer agressif** ExoPlayer (256 Mo réglables) anti micro-coupures Wi-Fi.
 - **Sous-titres .srt** injectés dans ExoPlayer (pas de burn-in).
-- **UI de configuration Web** : toggle NVENC, bitrate cap, taille du buffer, tone mapping…
+- **UI de configuration Web** : NVENC, bitrate cap, buffer, tone mapping, clé TMDB…
+
+> **Métadonnées** : créez une clé API gratuite sur
+> [themoviedb.org](https://www.themoviedb.org/settings/api) et collez-la dans
+> l'UI serveur (carte *Métadonnées*). Sans clé, le titre et l'année sont déduits
+> du nom de fichier.
 
 | Mode | Condition | Charge serveur |
 |------|-----------|----------------|

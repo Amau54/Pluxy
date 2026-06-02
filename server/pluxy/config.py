@@ -94,6 +94,23 @@ class SubtitlesCfg(BaseModel):
     burn_in: bool = False
 
 
+class MetadataCfg(BaseModel):
+    """Enrichissement façon Plex via TMDB (synopsis, casting, affiches, trailer)."""
+    enabled: bool = True
+    provider: str = "tmdb"
+    # Clé API TMDB (gratuite sur themoviedb.org). Vide => métadonnées désactivées.
+    tmdb_api_key: str = ""
+    language: str = "fr-FR"
+    # Enrichit automatiquement au scan (sinon à la demande).
+    auto_fetch_on_scan: bool = True
+
+
+class DiscoveryCfg(BaseModel):
+    """Découverte auto du serveur par le client (broadcast UDP)."""
+    enabled: bool = True
+    udp_port: int = 8421
+
+
 # --------------------------------------------------------------------------- #
 #  Racine                                                                      #
 # --------------------------------------------------------------------------- #
@@ -105,6 +122,8 @@ class PluxyConfig(BaseModel):
     network: NetworkCfg = Field(default_factory=NetworkCfg)
     client_buffer: ClientBufferCfg = Field(default_factory=ClientBufferCfg)
     subtitles: SubtitlesCfg = Field(default_factory=SubtitlesCfg)
+    metadata: MetadataCfg = Field(default_factory=MetadataCfg)
+    discovery: DiscoveryCfg = Field(default_factory=DiscoveryCfg)
 
 
 # --------------------------------------------------------------------------- #

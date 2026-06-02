@@ -57,5 +57,16 @@
     "external_extensions": [".srt", ".ass", ".ssa", ".vtt"],
     "prefer_external": true,
     "burn_in": false
+  },
+  "metadata": {
+    "enabled": true,
+    "provider": "tmdb",
+    "tmdb_api_key": "",
+    "language": "fr-FR",
+    "auto_fetch_on_scan": true
+  },
+  "discovery": {
+    "enabled": true,
+    "udp_port": 8421
   }
 }

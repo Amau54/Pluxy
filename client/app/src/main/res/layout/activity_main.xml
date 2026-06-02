@@ -5,19 +5,44 @@
     android:background="#0d0f14"
     android:padding="32dp">
 
-    <TextView
-        android:layout_width="wrap_content"
+    <LinearLayout
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Pluxy"
-        android:textColor="#e5a00d"
-        android:textSize="28sp"
-        android:textStyle="bold" />
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Pluxy"
+            android:textColor="#e5a00d"
+            android:textSize="28sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/serverLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="16dp"
+            android:textColor="#8a93a6"
+            android:textSize="13sp" />
+
+        <Button
+            android:id="@+id/changeServer"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Changer de serveur"
+            android:textColor="#e7eaf0"
+            android:textSize="12sp"
+            android:backgroundTint="#2a3142" />
+    </LinearLayout>
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/grid"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:layout_marginTop="56dp"
+        android:layout_marginTop="64dp"
         android:clipToPadding="false" />
 
     <TextView

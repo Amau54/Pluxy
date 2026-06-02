@@ -47,7 +47,7 @@
 <header>
   <img class="logo" src="/logo.png" alt="Pluxy" />
   <h1>Pluxy</h1>
-  <span class="badge">Serveur média · RTX 5080 / NVENC</span>
+  <span class="badge" id="serverBadge">Serveur média · RTX 5080 / NVENC</span>
 </header>
 
 <main>
@@ -183,6 +183,38 @@
     </div>
   </section>
 
+  <!-- ============ MÉTADONNÉES (façon Plex) ============ -->
+  <section class="card">
+    <h2>🎞️ Métadonnées (TMDB)</h2>
+    <p class="desc">Synopsis, casting, affiches et bandes-annonces récupérés automatiquement.</p>
+
+    <div class="row">
+      <div class="label">Activer l'enrichissement
+        <span class="hint">Identifie les films et télécharge les fiches (façon Plex).</span></div>
+      <label class="switch"><input type="checkbox" id="metaEnabled"><span class="slider"></span></label>
+    </div>
+
+    <div class="row">
+      <div class="label">Clé API TMDB
+        <span class="hint">Gratuite sur themoviedb.org ▸ Paramètres ▸ API. Sans clé : titre/année seuls.</span></div>
+      <input type="text" id="tmdbKey" placeholder="xxxxxxxxxxxxxxxx" style="min-width:260px" />
+    </div>
+
+    <div class="row">
+      <div class="label">Langue des fiches</div>
+      <select id="metaLang">
+        <option value="fr-FR">Français</option>
+        <option value="en-US">English</option>
+      </select>
+    </div>
+
+    <div class="row">
+      <div class="label">Rafraîchir maintenant
+        <span class="hint">Relance l'identification de toute la bibliothèque.</span></div>
+      <button class="scan" onclick="refreshMeta()" style="padding:8px 16px">↻ Rafraîchir métadonnées</button>
+    </div>
+  </section>
+
   <!-- ============ BIBLIOTHÈQUE ============ -->
   <section class="card">
     <h2>📁 Bibliothèque</h2>
@@ -218,6 +250,27 @@ async function load(){
   delivery.value = n.delivery;
   seg.value = String(n.hls_segment_duration);
   dirs.value = (s.media_dirs||[]).join('\n');
+  // Métadonnées
+  const md = CFG.metadata || {};
+  metaEnabled.checked = md.enabled !== false;
+  tmdbKey.value = md.tmdb_api_key || '';
+  metaLang.value = md.language || 'fr-FR';
+  loadServerInfo();
+}
+
+async function loadServerInfo(){
+  try{
+    const info = await (await fetch('/api/server/info')).json();
+    const ips = (info.ips||[]).join(', ');
+    document.getElementById('serverBadge').textContent =
+      `${info.name} · ${info.primary_ip}:${info.port}` + (info.ips.length>1 ? `  (aussi ${ips})` : '');
+  }catch(e){}
+}
+
+async function refreshMeta(){
+  toastMsg('Identification des films en cours…');
+  await fetch('/api/library/refresh-metadata',{method:'POST'});
+  toastMsg('Enrichissement TMDB lancé ✓');
 }
 
 bitrate.oninput = e => bitrateVal.textContent = e.target.value+' Mbps';
@@ -237,6 +290,7 @@ async function save(){
     audio:{ downmix_lossless: downmix.checked, target_codec: acodec.value, bitrate_kbps: +abitrate.value },
     client_buffer:{ target_buffer_bytes_mb: +bufmb.value, max_buffer_ms: +maxbuf.value },
     network:{ delivery: delivery.value, hls_segment_duration: +seg.value },
+    metadata:{ enabled: metaEnabled.checked, tmdb_api_key: tmdbKey.value.trim(), language: metaLang.value },
     server:{ media_dirs: dirs.value.split('\n').map(s=>s.trim()).filter(Boolean) }
   };
   await fetch('/api/settings',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(patch)});

@@ -20,17 +20,26 @@ class PluxyApplication : Application() {
 
         private const val PREFS = "pluxy_prefs"
         private const val KEY_SERVER = "server_base_url"
+        private const val KEY_NAME = "server_name"
 
-        /** Valeur par défaut — à adapter à l'IP du PC serveur. */
-        const val DEFAULT_SERVER = "http://192.168.1.20:8420"
+        private fun prefs(ctx: Context) =
+            ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+
+        /** true si un serveur a déjà été choisi (par découverte ou manuellement). */
+        fun isConfigured(ctx: Context): Boolean =
+            prefs(ctx).getString(KEY_SERVER, null) != null
 
         fun serverBaseUrl(ctx: Context): String =
-            ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                .getString(KEY_SERVER, DEFAULT_SERVER) ?: DEFAULT_SERVER
+            prefs(ctx).getString(KEY_SERVER, "http://127.0.0.1:8420")!!
 
-        fun setServerBaseUrl(ctx: Context, url: String) {
-            ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                .edit().putString(KEY_SERVER, url.trimEnd('/')).apply()
+        fun serverName(ctx: Context): String =
+            prefs(ctx).getString(KEY_NAME, "Pluxy") ?: "Pluxy"
+
+        fun setServer(ctx: Context, url: String, name: String = "Pluxy") {
+            prefs(ctx).edit()
+                .putString(KEY_SERVER, url.trimEnd('/'))
+                .putString(KEY_NAME, name)
+                .apply()
         }
     }
 }

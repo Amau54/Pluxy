@@ -17,6 +17,50 @@ data class MediaItem(
     @Json(name = "video_codec") val videoCodec: String? = null,
     @Json(name = "is_hdr") val isHdr: Boolean = false,
     @Json(name = "external_subs") val externalSubs: List<String> = emptyList(),
+    val year: Int? = null,
+    @Json(name = "poster_url") val posterUrl: String? = null,
+    @Json(name = "has_metadata") val hasMetadata: Boolean = false,
+)
+
+/** Serveur découvert sur le LAN (broadcast UDP ou /api/server/info). */
+@JsonClass(generateAdapter = true)
+data class ServerInfo(
+    val app: String = "pluxy",
+    val name: String = "Pluxy",
+    val ip: String,
+    val port: Int = 8420,
+    val version: String? = null,
+) {
+    val baseUrl: String get() = "http://$ip:$port"
+}
+
+/** Membre du casting. */
+@JsonClass(generateAdapter = true)
+data class CastMember(
+    val name: String,
+    val character: String? = null,
+    @Json(name = "profile_url") val profileUrl: String? = null,
+)
+
+/** Métadonnées enrichies (TMDB) renvoyées par /api/library/items/{id}/metadata */
+@JsonClass(generateAdapter = true)
+data class MovieMetadata(
+    @Json(name = "tmdb_id") val tmdbId: Int? = null,
+    val title: String,
+    @Json(name = "original_title") val originalTitle: String? = null,
+    val year: Int? = null,
+    val overview: String? = null,
+    val tagline: String? = null,
+    val genres: List<String> = emptyList(),
+    val runtime: Int? = null,
+    val rating: Double? = null,
+    @Json(name = "poster_url") val posterUrl: String? = null,
+    @Json(name = "backdrop_url") val backdropUrl: String? = null,
+    val cast: List<CastMember> = emptyList(),
+    val director: String? = null,
+    @Json(name = "trailer_youtube_key") val trailerYoutubeKey: String? = null,
+    @Json(name = "trailer_url") val trailerUrl: String? = null,
+    val matched: Boolean = false,
 )
 
 /** Capacités envoyées au serveur pour le moteur de décision. */

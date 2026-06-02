@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
-from .api import routes_library, routes_settings, routes_stream
+from .api import routes_library, routes_server, routes_settings, routes_stream
 from .state import AppState
 
 BASE_DIR = Path(__file__).resolve().parent.parent      # .../server
@@ -28,6 +28,7 @@ async def lifespan(app: FastAPI):
     task = asyncio.create_task(reaper())
     yield
     task.cancel()
+    app.state.pluxy.discovery.stop()
 
 
 app = FastAPI(title="Pluxy", version="1.0.0", lifespan=lifespan)
@@ -42,6 +43,7 @@ app.add_middleware(
 app.include_router(routes_settings.router)
 app.include_router(routes_library.router)
 app.include_router(routes_stream.router)
+app.include_router(routes_server.router)
 
 
 @app.get("/health")
