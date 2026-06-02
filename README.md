@@ -153,6 +153,21 @@ mise à jour sans désinstallation. Pour publier une nouvelle version, incrémen
 
 ---
 
+## 💾 Données utilisateur (persistance)
+
+La configuration (**clé TMDB**, dossiers), l'index de bibliothèque, le cache de
+métadonnées et les positions de reprise sont stockés dans un emplacement **stable,
+hors du dossier du projet** :
+
+```
+Windows : %LOCALAPPDATA%\Pluxy\
+Linux/Mac : ~/.local/share/Pluxy/
+```
+
+→ Mettre à jour ou remplacer le dossier Pluxy **ne perd plus** ces données.
+Une ancienne config présente dans `server/config.json` est **migrée automatiquement**
+au premier démarrage. *(Personnalisable via la variable d'environnement `PLUXY_DATA_DIR`.)*
+
 ## 🗂️ Politique de versions
 
 `Build-APK.bat` ne conserve que les **3 APK les plus récentes** dans `dist/` ;

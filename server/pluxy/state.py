@@ -8,17 +8,25 @@ from .config import ConfigManager
 from .discovery import DiscoveryResponder
 from .library import Library
 from .metadata import MetadataProvider
+from .paths import data_dir
 from .transcoder import TranscodeManager
 from .watchstate import WatchStore
 
 
 class AppState:
     def __init__(self, base_dir: Path):
-        self.cfgm = ConfigManager(base_dir)
-        self.library = Library(self.cfgm, base_dir)
+        # Données utilisateur dans un emplacement STABLE (hors dossier projet) :
+        # config, index bibliothèque, métadonnées et reprise survivent aux MAJ.
+        data = data_dir()
+        self.cfgm = ConfigManager(
+            data_dir=data,
+            default_path=base_dir / "config.default.json",
+            legacy_dir=base_dir,                       # migre l'ancien server/config.json
+        )
+        self.library = Library(self.cfgm, data, legacy_dir=base_dir)
         self.transcoder = TranscodeManager(self.cfgm.cfg)
-        self.metadata = MetadataProvider(self.cfgm, base_dir)
-        self.watch = WatchStore(base_dir)
+        self.metadata = MetadataProvider(self.cfgm, data)
+        self.watch = WatchStore(data)
         self.discovery = DiscoveryResponder(self.cfgm)
         self.discovery.start()
         # L'index persistant est déjà chargé : la liste est dispo immédiatement.

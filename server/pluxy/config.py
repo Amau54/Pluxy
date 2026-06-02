@@ -132,22 +132,41 @@ class PluxyConfig(BaseModel):
 class ConfigManager:
     """Charge/sauvegarde la configuration et expose un objet `PluxyConfig` vivant."""
 
-    def __init__(self, base_dir: Path):
-        self.base_dir = base_dir
-        self.path = base_dir / "config.json"
-        self.default_path = base_dir / "config.default.json"
+    def __init__(self, data_dir: Path, default_path: Path, legacy_dir: Path | None = None):
+        # config.json est écrit dans un emplacement STABLE (survit aux mises à jour).
+        self.path = data_dir / "config.json"
+        self.default_path = default_path
+        self.legacy_dir = legacy_dir
         self._lock = threading.RLock()
         self._cfg = self._load()
 
     def _load(self) -> PluxyConfig:
-        src = self.path if self.path.exists() else self.default_path
+        # Priorité : config persistée -> ancienne config (migration) -> modèle par défaut.
+        legacy = self.legacy_dir / "config.json" if self.legacy_dir else None
+        if self.path.exists():
+            src = self.path
+        elif legacy and legacy.exists():
+            src = legacy                              # migration depuis server/config.json
+        else:
+            src = self.default_path
+
         if src.exists():
             data = json.loads(src.read_text(encoding="utf-8"))
             cfg = PluxyConfig.model_validate(data)
         else:
             cfg = PluxyConfig()
-        # Garantit l'existence du cache de transcodage.
+
         Path(cfg.server.transcode_temp_dir).mkdir(parents=True, exist_ok=True)
+        # Si on a chargé depuis le défaut/legacy, on écrit immédiatement dans
+        # l'emplacement stable pour figer la persistance.
+        if src != self.path:
+            try:
+                self.path.write_text(
+                    json.dumps(cfg.model_dump(), indent=2, ensure_ascii=False),
+                    encoding="utf-8",
+                )
+            except Exception:
+                pass
         return cfg
 
     @property

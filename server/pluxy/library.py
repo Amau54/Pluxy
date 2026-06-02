@@ -17,9 +17,17 @@ from .probe import probe
 
 
 class Library:
-    def __init__(self, cfgm: ConfigManager, base_dir: Path):
+    def __init__(self, cfgm: ConfigManager, data_dir: Path, legacy_dir: Path | None = None):
         self.cfgm = cfgm
-        self.index_path = base_dir / ".pluxy_library.json"
+        self.index_path = data_dir / ".pluxy_library.json"
+        # Migration : récupère l'ancien index s'il existe et que le nouveau non.
+        if legacy_dir and not self.index_path.exists():
+            legacy = legacy_dir / ".pluxy_library.json"
+            if legacy.exists():
+                try:
+                    self.index_path.write_text(legacy.read_text(encoding="utf-8"), encoding="utf-8")
+                except Exception:
+                    pass
         self._items: Dict[str, MediaItem] = {}
         self._lock = threading.RLock()
         self._scanning = False
