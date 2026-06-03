@@ -1,9 +1,7 @@
 package com.pluxy.tv.player
 
 import android.app.ActivityManager
-import android.app.UiModeManager
 import android.content.Context
-import android.content.res.Configuration
 import androidx.media3.common.C
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.util.UnstableApi
@@ -25,8 +23,8 @@ import java.util.concurrent.TimeUnit
  *  1. Pré-buffer agressif (LoadControl) piloté par la config serveur — pré-charge
  *     plusieurs centaines de Mo en RAM pour absorber les micro-coupures du double
  *     saut Wi-Fi 5 GHz.
- *  2. Décodage matériel HEVC Main10 + passthrough HDR10 (tunneling) vers la dalle
- *     OLED de la Philips 803.
+ *  2. Décodage matériel HEVC Main10 + HDR10 natif (SANS tunneling) vers la dalle
+ *     OLED de la Philips 803 — le HDR passe par les infoframes HDMI du décodeur.
  *  3. Source HLS (transcode NVENC) ou progressive (Direct Play / Direct Stream).
  */
 @UnstableApi
@@ -57,8 +55,6 @@ object PluxyPlayerFactory {
             .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
             .setEnableDecoderFallback(true)
 
-        val isTv = isTelevision(context)
-
         // ---- 3. Source de données HTTP via OkHttp (Range + keep-alive) ----- //
         val ok = OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS)
@@ -71,14 +67,15 @@ object PluxyPlayerFactory {
         val mediaSourceFactory = DefaultMediaSourceFactory(context)
             .setDataSourceFactory(httpFactory)
 
-        // ---- 4. Sélecteur de pistes : HDR10 + tunneling -------------------- //
+        // ---- 4. Sélecteur de pistes : HDR10 natif ------------------------- //
         val trackSelector = DefaultTrackSelector(context).apply {
             setParameters(
                 buildUponParameters()
-                    // Tunneling UNIQUEMENT sur Android TV (HDR10 passthrough vers la
-                    // dalle). Sur mobile, beaucoup de décodeurs gèrent mal le tunneling
-                    // (écran noir) -> on le désactive.
-                    .setTunnelingEnabled(isTv)
+                    // Tunneling DÉSACTIVÉ : le HDR10 n'en a PAS besoin (il passe par
+                    // les infoframes HDMI du décodeur matériel classique). Le tunneling
+                    // est au contraire une cause fréquente d'écran noir, de HDR qui ne
+                    // s'enclenche pas et de désynchro A/V sur Android TV.
+                    .setTunnelingEnabled(false)
                     .setPreferredVideoMimeType(MimeTypes.VIDEO_H265)
                     // Langue audio préférée = réglage utilisateur (fiche film).
                     .setPreferredAudioLanguage(
@@ -103,11 +100,6 @@ object PluxyPlayerFactory {
             .setReleaseTimeoutMs(5000)
             .build()
             .also { it.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT }
-    }
-
-    private fun isTelevision(ctx: Context): Boolean {
-        val ui = ctx.getSystemService(Context.UI_MODE_SERVICE) as? UiModeManager
-        return ui?.currentModeType == Configuration.UI_MODE_TYPE_TELEVISION
     }
 
     /** Octets de buffer cible : min(demandé, ~1/4 de la mémoire de classe), borné. */

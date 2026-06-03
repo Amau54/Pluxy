@@ -24,7 +24,9 @@ class MediaStream(BaseModel):
     pix_fmt: Optional[str] = None
     color_transfer: Optional[str] = None    # smpte2084 (PQ/HDR10), arib-std-b67 (HLG)...
     color_primaries: Optional[str] = None
+    color_space: Optional[str] = None       # bt2020nc, bt709...
     is_hdr: bool = False
+    is_dovi: bool = False                   # Dolby Vision (DOVI configuration record)
     # Audio
     channels: Optional[int] = None
     # Commun

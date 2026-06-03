@@ -46,7 +46,26 @@ def probe(ffprobe_path: str, file_path: str) -> MediaInfo:
             continue
 
         transfer = s.get("color_transfer")
-        is_hdr = kind == StreamKind.VIDEO and transfer in _HDR_TRANSFERS
+        primaries = s.get("color_primaries")
+        space = s.get("color_space")
+        pix = s.get("pix_fmt") or ""
+
+        # Dolby Vision : décrit dans side_data_list (DOVI configuration record).
+        side = s.get("side_data_list") or []
+        is_dovi = any(
+            "dolby vision" in str(sd.get("side_data_type", "")).lower()
+            or "dovi" in str(sd.get("side_data_type", "")).lower()
+            for sd in side
+        )
+
+        # HDR fiable : transfert PQ/HLG, OU Dolby Vision, OU faisceau d'indices
+        # (primaires BT.2020 + 10 bits) quand le tag color_transfer manque (fichiers
+        # mal taggés fréquents). On ne se fie PAS à BT.2020 seul (peut être du SDR WCG).
+        is_hdr = kind == StreamKind.VIDEO and (
+            transfer in _HDR_TRANSFERS
+            or is_dovi
+            or (primaries == "bt2020" and ("10" in pix or "p010" in pix or "12" in pix))
+        )
 
         tags = s.get("tags", {}) or {}
         streams.append(
@@ -59,8 +78,10 @@ def probe(ffprobe_path: str, file_path: str) -> MediaInfo:
                 bit_rate=_to_int(s.get("bit_rate")),
                 pix_fmt=s.get("pix_fmt"),
                 color_transfer=transfer,
-                color_primaries=s.get("color_primaries"),
+                color_primaries=primaries,
+                color_space=space,
                 is_hdr=is_hdr,
+                is_dovi=is_dovi,
                 channels=s.get("channels"),
                 language=tags.get("language"),
                 title=tags.get("title"),

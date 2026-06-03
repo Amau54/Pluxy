@@ -146,11 +146,17 @@ class PlayerActivity : AppCompatActivity() {
                 buffer = api.clientRuntime().buffer
                 val progress = api.getProgress(item.id)
 
+                // Échelle de repli dédupliquée : flux choisi par le serveur, puis
+                // lecture directe brute, puis conversion compatible H.264 1080p
+                // (universellement décodable, ultime filet de sécurité).
                 attempts.clear()
                 attempts.add(decision.streamUrl to decision.delivery)
-                if (decision.delivery != "direct")
-                    attempts.add("/stream/direct/${item.id}" to "direct")
-                attempts.add("/stream/hls/${item.id}/compat/index.m3u8" to "hls")
+                val directUrl = "/stream/direct/${item.id}"
+                if (attempts.none { it.first == directUrl })
+                    attempts.add(directUrl to "direct")
+                val compatUrl = "/stream/hls/${item.id}/compat/index.m3u8"
+                if (attempts.none { it.first == compatUrl })
+                    attempts.add(compatUrl to "hls")
                 attemptIdx = 0
                 modeLabel = decision.mode + if (decision.toneMap) " · HDR→SDR" else ""
                 Logger.log("decide", "mode=${decision.mode} compat=${decision.compat} url=${decision.streamUrl} reasons=${decision.reasons.joinToString(" | ")}")
@@ -391,42 +397,76 @@ class PlayerActivity : AppCompatActivity() {
         }
 
         override fun onPlayerError(error: PlaybackException) {
-            Logger.log("error", "${error.errorCodeName} (attempt $attemptIdx)")
-            // 1) Avance dans la chaîne de repli (décodage/manifeste/HTTP).
-            if (attemptIdx + 1 < attempts.size) {
+            val code = error.errorCode
+            Logger.log("error", "${error.errorCodeName}($code) attempt=$attemptIdx")
+            val pos = player?.currentPosition?.coerceAtLeast(0) ?: savedPositionMs
+
+            // CAS 1 — Erreur FATALE de décodage/conteneur : la TV ne sait vraiment
+            // pas lire CE flux. On descend d'un cran dans l'échelle de repli
+            // (lecture directe brute, puis conversion compatible H.264).
+            if (isFatalDecodeError(code) && attemptIdx + 1 < attempts.size) {
                 statusView.text = when (attempts[attemptIdx + 1].second) {
                     "direct" -> "Lecture directe (repli)…"
                     else -> "Conversion compatible H.264 (repli)…"
                 }
-                loadAttempt(attemptIdx + 1, restorePos = player?.currentPosition ?: 0L)
+                loadAttempt(attemptIdx + 1, restorePos = pos)
                 return
             }
-            // 2) Chaîne épuisée : on RECHARGE la tentative courante (pas un prepare()
-            //    nu qui rejouerait le même flux en échec), avec backoff borné.
-            if (retries < 3) {
+
+            // CAS 2 — Erreur TRANSITOIRE (réseau, IO, segment momentanément
+            // indisponible) : on RECHARGE LE MÊME flux. On ne dégrade JAMAIS la
+            // qualité 4K HDR à cause d'un simple hoquet Wi-Fi. Backoff borné.
+            if (retries < MAX_RETRIES) {
                 retries++
-                statusView.text = "Reconnexion… ($retries/3)"
-                val pos = player?.currentPosition ?: savedPositionMs
+                statusView.text = "Reconnexion… ($retries/$MAX_RETRIES)"
                 retryRunnable?.let { handler.removeCallbacks(it) }
-                val r = Runnable { if (!isFinishing) loadAttempt(attemptIdx, restorePos = pos) }
+                val r = Runnable { if (!isFinishing) prepareCurrent(restorePos = pos) }
                 retryRunnable = r
-                handler.postDelayed(r, 1500L * retries)
+                handler.postDelayed(r, (1000L * retries).coerceAtMost(5000L))
+                return
+            }
+
+            // CAS 3 — Repli épuisé sur le flux courant : en DERNIER recours, on tente
+            // le cran suivant de l'échelle s'il en reste un.
+            if (attemptIdx + 1 < attempts.size) {
+                loadAttempt(attemptIdx + 1, restorePos = pos)
             } else {
                 statusView.text = "Erreur lecture : ${error.errorCodeName}"
             }
         }
     }
 
-    private fun loadAttempt(idx: Int, restorePos: Long) {
+    /** Erreur impliquant que CE flux est intrinsèquement illisible par la TV
+     *  (codec/profil/conteneur non supportés) -> inutile de réessayer à l'identique. */
+    private fun isFatalDecodeError(code: Int): Boolean = code in setOf(
+        PlaybackException.ERROR_CODE_DECODING_FAILED,
+        PlaybackException.ERROR_CODE_DECODER_INIT_FAILED,
+        PlaybackException.ERROR_CODE_DECODER_QUERY_FAILED,
+        PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED,
+        PlaybackException.ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES,
+        PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED,
+        PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED,
+        PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED,
+        PlaybackException.ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED,
+    )
+
+    /** (Re)charge la tentative courante SANS réinitialiser le compteur de retries
+     *  (utilisé pour réessayer le même flux après une erreur transitoire). */
+    private fun prepareCurrent(restorePos: Long) {
         val p = player ?: return
-        attemptIdx = idx
-        retries = 0
         retryRunnable?.let { handler.removeCallbacks(it) }
-        val (url, delivery) = attempts[idx]
+        val (url, delivery) = attempts[attemptIdx]
         p.setMediaItem(buildMediaItem(url, delivery))
         p.prepare()
         if (restorePos > 0) p.seekTo(restorePos)
         p.playWhenReady = true
+    }
+
+    /** Bascule sur une nouvelle tentative de l'échelle de repli (remet retries à 0). */
+    private fun loadAttempt(idx: Int, restorePos: Long) {
+        attemptIdx = idx
+        retries = 0
+        prepareCurrent(restorePos)
     }
 
     private fun saveProgress() {
@@ -439,6 +479,9 @@ class PlayerActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_ITEM = "extra_item_json"
+        // Réessais sur erreur transitoire avant d'envisager un repli de qualité
+        // inférieure : on préserve le 4K HDR face aux micro-coupures Wi-Fi.
+        private const val MAX_RETRIES = 6
         // Scope process-wide pour les nettoyages réseau qui doivent aboutir
         // même après destruction de l'activité (libération NVENC, dernière position).
         private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)

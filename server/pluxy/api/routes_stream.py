@@ -202,7 +202,13 @@ def stream_remux(item_id: str, request: Request):
             except Exception:
                 pass
 
-    return StreamingResponse(pump(), media_type="video/x-matroska")
+    # fMP4 fragmenté continu : pas de Range (flux non-seekable) -> on l'indique
+    # explicitement pour qu'ExoPlayer ne tente pas de rouvrir la connexion.
+    return StreamingResponse(
+        pump(),
+        media_type="video/mp4",
+        headers={"Cache-Control": "no-store", "Accept-Ranges": "none"},
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -260,8 +266,13 @@ def hls_segment(item_id: str, variant: str, segment: str, request: Request):
     if not m:
         raise HTTPException(404, "Segment invalide")
     _ensure_vod_ctx(st, item_id, variant)
-    # Transcodage À LA DEMANDE de ce segment (et cache).
-    path = st.vod.segment(st.cfgm.cfg, item_id, variant, int(m.group(1)))
+    # Transcodage À LA DEMANDE de ce segment (et cache). Une 2e tentative en cas
+    # d'échec transitoire (GPU momentanément saturé) évite un 503 -> erreur lecteur
+    # -> rechargement depuis le début côté client.
+    idx = int(m.group(1))
+    path = st.vod.segment(st.cfgm.cfg, item_id, variant, idx)
+    if path is None or not path.exists():
+        path = st.vod.segment(st.cfgm.cfg, item_id, variant, idx)
     if path is None or not path.exists():
         raise HTTPException(503, "Segment indisponible (transcodage)")
     return FileResponse(path, media_type="video/mp2t")

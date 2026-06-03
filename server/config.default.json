@@ -23,6 +23,7 @@
     "tune": "hq",
     "rc_mode": "vbr",
     "force_transcode": false,
+    "prefer_direct_play": true,
     "max_bitrate_mbps": 50,
     "vbv_bufsize_factor": 2.0,
     "gpu_index": 0,

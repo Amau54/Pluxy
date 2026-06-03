@@ -25,9 +25,30 @@ from .tools import NO_WINDOW, has_libplacebo
 # ===========================================================================
 #  Construction des arguments FFmpeg
 # ===========================================================================
-def _audio_args(decision: PlaybackDecision, cfg: PluxyConfig) -> List[str]:
-    """Sélectionne la 1re piste audio et la downmixe si nécessaire (ARC Philips 803)."""
-    if decision.audio_action == "copy":
+# Codecs audio que le conteneur fMP4 transporte proprement (et qu'ExoPlayer lit
+# de façon fiable depuis un flux fragmenté). Les autres (DTS, TrueHD, FLAC…) sont
+# ré-encodés vers la cible pour rester dans un MP4 valide.
+_MP4_AUDIO_OK = {"aac", "ac3", "eac3", "mp3"}
+
+
+def _audio_args(
+    decision: PlaybackDecision,
+    cfg: PluxyConfig,
+    src_codec: str | None = None,
+    mp4_safe: bool = False,
+) -> List[str]:
+    """
+    Sélectionne la 1re piste audio. La copie telle quelle (passthrough Atmos/DTS-HD)
+    quand c'est possible, sinon la transcode vers la cible (AC3 5.1 universel).
+
+    `mp4_safe` : si la sortie est un MP4/fMP4, on force le transcodage des codecs
+    que le conteneur MP4 ne porte pas proprement (DTS/TrueHD/FLAC) même si la
+    décision disait "copy" — sinon le flux MP4 est illisible par ExoPlayer.
+    """
+    copy_ok = decision.audio_action == "copy"
+    if copy_ok and mp4_safe and (src_codec or "") not in _MP4_AUDIO_OK:
+        copy_ok = False
+    if copy_ok:
         return ["-map", "0:a:0?", "-c:a", "copy"]
     return [
         "-map", "0:a:0?",
@@ -45,17 +66,36 @@ def build_direct_stream_cmd(
     """
     Direct Stream : seule la couche conteneur (et/ou l'audio) pose problème.
     La vidéo 4K HDR n'est JAMAIS touchée -> zéro lag, charge CPU/GPU quasi nulle.
-    Sortie Matroska fragmentée sur stdout (pipe:1) pour streaming progressif.
+
+    Sortie **MP4 fragmenté** sur stdout (pipe:1) : contrairement au Matroska sur
+    pipe (non-seekable, mal géré par ExoPlayer -> rechargements depuis le début =
+    "le son repart en boucle"), le fMP4 est le format de streaming progressif
+    canonique, lu de façon fiable et continue par FragmentedMp4Extractor.
+    Les sous-titres incrustés ne passent pas en MP4 -> le client utilise les pistes
+    externes (sidecar) injectées séparément.
     """
-    cmd = [
+    v = media.video
+    vcodec = (v.codec if v else "") or ""
+    a = media.audios[0] if media.audios else None
+    acodec = (a.codec if a else "") or ""
+
+    cmd: List[str] = [
         cfg.ffmpeg.ffmpeg_path,
         "-hide_banner", "-loglevel", cfg.ffmpeg.log_level,
+        "-fflags", "+genpts",
         "-i", media.path,
         "-map", "0:v:0",
-        "-c:v", "copy",                # vidéo intacte (HEVC/HDR10 préservé)
-        *_audio_args(decision, cfg),
-        "-map", "0:s?", "-c:s", "copy",
-        "-f", "matroska",
+        "-c:v", "copy",                # vidéo intacte (HEVC/HDR10/DV préservé)
+    ]
+    # HEVC dans un MP4 DOIT être taggé hvc1 (et non hev1) pour les décodeurs
+    # matériels Android, sinon écran noir / refus du décodeur.
+    if vcodec in ("hevc", "h265"):
+        cmd += ["-tag:v", "hvc1"]
+    cmd += _audio_args(decision, cfg, src_codec=acodec, mp4_safe=True)
+    cmd += [
+        "-movflags", "+frag_keyframe+empty_moov+default_base_moof",
+        "-frag_duration", "1000000",   # fragments ~1 s -> démarrage rapide
+        "-f", "mp4",
         "-",
     ]
     return cmd
@@ -178,14 +218,20 @@ def build_transcode_cmd(
         ]
         # PAS de `-pix_fmt p010le` (échec conversion CPU sur frames CUDA).
         # Profil main10 + flags couleur HDR si la source est HDR (HDR -> HDR) :
-        # la TV reste en mode HDR (transfert PQ + primaires BT.2020 conservés).
+        # la TV reste en mode HDR (transfert PQ/HLG + primaires BT.2020 conservés,
+        # repris de la SOURCE pour ne pas forcer du PQ sur du HLG par erreur).
         if not decision.tone_map:
             pix = (v.pix_fmt or "") if v else ""
             if v and (v.is_hdr or "10" in pix):
                 cmd += ["-profile:v", "main10"]
             if v and v.is_hdr:
-                cmd += ["-color_primaries", "bt2020",
-                        "-color_trc", "smpte2084", "-colorspace", "bt2020nc"]
+                trc = (v.color_transfer
+                       if v.color_transfer in ("smpte2084", "arib-std-b67")
+                       else "smpte2084")
+                prim = v.color_primaries or "bt2020"
+                space = v.color_space or "bt2020nc"
+                cmd += ["-color_primaries", prim, "-color_trc", trc,
+                        "-colorspace", space, "-color_range", "tv"]
     else:
         cmd += [
             "-c:v", "libx265", "-preset", "fast",
