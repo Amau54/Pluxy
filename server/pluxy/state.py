@@ -10,6 +10,7 @@ from .library import Library
 from .metadata import MetadataProvider
 from .paths import data_dir
 from .transcoder import TranscodeManager
+from .vodhls import VodHls
 from .watchstate import WatchStore
 
 
@@ -25,6 +26,7 @@ class AppState:
         )
         self.library = Library(self.cfgm, data, legacy_dir=base_dir)
         self.transcoder = TranscodeManager(self.cfgm.cfg)
+        self.vod = VodHls(self.cfgm.cfg, data)
         self.metadata = MetadataProvider(self.cfgm, data)
         self.watch = WatchStore(data)
         self.discovery = DiscoveryResponder(self.cfgm)

@@ -5,6 +5,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.view.View
 import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
@@ -57,11 +58,9 @@ class PlayerActivity : AppCompatActivity() {
     private var savedPositionMs = 0L
     private var resumeHandled = false
     private var modeLabel = ""
-    // Seek dans un flux transcodé = relance FFmpeg à un offset -> on suit la base.
-    private var streamBaseMs = 0L
-    private var transcodeVariant = "main"
     private val isTranscode get() = attempts.getOrNull(attemptIdx)?.second == "hls"
-    private fun absolutePositionMs(): Long = streamBaseMs + (player?.currentPosition ?: 0L)
+    // La playlist VOD couvre tout le film : position et durée sont absolues.
+    private fun absolutePositionMs(): Long = player?.currentPosition ?: 0L
     private val durationMs get() = (item.duration * 1000).toLong()
 
     private val aspectModes = listOf(
@@ -91,8 +90,15 @@ class PlayerActivity : AppCompatActivity() {
         item = Moshi.Builder().add(KotlinJsonAdapterFactory()).build()
             .adapter(PluxyItem::class.java).fromJson(json) ?: run { finish(); return }
 
-        // Tout passe par la roue crantée unique.
-        findViewById<Button>(R.id.btnGear).setOnClickListener { openMenu() }
+        // Roue crantée : visible UNIQUEMENT quand les contrôles du lecteur sont
+        // affichés (au tap sur l'écran), comme un lecteur moderne.
+        val gear = findViewById<Button>(R.id.btnGear)
+        gear.setOnClickListener { openMenu() }
+        gear.visibility = View.GONE
+        playerView.setControllerVisibilityListener(
+            PlayerView.ControllerVisibilityListener { vis -> gear.visibility = vis }
+        )
+        playerView.controllerShowTimeoutMs = 3500
     }
 
     /** Menu unique (roue crantée) regroupant toutes les options de lecture. */
@@ -140,14 +146,12 @@ class PlayerActivity : AppCompatActivity() {
                 buffer = api.clientRuntime().buffer
                 val progress = api.getProgress(item.id)
 
-                transcodeVariant = if ("/compat/" in decision.streamUrl) "compat" else "main"
                 attempts.clear()
                 attempts.add(decision.streamUrl to decision.delivery)
                 if (decision.delivery != "direct")
                     attempts.add("/stream/direct/${item.id}" to "direct")
-                attempts.add("/stream/hls/${item.id}/compat/0/index.m3u8" to "hls")
+                attempts.add("/stream/hls/${item.id}/compat/index.m3u8" to "hls")
                 attemptIdx = 0
-                streamBaseMs = 0L
                 modeLabel = decision.mode + if (decision.toneMap) " · HDR→SDR" else ""
                 Logger.log("decide", "mode=${decision.mode} compat=${decision.compat} url=${decision.streamUrl} reasons=${decision.reasons.joinToString(" | ")}")
 
@@ -187,17 +191,11 @@ class PlayerActivity : AppCompatActivity() {
             .show()
     }
 
-    /** Va à une position ABSOLUE : seek natif (Direct Play) ou relance transcodage. */
+    /** Va à une position ABSOLUE. Seek natif : la playlist VOD couvre tout le film,
+     *  ExoPlayer demande le segment cible (transcodé à la demande) -> lecture. */
     private fun goToAbsolute(targetMs: Long) {
         val t = targetMs.coerceIn(0, if (durationMs > 0) durationMs else Long.MAX_VALUE)
-        if (isTranscode && t > 1000) {
-            streamBaseMs = t
-            attempts[attemptIdx] = "/stream/hls/${item.id}/$transcodeVariant/${t / 1000}/index.m3u8" to "hls"
-            Logger.log("seek", "transcode restart @ ${t / 1000}s")
-            loadAttempt(attemptIdx, restorePos = 0L)
-        } else {
-            player?.seekTo(t)
-        }
+        player?.seekTo(t)
     }
 
     private fun buildMediaItem(url: String, delivery: String): MediaItem {

@@ -79,7 +79,10 @@ async def playback_decide(request: Request) -> PlaybackDecision:
         dec.stream_url = f"/stream/remux/{item_id}"
     else:
         variant = "compat" if dec.compat else "main"
-        dec.stream_url = f"/stream/hls/{item_id}/{variant}/0/index.m3u8"
+        # Enregistre le contexte (media + décision avec vraies capacités client)
+        # pour le transcodage VOD à la demande, puis donne la playlist VOD.
+        st.vod.register(item_id, variant, media, dec)
+        dec.stream_url = f"/stream/hls/{item_id}/{variant}/index.m3u8"
     return dec
 
 
@@ -203,70 +206,72 @@ def stream_remux(item_id: str, request: Request):
 
 
 # --------------------------------------------------------------------------- #
-#  2c. Transcode — HLS NVENC fMP4 (variante main = HEVC ; compat = H.264 1080p)#
+#  2c. Transcode — HLS VOD à la demande (barre = film entier, seek partout)     #
+#  variante main = HEVC ; compat = H.264 1080p. Segments mpegts transcodés      #
+#  uniquement quand le lecteur les réclame.                                     #
 # --------------------------------------------------------------------------- #
-# L'OFFSET (en secondes) dans le chemin permet de relancer le transcodage à
-# n'importe quel instant du film -> seek/saut même sans pré-chargement.
-@router.get("/stream/hls/{item_id}/{variant}/{offset}/index.m3u8")
-def hls_playlist(item_id: str, variant: str, offset: int, request: Request):
-    st: AppState = get_state(request)
+def _ensure_vod_ctx(st: "AppState", item_id: str, variant: str):
+    """Garantit un contexte VOD (media + décision). Reconstruit après redémarrage."""
     it = st.library.get(item_id)
     if not it:
         raise HTTPException(404, "Média introuvable")
-    if variant not in ("main", "compat") or offset < 0:
-        raise HTTPException(404, "Variante/offset invalide")
-    compat = variant == "compat"
-    sid = f"{item_id}_{variant}_{offset}"
+    if variant not in ("main", "compat"):
+        raise HTTPException(404, "Variante inconnue")
+    if st.vod._context(item_id, variant) is None:
+        media = _safe_probe(st.cfgm.cfg.ffmpeg.ffprobe_path, it.path)
+        # Décision synthétique cohérente avec la variante de l'URL.
+        compat = variant == "compat"
+        dec = PlaybackDecision(
+            mode=PlaybackMode.TRANSCODE, compat=compat,
+            video_action="transcode",
+            audio_action="transcode" if compat else "copy",  # mpegts porte tout
+            tone_map=False,
+            target_bitrate_mbps=st.cfgm.cfg.transcoding.max_bitrate_mbps,
+            media=media,
+        )
+        st.vod.register(item_id, variant, media, dec)
+    return it
 
-    cfg = st.cfgm.cfg
-    sess = st.transcoder.get(sid)
-    if sess is None or not sess.is_alive():
-        media = _safe_probe(cfg.ffmpeg.ffprobe_path, it.path)
-        dec = decide(media, ClientCapabilities(), cfg)
 
-        def builder(out_dir: Path):
-            return build_transcode_cmd(media, dec, cfg, out_dir,
-                                       start_time=float(offset), compat=compat)
-
-        try:
-            # On arrête les AUTRES offsets de ce média/variante (un seul flux actif).
-            st.transcoder.stop_others(f"{item_id}_{variant}_", keep=sid)
-            sess = st.transcoder.get_or_start(sid, builder)
-        except FileNotFoundError:
-            raise HTTPException(503, "FFmpeg indisponible pour le transcodage")
-        if not sess.wait_for_playlist():
-            st.transcoder.stop(sid)
-            raise HTTPException(503, "Le transcodage n'a pas pu démarrer")
-
-    return FileResponse(
-        sess.playlist_path(),
+@router.get("/stream/hls/{item_id}/{variant}/index.m3u8")
+def hls_playlist(item_id: str, variant: str, request: Request):
+    st: AppState = get_state(request)
+    it = _ensure_vod_ctx(st, item_id, variant)
+    # Durée connue -> playlist VOD complète (barre de lecture = film entier).
+    duration = it.duration or 0.0
+    if duration <= 0:
+        media = _safe_probe(st.cfgm.cfg.ffmpeg.ffprobe_path, it.path)
+        duration = media.duration
+    return Response(
+        content=st.vod.playlist(duration),
         media_type="application/vnd.apple.mpegurl",
         headers={"Cache-Control": "no-cache"},
     )
 
 
-# Seuls ces noms de segments sont servis (anti path-traversal Windows/Unix).
-_SEGMENT_RE = re.compile(r"^(?:seg_\d{1,7}\.m4s|init\.mp4)$")
+# Anti path-traversal : seuls seg_NNNNN.ts sont servis.
+_SEGMENT_RE = re.compile(r"^seg_(\d{1,7})\.ts$")
 
 
-@router.get("/stream/hls/{item_id}/{variant}/{offset}/{segment}")
-def hls_segment(item_id: str, variant: str, offset: int, segment: str, request: Request):
+@router.get("/stream/hls/{item_id}/{variant}/{segment}")
+def hls_segment(item_id: str, variant: str, segment: str, request: Request):
     st = get_state(request)
-    if not _SEGMENT_RE.match(segment):
+    m = _SEGMENT_RE.match(segment)
+    if not m:
         raise HTTPException(404, "Segment invalide")
-    sess = st.transcoder.get(f"{item_id}_{variant}_{offset}")
-    if sess is None:
-        raise HTTPException(404, "Segment indisponible")
-    seg_path = sess.out_dir / segment
-    if not seg_path.exists() or sess.out_dir.resolve() not in seg_path.resolve().parents:
-        raise HTTPException(404, "Segment indisponible")
-    return FileResponse(seg_path, media_type="video/mp4")
+    _ensure_vod_ctx(st, item_id, variant)
+    # Transcodage À LA DEMANDE de ce segment (et cache).
+    path = st.vod.segment(st.cfgm.cfg, item_id, variant, int(m.group(1)))
+    if path is None or not path.exists():
+        raise HTTPException(503, "Segment indisponible (transcodage)")
+    return FileResponse(path, media_type="video/mp2t")
 
 
 @router.delete("/stream/hls/{item_id}")
 def hls_stop(item_id: str, request: Request) -> dict:
-    # Arrête toutes les sessions du média (toutes variantes + tous offsets de seek).
-    get_state(request).transcoder.stop_prefix(f"{item_id}_")
+    st = get_state(request)
+    st.transcoder.stop_prefix(f"{item_id}_")
+    st.vod.cleanup_item(item_id)
     return {"stopped": item_id}
 
 

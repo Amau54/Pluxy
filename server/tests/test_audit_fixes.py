@@ -8,9 +8,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 def test_segment_anti_traversal():
     from pluxy.api.routes_stream import _SEGMENT_RE
-    bad = [r"..\..\x.m4s", "../../x.m4s", "seg_0/../x.m4s", r"C:\x.m4s",
-           "init.mp4.exe", "evil.m4s", ".env", "seg_.m4s"]
-    good = ["seg_00000.m4s", "init.mp4", "seg_12.m4s", "seg_9999999.m4s"]
+    bad = [r"..\..\x.ts", "../../x.ts", "seg_0/../x.ts", r"C:\x.ts",
+           "seg_0.ts.exe", "evil.ts", ".env", "seg_.ts", "init.mp4"]
+    good = ["seg_00000.ts", "seg_12.ts", "seg_9999999.ts"]
     assert all(not _SEGMENT_RE.match(b) for b in bad), "traversal non bloque"
     assert all(_SEGMENT_RE.match(g) for g in good), "segment legitime refuse"
 
@@ -27,7 +27,7 @@ def test_atomic_write():
 def test_app_imports():
     from pluxy.main import app
     paths = {r.path for r in app.routes}
-    assert "/stream/hls/{item_id}/{variant}/{offset}/index.m3u8" in paths
+    assert "/stream/hls/{item_id}/{variant}/index.m3u8" in paths
 
 
 def test_sub_lang_detection():

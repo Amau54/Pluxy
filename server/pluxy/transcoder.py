@@ -97,12 +97,16 @@ def build_transcode_cmd(
     out_dir: Path,
     start_time: float = 0.0,
     compat: bool = False,
+    segment_out: Path | None = None,
+    seg_duration: float | None = None,
 ) -> List[str]:
     """
-    Transcode matériel NVENC -> HLS.
+    Transcode matériel NVENC.
 
-    Pipeline GPU pur quand pas de tone mapping (NVDEC->NVENC sans copie système) ;
-    bascule download/tonemap/upload uniquement si HDR->SDR demandé.
+    - segment_out=None : sortie HLS live (héritage).
+    - segment_out=Path : produit UN segment mpegts indépendant de `seg_duration`
+      secondes à partir de `start_time` -> HLS VOD à la demande (barre = film entier,
+      seek partout). mpegts autonome (pas d'init partagé), décodable seul.
     """
     tc = cfg.transcoding
     cap_mbps = decision.target_bitrate_mbps or tc.max_bitrate_mbps
@@ -144,6 +148,9 @@ def build_transcode_cmd(
         cmd += ["-ss", f"{start_time:.3f}"]
 
     cmd += ["-i", media.path]
+
+    if segment_out is not None and seg_duration:
+        cmd += ["-t", f"{seg_duration:.3f}"]
 
     cmd += ["-map", "0:v:0"]
     if vf:
@@ -187,7 +194,18 @@ def build_transcode_cmd(
     else:
         cmd += _audio_args(decision, cfg)
 
-    # ---- Sortie HLS fMP4 (CMAF) : bien plus compatible que mpegts pour HEVC #
+    # ---- Sortie ---------------------------------------------------------- #
+    if segment_out is not None:
+        # Un segment mpegts autonome (HLS VOD à la demande).
+        cmd += [
+            "-f", "mpegts",
+            "-avoid_negative_ts", "make_zero",
+            "-muxdelay", "0", "-muxpreload", "0",
+            str(segment_out),
+        ]
+        return cmd
+
+    # Héritage : HLS fMP4 live.
     seg_dur = cfg.network.hls_segment_duration
     cmd += [
         "-f", "hls",

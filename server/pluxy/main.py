@@ -27,6 +27,7 @@ async def lifespan(app: FastAPI):
             await asyncio.sleep(30)
             try:
                 app.state.pluxy.transcoder.reap_idle()
+                app.state.pluxy.vod.reap_idle()
             except Exception:
                 pass
 

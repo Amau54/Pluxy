@@ -62,8 +62,10 @@ que le `versionCode` augmente.
   vers l'ampli quand l'appareil/HDMI le permet ; sinon downmix AC3/EAC3.
 - **Tone mapping HDR→SDR haute qualité** (libplacebo bt.2390 + détection du pic),
   repli zscale.
-- **Seek dans le transcodage** : relance FFmpeg à l'instant choisi -> aller à 45 min
-  même sans pré-chargement (le Direct Play seeke nativement via HTTP Range).
+- **Barre de lecture complète + seek partout (même en transcodage)** : HLS VOD à la
+  demande — la playlist couvre tout le film, chaque segment n'est transcodé qu'au
+  clic. On clique à 45 min et ça lit (~1 s), même sans pré-chargement. Direct Play
+  seeke nativement via HTTP Range.
 - **Bibliothèque persistante** : l'index survit aux redémarrages (liste instantanée),
   scan en arrière-plan, bouton **Actualiser** + pull-to-refresh côté app, et
   **regroupement des titres similaires** (sagas côte à côte).
