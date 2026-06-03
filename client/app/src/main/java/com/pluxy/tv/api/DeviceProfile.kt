@@ -97,15 +97,27 @@ object DeviceProfile {
         }
     }
 
+    /**
+     * Panneau HDR ? On accepte TOUTE forme de HDR (HDR10, HDR10+, HLG, Dolby Vision) :
+     * si l'écran fait du HDR, on lui envoie le HDR tel quel (pas de tone mapping SDR).
+     * Détection via l'API ancienne (hdrCapabilities) ET la nouvelle (Display.Mode, API 34+).
+     */
     private fun supportsHdr10(ctx: Context): Boolean {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return false
-        val display = (ctx.getSystemService(Context.DISPLAY_SERVICE)
-            as android.hardware.display.DisplayManager)
-            .getDisplay(Display.DEFAULT_DISPLAY) ?: return false
-        val caps = display.hdrCapabilities ?: return false
-        return caps.supportedHdrTypes.any {
-            it == Display.HdrCapabilities.HDR_TYPE_HDR10 ||
-                it == Display.HdrCapabilities.HDR_TYPE_HDR10_PLUS
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return false
+        return try {
+            val display = (ctx.getSystemService(Context.DISPLAY_SERVICE)
+                as android.hardware.display.DisplayManager)
+                .getDisplay(Display.DEFAULT_DISPLAY) ?: return false
+            @Suppress("DEPRECATION")
+            val legacy = display.hdrCapabilities?.supportedHdrTypes ?: IntArray(0)
+            if (legacy.isNotEmpty()) return true        // toute capacité HDR du panneau
+            if (Build.VERSION.SDK_INT >= 34) {
+                val modeTypes = display.mode?.supportedHdrTypes ?: IntArray(0)
+                if (modeTypes.isNotEmpty()) return true
+            }
+            false
+        } catch (_: Throwable) {
+            false
         }
     }
 

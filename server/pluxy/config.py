@@ -45,7 +45,12 @@ class TranscodingCfg(BaseModel):
     rc_mode: str = "vbr"
     # Force le transcodage même si Direct Play serait possible.
     force_transcode: bool = False
-    # Sélecteur de débit max (Bitrate Cap) — bride la bande passante Wi-Fi.
+    # PRÉFÉRER LA LECTURE DIRECTE (façon Plex « Original/Maximum » en réseau local) :
+    # quand le lecteur sait décoder le fichier, on l'envoie BRUT (qualité d'origine,
+    # HDR préservé, zéro transcodage) -> le plafond de débit n'est PAS appliqué.
+    # Le mettre à false pour bel et bien brider la bande passante Wi-Fi.
+    prefer_direct_play: bool = True
+    # Plafond de débit (Mbps) — appliqué seulement si prefer_direct_play=false.
     max_bitrate_mbps: int = 50
     vbv_bufsize_factor: float = 2.0
     gpu_index: int = 0

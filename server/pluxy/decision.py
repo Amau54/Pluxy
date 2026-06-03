@@ -71,16 +71,20 @@ def decide(
                 f"Résolution {v.height}p > max décodable {client.max_video_height}p."
             )
 
-        # Débit trop élevé pour la liaison Wi-Fi -> transcode avec bitrate cap.
-        # On préfère le débit VIDÉO (sinon une piste audio lossless volumineuse
-        # gonfle overall_bitrate et déclenche un transcode vidéo inutile).
-        v_bps = (v.bit_rate if v and v.bit_rate else media.overall_bitrate) or 0
-        src_mbps = v_bps / 1_000_000
-        if cap_mbps and src_mbps > cap_mbps:
-            video_needs_transcode = True
-            reasons.append(
-                f"Débit source {src_mbps:.0f} Mbps > plafond {cap_mbps} Mbps (Wi-Fi)."
-            )
+        # Débit trop élevé -> transcode AVEC bitrate cap, MAIS seulement si l'utilisateur
+        # a explicitement désactivé la lecture directe (sinon : qualité d'origine, façon
+        # Plex en réseau local). Le client peut aussi imposer sa propre limite Wi-Fi.
+        apply_cap = (not tc.prefer_direct_play) or bool(client.max_bitrate_mbps)
+        effective_cap = client.max_bitrate_mbps if tc.prefer_direct_play else cap_mbps
+        if apply_cap and effective_cap:
+            v_bps = (v.bit_rate if v and v.bit_rate else media.overall_bitrate) or 0
+            src_mbps = v_bps / 1_000_000
+            if src_mbps > effective_cap:
+                video_needs_transcode = True
+                cap_mbps = effective_cap
+                reasons.append(
+                    f"Débit source {src_mbps:.0f} Mbps > plafond {effective_cap} Mbps."
+                )
 
     # ---- 2. Tone mapping HDR -> SDR ? ------------------------------------ #
     tone_map = False

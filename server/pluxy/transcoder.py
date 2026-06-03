@@ -177,11 +177,15 @@ def build_transcode_cmd(
             "-spatial_aq", "1", "-rc-lookahead", "20", "-gpu", str(tc.gpu_index),
         ]
         # PAS de `-pix_fmt p010le` (échec conversion CPU sur frames CUDA).
-        # Profil main10 seulement si HDR/10-bit (préserve le HDR).
+        # Profil main10 + flags couleur HDR si la source est HDR (HDR -> HDR) :
+        # la TV reste en mode HDR (transfert PQ + primaires BT.2020 conservés).
         if not decision.tone_map:
             pix = (v.pix_fmt or "") if v else ""
             if v and (v.is_hdr or "10" in pix):
                 cmd += ["-profile:v", "main10"]
+            if v and v.is_hdr:
+                cmd += ["-color_primaries", "bt2020",
+                        "-color_trc", "smpte2084", "-colorspace", "bt2020nc"]
     else:
         cmd += [
             "-c:v", "libx265", "-preset", "fast",

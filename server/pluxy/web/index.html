@@ -81,13 +81,20 @@
   <!-- ============ BITRATE / QUALITÉ ============ -->
   <section class="card">
     <h2>📶 Débit & qualité réseau</h2>
-    <p class="desc">Bride la bande passante pour absorber la saturation du Wi-Fi 5 GHz.</p>
+    <p class="desc">Par défaut, qualité d'origine (lecture directe) — le HDR est préservé.</p>
 
     <div class="row">
-      <div class="label">Débit max (Bitrate Cap)
-        <span class="hint">Au-delà, transcodage NVENC automatique vers cette cible.</span></div>
+      <div class="label">Préférer la lecture directe (qualité originale)
+        <span class="hint">Recommandé. Envoie le fichier brut quand l'appareil sait le lire
+        (HDR intact, aucun transcodage). Désactiver pour brider la bande passante Wi-Fi.</span></div>
+      <label class="switch"><input type="checkbox" id="preferDirect"><span class="slider"></span></label>
+    </div>
+
+    <div class="row">
+      <div class="label">Débit max (si lecture directe désactivée)
+        <span class="hint">Au-delà, transcodage NVENC vers cette cible (HDR conservé si écran HDR).</span></div>
       <div class="range-wrap">
-        <input type="range" id="bitrate" min="5" max="120" step="5">
+        <input type="range" id="bitrate" min="5" max="150" step="5">
         <span class="val" id="bitrateVal">50 Mbps</span>
       </div>
     </div>
@@ -238,6 +245,7 @@ async function load(){
   const t = CFG.transcoding, a = CFG.audio, b = CFG.client_buffer, n = CFG.network, s = CFG.server;
   hw.checked = t.hardware_acceleration;
   force.checked = t.force_transcode;
+  preferDirect.checked = t.prefer_direct_play !== false;
   preset.value = t.preset;
   bitrate.value = t.max_bitrate_mbps; bitrateVal.textContent = t.max_bitrate_mbps+' Mbps';
   tonemap.value = t.hdr_tone_mapping;
@@ -282,6 +290,7 @@ async function save(){
     transcoding:{
       hardware_acceleration: hw.checked,
       force_transcode: force.checked,
+      prefer_direct_play: preferDirect.checked,
       preset: preset.value,
       max_bitrate_mbps: +bitrate.value,
       hdr_tone_mapping: tonemap.value,
