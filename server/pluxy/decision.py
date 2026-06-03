@@ -172,19 +172,38 @@ def decide(
 
     compat = need_compat and mode == PlaybackMode.TRANSCODE
 
-    # ---- Action audio (passthrough quand possible) ---------------------- #
-    # Direct Play / Direct Stream : copie si l'audio n'a pas besoin d'être touché
-    # (passthrough bitstream DTS-HD/TrueHD/Atmos vers l'ampli).
-    # Transcode HLS fMP4 : on peut COPIER un codec porté par le fMP4 (AAC/AC3/EAC3,
-    # ce qui préserve l'Atmos en EAC3) ; sinon ré-encodage vers la cible.
+    # ---- Action audio : GARANTIR que tous les formats audio passent ------ #
+    # Règle : on COPIE l'audio (passthrough bitstream DTS-HD/TrueHD/Atmos/EAC3…) dès que
+    # le client sait le restituer (décodage OU passthrough vers l'ampli). Sinon on
+    # transcode vers le MEILLEUR codec réellement supporté par le client -> son garanti.
+    # NB : les segments de transcodage sont en mpegts, qui porte TOUS les codecs (copie
+    # possible même en transcodage vidéo).
+    client_audio = {c.lower() for c in client.supported_audio_codecs}
+    src_ch = (a.channels if (a and a.channels) else 6)
+
+    def best_audio_target() -> tuple[str, int]:
+        ch_max = max(2, client.max_audio_channels)
+        if "eac3" in client_audio:
+            return "eac3", min(src_ch, ch_max, 8)
+        if "ac3" in client_audio:
+            return "ac3", min(src_ch, ch_max, 6)
+        return "aac", min(src_ch, ch_max, 8)       # AAC : décodable partout (repli sûr)
+
+    # Pas de piste audio -> rien à faire (copy). Sinon : le client gère-t-il la source ?
+    client_plays_audio = (a is None) or (
+        a.codec in client_audio and src_ch <= max(2, client.max_audio_channels)
+    )
+
     if compat:
-        audio_action = "transcode"          # compat = AAC stéréo universel
-    elif mode == PlaybackMode.TRANSCODE:
-        fmp4_safe = bool(a and a.codec in {"aac", "ac3", "eac3"})
-        client_ok = bool(a and a.codec in {c.lower() for c in client.supported_audio_codecs})
-        audio_action = "copy" if (fmp4_safe and client_ok and not audio_needs_transcode) else "transcode"
+        audio_action = "transcode"                 # compat = AAC stéréo universel
+        tgt_codec, tgt_ch = "aac", 2
+    elif client_plays_audio:
+        audio_action = "copy"                      # passthrough / lecture native
+        tgt_codec, tgt_ch = None, src_ch
     else:
-        audio_action = "transcode" if audio_needs_transcode else "copy"
+        audio_action = "transcode"                 # vers un codec garanti audible
+        tgt_codec, tgt_ch = best_audio_target()
+        reasons.append(f"Audio {a.codec if a else '?'} -> {tgt_codec} {tgt_ch}ch (compatibilité).")
 
     return PlaybackDecision(
         mode=mode,
@@ -194,7 +213,8 @@ def decide(
         audio_action=audio_action,
         tone_map=tone_map,
         target_video_codec=target_codec,
-        target_audio_codec=cfg.audio.target_codec if audio_action == "transcode" else None,
+        target_audio_codec=tgt_codec if audio_action == "transcode" else None,
+        target_audio_channels=tgt_ch,
         target_bitrate_mbps=cap_mbps if mode == PlaybackMode.TRANSCODE else None,
         container=container,
         delivery=delivery,

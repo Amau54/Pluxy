@@ -156,6 +156,7 @@ class PlaybackDecision(BaseModel):
     tone_map: bool = False
     target_video_codec: Optional[str] = None
     target_audio_codec: Optional[str] = None
+    target_audio_channels: int = 6
     target_bitrate_mbps: Optional[int] = None
     container: str = "mkv"
     delivery: str = "direct"               # direct | hls

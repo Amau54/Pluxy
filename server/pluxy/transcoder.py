@@ -26,14 +26,23 @@ from .tools import NO_WINDOW, has_libplacebo
 #  Construction des arguments FFmpeg
 # ===========================================================================
 def _audio_args(decision: PlaybackDecision, cfg: PluxyConfig) -> List[str]:
-    """Sélectionne la 1re piste audio et la downmixe si nécessaire (ARC Philips 803)."""
+    """
+    Audio : copie (passthrough) si le client gère la source, sinon transcodage vers
+    le codec/canaux décidés (garanti audible par le client). Repli AAC universel.
+    """
     if decision.audio_action == "copy":
         return ["-map", "0:a:0?", "-c:a", "copy"]
+    codec = decision.target_audio_codec or cfg.audio.target_codec
+    ch = max(1, decision.target_audio_channels or cfg.audio.target_channels)
+    if codec == "aac":
+        bitrate = 192 if ch <= 2 else 384
+    else:
+        bitrate = cfg.audio.bitrate_kbps           # 640k AC3/EAC3 5.1
     return [
         "-map", "0:a:0?",
-        "-c:a", cfg.audio.target_codec,            # ac3 (universel ARC) / eac3
-        "-ac", str(cfg.audio.target_channels),     # downmix 5.1
-        "-b:a", f"{cfg.audio.bitrate_kbps}k",
+        "-c:a", codec,
+        "-ac", str(ch),
+        "-b:a", f"{bitrate}k",
     ]
 
 

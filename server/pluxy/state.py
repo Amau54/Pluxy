@@ -29,6 +29,9 @@ class AppState:
         self.vod = VodHls(self.cfgm.cfg, data)
         self.metadata = MetadataProvider(self.cfgm, data)
         self.watch = WatchStore(data)
+        # Dernière décision de lecture par média (capacités client réelles) — réutilisée
+        # par les endpoints de flux (remux) pour cibler le bon codec audio.
+        self.decisions: dict = {}
         self.discovery = DiscoveryResponder(self.cfgm)
         self.discovery.start()
         # L'index persistant est déjà chargé : la liste est dispo immédiatement.

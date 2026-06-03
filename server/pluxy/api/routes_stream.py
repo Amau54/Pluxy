@@ -71,6 +71,8 @@ async def playback_decide(request: Request) -> PlaybackDecision:
 
     media = _safe_probe(st.cfgm.cfg.ffmpeg.ffprobe_path, it.path)
     dec = decide(media, caps, st.cfgm.cfg)
+    # Mémorise la décision (capacités client réelles) pour les endpoints de flux.
+    st.decisions[item_id] = (media, dec)
 
     # URL relative que le client doit ouvrir selon le mode retenu.
     if dec.mode == PlaybackMode.DIRECT_PLAY:
@@ -171,8 +173,14 @@ def stream_remux(item_id: str, request: Request):
         raise HTTPException(404, "Média introuvable")
 
     cfg = st.cfgm.cfg
-    media = _safe_probe(cfg.ffmpeg.ffprobe_path, it.path)
-    dec = decide(media, ClientCapabilities(), cfg)
+    # Réutilise la décision calculée avec les VRAIES capacités du client (cible audio
+    # correcte) ; repli sur une décision par défaut si elle n'a pas été mémorisée.
+    cached = st.decisions.get(item_id)
+    if cached:
+        media, dec = cached
+    else:
+        media = _safe_probe(cfg.ffmpeg.ffprobe_path, it.path)
+        dec = decide(media, ClientCapabilities(), cfg)
     cmd = build_direct_stream_cmd(media, dec, cfg)
 
     try:

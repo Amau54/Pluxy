@@ -41,24 +41,45 @@ object DeviceProfile {
     }
 
     /**
-     * Codecs audio réellement restituables (décodage logiciel + PASSTHROUGH/bitstream
-     * vers l'ampli via HDMI/eARC) : DTS, DTS-HD, TrueHD, Dolby Atmos (EAC3 JOC)…
-     * Le serveur s'en sert pour transmettre l'audio TEL QUEL quand c'est possible.
+     * Codecs audio RÉELLEMENT restituables, sans rien supposer :
+     *   - DÉCODAGE logiciel/matériel effectif (MediaCodecList) : AAC, AC3, EAC3, MP3,
+     *     FLAC, Opus, Vorbis… On ne suppose PAS AC3/EAC3 (beaucoup de mobiles sans
+     *     licence Dolby ne les décodent pas).
+     *   - PASSTHROUGH/bitstream vers l'ampli (AudioCapabilities) : DTS, DTS-HD, TrueHD,
+     *     Atmos (EAC3 JOC)… transmis TELS QUELS quand l'ampli/HDMI le permet.
+     * AAC est toujours inclus (Android le décode partout) -> le serveur a toujours une
+     * cible de repli audible. Garantit que TOUS les formats audio passent.
      */
     @UnstableApi
     private fun audioCapabilities(ctx: Context): Pair<List<String>, Int> {
-        val codecs = linkedSetOf("aac", "mp3", "ac3", "eac3")   // décodés logiciellement
-        var maxCh = 6
+        val codecs = linkedSetOf("aac")                 // toujours décodable sous Android
+        // 1) Décodeurs présents sur l'appareil (vérité terrain).
+        val mimeToName = mapOf(
+            "audio/mp4a-latm" to "aac", "audio/mpeg" to "mp3",
+            "audio/ac3" to "ac3", "audio/eac3" to "eac3", "audio/eac3-joc" to "eac3",
+            "audio/flac" to "flac", "audio/opus" to "opus", "audio/vorbis" to "vorbis",
+            "audio/vnd.dts" to "dts", "audio/vnd.dts.hd" to "dtshd", "audio/true-hd" to "truehd",
+        )
+        try {
+            val list = MediaCodecList(MediaCodecList.REGULAR_CODECS)
+            for (info in list.codecInfos) {
+                if (info.isEncoder) continue
+                for (t in info.supportedTypes) {
+                    mimeToName[t.lowercase()]?.let { codecs.add(it) }
+                }
+            }
+        } catch (_: Throwable) {
+        }
+        // 2) Passthrough bitstream vers l'ampli (HDMI/eARC).
+        var maxCh = 2
         try {
             val caps = AudioCapabilities.getCapabilities(ctx)
             fun pt(enc: Int, name: String) { if (caps.supportsEncoding(enc)) codecs.add(name) }
-            pt(C.ENCODING_AC3, "ac3")
-            pt(C.ENCODING_E_AC3, "eac3")
-            pt(C.ENCODING_E_AC3_JOC, "eac3")            // Dolby Atmos (EAC3+JOC)
-            pt(C.ENCODING_DTS, "dts")
-            pt(C.ENCODING_DTS_HD, "dtshd")
-            pt(C.ENCODING_DOLBY_TRUEHD, "truehd")       // Dolby TrueHD / Atmos
-            maxCh = caps.maxChannelCount.coerceAtLeast(6)
+            pt(C.ENCODING_AC3, "ac3"); pt(C.ENCODING_E_AC3, "eac3")
+            pt(C.ENCODING_E_AC3_JOC, "eac3")
+            pt(C.ENCODING_DTS, "dts"); pt(C.ENCODING_DTS_HD, "dtshd")
+            pt(C.ENCODING_DOLBY_TRUEHD, "truehd")
+            maxCh = caps.maxChannelCount.coerceAtLeast(2)
         } catch (_: Throwable) {
         }
         return codecs.toList() to maxCh
