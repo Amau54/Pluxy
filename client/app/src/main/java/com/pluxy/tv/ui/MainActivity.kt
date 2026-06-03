@@ -87,7 +87,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun loadItems() {
         if (!PluxyApplication.isConfigured(this)) return
-        findViewById<TextView>(R.id.serverLabel).text = PluxyApplication.serverName(this)
+        // Affiche l'hôte du serveur (utile) au lieu du nom redondant « Pluxy ».
+        findViewById<TextView>(R.id.serverLabel).text =
+            PluxyApplication.serverBaseUrl(this).removePrefix("http://").removePrefix("https://")
         loadJob?.cancel()
         val api = PluxyApi.create()
         loadJob = lifecycleScope.launch { fetchAndShow(api); loadedOnce = true }
