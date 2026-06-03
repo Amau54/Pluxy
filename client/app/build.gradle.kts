@@ -11,8 +11,8 @@ android {
         applicationId = "com.pluxy.tv"
         minSdk = 23            // Android TV 6.0+ ET mobile (Android 6+)
         targetSdk = 34
-        versionCode = 11
-        versionName = "1.0.10"
+        versionCode = 12
+        versionName = "1.0.11"
     }
 
     // Cle de signature STABLE et versionnee : permet de mettre a jour l'app

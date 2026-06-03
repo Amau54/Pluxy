@@ -197,10 +197,13 @@ def build_transcode_cmd(
     # ---- Sortie ---------------------------------------------------------- #
     if segment_out is not None:
         # Un segment mpegts autonome (HLS VOD à la demande).
+        # CRITIQUE : `-output_ts_offset {start}` aligne les timestamps du segment sur
+        # sa position dans le film (segment @45min -> PTS≈2700s). SANS ça, chaque
+        # segment redémarre à PTS 0 -> ExoPlayer ne peut plus enchaîner -> boucle/freeze.
         cmd += [
-            "-f", "mpegts",
-            "-avoid_negative_ts", "make_zero",
+            "-output_ts_offset", f"{start_time:.3f}",
             "-muxdelay", "0", "-muxpreload", "0",
+            "-f", "mpegts",
             str(segment_out),
         ]
         return cmd
