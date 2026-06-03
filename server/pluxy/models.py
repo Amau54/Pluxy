@@ -54,6 +54,14 @@ class MediaInfo(BaseModel):
         return [s for s in self.streams if s.kind == StreamKind.SUBTITLE]
 
 
+class SubtitleTrack(BaseModel):
+    """Sous-titre externe décrit (le client en déduit MIME + langue + label)."""
+    index: int
+    lang: Optional[str] = None              # ex. "fr", "en"
+    format: str = "srt"                     # srt | vtt | ass | ssa
+    label: str = ""
+
+
 class MediaItem(BaseModel):
     """Entrée de bibliothèque (vue catalogue)."""
     id: str
@@ -67,6 +75,8 @@ class MediaItem(BaseModel):
     video_codec: Optional[str] = None
     is_hdr: bool = False
     external_subs: List[str] = Field(default_factory=list)
+    # Sous-titres externes décrits (langue + format) pour le client.
+    subtitles: List[SubtitleTrack] = Field(default_factory=list)
     # Renseignés depuis le cache de métadonnées s'il existe (affichage grille).
     year: Optional[int] = None
     poster_url: Optional[str] = None

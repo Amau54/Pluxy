@@ -72,7 +72,10 @@ def decide(
             )
 
         # Débit trop élevé pour la liaison Wi-Fi -> transcode avec bitrate cap.
-        src_mbps = (media.overall_bitrate or 0) / 1_000_000
+        # On préfère le débit VIDÉO (sinon une piste audio lossless volumineuse
+        # gonfle overall_bitrate et déclenche un transcode vidéo inutile).
+        v_bps = (v.bit_rate if v and v.bit_rate else media.overall_bitrate) or 0
+        src_mbps = v_bps / 1_000_000
         if cap_mbps and src_mbps > cap_mbps:
             video_needs_transcode = True
             reasons.append(

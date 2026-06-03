@@ -168,6 +168,20 @@ Linux/Mac : ~/.local/share/Pluxy/
 Une ancienne config présente dans `server/config.json` est **migrée automatiquement**
 au premier démarrage. *(Personnalisable via la variable d'environnement `PLUXY_DATA_DIR`.)*
 
+## 🔒 Sécurité & robustesse
+
+Audité (multi-agents) et durci pour un usage **LAN de confiance** :
+- Anti **path-traversal** sur les segments HLS, **Range** hors-limites (416),
+  validation Pydantic des corps de requête, garde des fichiers manquants (404).
+- Les **chemins d'exécutables** (ffmpeg/ffprobe) et le dossier de cache ne sont
+  **pas** modifiables via l'API (anti-RCE) ; le chemin disque des médias n'est plus
+  exposé au client.
+- Écritures **atomiques** (config/index/reprise), scans non concurrents, sessions
+  FFmpeg sans deadlock (stderr non bloquant) ni fuite (reaper robuste).
+
+> ⚠️ **À garder en tête** : Pluxy est conçu pour un réseau privé. Il n'y a pas encore
+> d'authentification ni de TLS — n'exposez pas le port `8420` directement sur Internet.
+
 ## 🗂️ Politique de versions
 
 `Build-APK.bat` ne conserve que les **3 APK les plus récentes** dans `dist/` ;

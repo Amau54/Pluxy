@@ -19,6 +19,7 @@ from typing import Dict, List, Optional
 
 from .config import PluxyConfig
 from .models import MediaInfo, PlaybackDecision
+from .tools import NO_WINDOW
 
 
 # ===========================================================================
@@ -201,19 +202,27 @@ class TranscodeSession:
         self.out_dir = out_dir
         self.cmd = cmd
         self.proc: Optional[subprocess.Popen] = None
+        self._errlog = None
         self.created = time.time()
         self.last_access = time.time()
 
     def start(self) -> None:
         self.out_dir.mkdir(parents=True, exist_ok=True)
+        # stderr REDIRIGÉ VERS UN FICHIER (jamais un PIPE non lu) : sinon le buffer
+        # du pipe se remplit -> FFmpeg bloque en écriture -> aucun segment -> deadlock.
+        self._errlog = open(self.out_dir / "ffmpeg.log", "wb")
         # CWD = dossier de sortie : le segment d'init fMP4 (`init.mp4`, nom relatif)
         # est ainsi écrit AU BON ENDROIT et non dans le répertoire courant du serveur.
         self.proc = subprocess.Popen(
             self.cmd,
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
+            stderr=self._errlog,
             cwd=str(self.out_dir),
+            creationflags=NO_WINDOW,
         )
+
+    def is_alive(self) -> bool:
+        return self.proc is not None and self.proc.poll() is None
 
     def playlist_path(self) -> Path:
         return self.out_dir / "index.m3u8"
@@ -242,6 +251,16 @@ class TranscodeSession:
                 self.proc.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 self.proc.kill()
+                try:
+                    self.proc.wait(timeout=3)
+                except subprocess.TimeoutExpired:
+                    pass
+        if self._errlog:
+            try:
+                self._errlog.close()
+            except Exception:
+                pass
+            self._errlog = None
         shutil.rmtree(self.out_dir, ignore_errors=True)
 
 
@@ -255,20 +274,26 @@ class TranscodeManager:
         self._sessions: Dict[str, TranscodeSession] = {}
         self._lock = threading.RLock()
 
-    def start(self, session_id: str, cmd_builder) -> TranscodeSession:
-        """`cmd_builder(out_dir)` renvoie la liste d'arguments FFmpeg."""
+    def get_or_start(self, session_id: str, cmd_builder) -> TranscodeSession:
+        """
+        Retourne la session vivante pour `session_id`, ou en crée une nouvelle —
+        le tout ATOMIQUEMENT sous verrou (évite la course « deux requêtes HLS
+        simultanées lancent/tuent deux FFmpeg » -> 503 aléatoires + double GPU).
+        """
         with self._lock:
-            old = self._sessions.pop(session_id, None)
-        if old:
-            old.stop()
+            existing = self._sessions.get(session_id)
+            if existing and existing.is_alive():
+                existing.last_access = time.time()
+                return existing
+            if existing:                       # session morte : on la remplace
+                existing.stop()
+                self._sessions.pop(session_id, None)
 
-        out_dir = self.base / session_id
-        cmd = cmd_builder(out_dir)
-        sess = TranscodeSession(session_id, out_dir, cmd)
-        sess.start()
-        with self._lock:
+            out_dir = self.base / session_id
+            sess = TranscodeSession(session_id, out_dir, cmd_builder(out_dir))
+            sess.start()
             self._sessions[session_id] = sess
-        return sess
+            return sess
 
     def get(self, session_id: str) -> Optional[TranscodeSession]:
         with self._lock:
@@ -287,7 +312,12 @@ class TranscodeManager:
         """Tue les sessions inactives (client parti) pour libérer le GPU."""
         now = time.time()
         with self._lock:
-            stale = [sid for sid, s in self._sessions.items()
+            stale = [self._sessions.pop(sid)
+                     for sid, s in list(self._sessions.items())
                      if now - s.last_access > max_idle]
-            for sid in stale:
-                self._sessions.pop(sid).stop()
+        # stop() (terminate + rmtree) HORS du lock pour ne pas le bloquer.
+        for s in stale:
+            try:
+                s.stop()
+            except Exception:
+                pass

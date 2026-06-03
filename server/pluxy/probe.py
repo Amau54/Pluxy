@@ -6,6 +6,7 @@ import subprocess
 from pathlib import Path
 
 from .models import MediaInfo, MediaStream, StreamKind
+from .tools import NO_WINDOW
 
 # Transferts de couleur indiquant du HDR (PQ / HLG).
 _HDR_TRANSFERS = {"smpte2084", "arib-std-b67"}
@@ -20,9 +21,14 @@ def probe(ffprobe_path: str, file_path: str) -> MediaInfo:
         "-show_streams",
         file_path,
     ]
-    out = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8")
+    try:
+        out = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
+                             timeout=30, creationflags=NO_WINDOW)
+    except subprocess.TimeoutExpired:
+        # Fichier pathologique / partage réseau lent : on n'immobilise pas un worker.
+        raise RuntimeError(f"ffprobe a expiré (timeout) pour {file_path}")
     if out.returncode != 0 or not out.stdout:
-        raise RuntimeError(f"ffprobe a échoué pour {file_path}: {out.stderr.strip()}")
+        raise RuntimeError(f"ffprobe a échoué pour {file_path}: {(out.stderr or '').strip()}")
 
     data = json.loads(out.stdout)
     fmt = data.get("format", {})

@@ -17,9 +17,26 @@ data class MediaItem(
     @Json(name = "video_codec") val videoCodec: String? = null,
     @Json(name = "is_hdr") val isHdr: Boolean = false,
     @Json(name = "external_subs") val externalSubs: List<String> = emptyList(),
+    val subtitles: List<SubtitleTrack> = emptyList(),
     val year: Int? = null,
     @Json(name = "poster_url") val posterUrl: String? = null,
     @Json(name = "has_metadata") val hasMetadata: Boolean = false,
+)
+
+/** Statut du scan de bibliothèque (/api/library/scan-status). */
+@JsonClass(generateAdapter = true)
+data class ScanStatus(
+    val scanning: Boolean = false,
+    val count: Int = 0,
+)
+
+/** Sous-titre externe décrit par le serveur (langue + format). */
+@JsonClass(generateAdapter = true)
+data class SubtitleTrack(
+    val index: Int,
+    val lang: String? = null,
+    val format: String = "srt",
+    val label: String = "",
 )
 
 /** Serveur découvert sur le LAN (broadcast UDP ou /api/server/info). */

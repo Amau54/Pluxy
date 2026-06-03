@@ -22,6 +22,7 @@ import com.pluxy.tv.api.MediaItem
 import com.pluxy.tv.api.PluxyApi
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -34,9 +35,12 @@ class MainActivity : AppCompatActivity() {
     private lateinit var empty: TextView
     private lateinit var swipe: SwipeRefreshLayout
 
+    private var loadJob: Job? = null
+    private var loadedOnce = false
+
     private val setupLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
-    ) { loadItems() }
+    ) { loadedOnce = false; loadItems() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -53,51 +57,57 @@ class MainActivity : AppCompatActivity() {
         swipe.setOnRefreshListener { refresh() }
         swipe.setColorSchemeColors(0xFFE5A00D.toInt())
 
-        if (!PluxyApplication.isConfigured(this)) openSetup() else loadItems()
+        if (!PluxyApplication.isConfigured(this)) openSetup()
     }
 
     override fun onResume() {
         super.onResume()
-        if (PluxyApplication.isConfigured(this)) loadItems()   // maj reprise/posters
+        // Charge UNE fois (préserve le scroll au retour ; rafraîchir = bouton/swipe).
+        if (PluxyApplication.isConfigured(this) && !loadedOnce) loadItems()
     }
 
     private fun openSetup() = setupLauncher.launch(Intent(this, ServerSetupActivity::class.java))
 
-    /** Relance un scan serveur puis recharge (et re-recharge après le scan). */
+    /** Relance un scan serveur puis recharge en pollant le statut (pas de delay fixe). */
     private fun refresh() {
         if (!PluxyApplication.isConfigured(this)) { openSetup(); return }
         swipe.isRefreshing = true
+        loadJob?.cancel()
         val api = PluxyApi.create()
-        lifecycleScope.launch {
+        loadJob = lifecycleScope.launch {
             runCatching { api.rescan() }
-            loadItems(showSpinner = false)
-            delay(3000)                       // laisse le scan progresser
-            loadItems(showSpinner = false)
+            repeat(10) {                       // poll jusqu'à 10 s max
+                fetchAndShow(api)
+                if (!runCatching { api.scanStatus().scanning }.getOrDefault(false)) return@repeat
+                delay(1000)
+            }
             swipe.isRefreshing = false
         }
     }
 
-    private fun loadItems(showSpinner: Boolean = false) {
+    private fun loadItems() {
         if (!PluxyApplication.isConfigured(this)) return
         findViewById<TextView>(R.id.serverLabel).text = PluxyApplication.serverName(this)
-        if (showSpinner) swipe.isRefreshing = true
+        loadJob?.cancel()
         val api = PluxyApi.create()
-        lifecycleScope.launch {
-            try {
-                val items = groupSimilar(api.listItems())
-                if (items.isEmpty()) {
-                    empty.text = "Aucun média. Ajoutez des dossiers et scannez depuis l'UI serveur."
-                    empty.visibility = View.VISIBLE
-                    grid.adapter = null
-                } else {
-                    empty.visibility = View.GONE
-                    grid.adapter = MediaAdapter(items) { open(it) }
-                }
-            } catch (e: Exception) {
+        loadJob = lifecycleScope.launch { fetchAndShow(api); loadedOnce = true }
+    }
+
+    private suspend fun fetchAndShow(api: PluxyApi) {
+        try {
+            val items = groupSimilar(api.listItems())
+            if (items.isEmpty()) {
+                empty.text = "Aucun média. Ajoutez des dossiers et scannez depuis l'UI serveur."
+                empty.visibility = View.VISIBLE
+                grid.adapter = null
+            } else {
+                empty.visibility = View.GONE
+                grid.adapter = MediaAdapter(items) { open(it) }
+            }
+        } catch (e: Exception) {
+            if (grid.adapter == null) {
                 empty.text = "Serveur injoignable : ${e.message}"
                 empty.visibility = View.VISIBLE
-            } finally {
-                if (showSpinner) swipe.isRefreshing = false
             }
         }
     }

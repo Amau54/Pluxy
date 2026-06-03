@@ -1,6 +1,9 @@
 package com.pluxy.tv.player
 
+import android.app.ActivityManager
+import android.app.UiModeManager
 import android.content.Context
+import android.content.res.Configuration
 import androidx.media3.common.C
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.util.UnstableApi
@@ -38,17 +41,23 @@ object PluxyPlayerFactory {
                 buffer.bufferForPlaybackMs,                    // démarrage
                 buffer.bufferForPlaybackAfterRebufferMs        // reprise post-coupure
             )
-            // Plafond mémoire = X Mo demandés dans l'UI (256 Mo par défaut).
-            .setTargetBufferBytes(buffer.targetBufferBytesMb * 1024 * 1024)
+            // Plafond mémoire borné à la RAM dispo (évite l'OOM sur mobile faible) :
+            // au plus la valeur demandée ET au plus ~1/4 de la mémoire de classe.
+            .setTargetBufferBytes(targetBufferBytes(context, buffer.targetBufferBytesMb))
             // Priorise le remplissage du tampon sur la taille mémoire stricte.
             .setPrioritizeTimeOverSizeThresholds(true)
             .setBackBuffer(buffer.backBufferMs, /* retainBackBufferFromKeyframe */ true)
             .build()
 
-        // ---- 2. Renderers : HW d'abord, repli logiciel autorisé ------------ //
+        // ---- 2. Renderers : MATÉRIEL d'abord, logiciel en REPLI ------------ //
+        // MODE_ON (et non PREFER) : le décodeur matériel HEVC/HDR est prioritaire ;
+        // FFmpeg logiciel n'est utilisé QUE si le matériel échoue. PREFER cassait
+        // le HDR10 (décodage CPU + conflit avec le tunneling).
         val renderers = DefaultRenderersFactory(context)
-            .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
+            .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
             .setEnableDecoderFallback(true)
+
+        val isTv = isTelevision(context)
 
         // ---- 3. Source de données HTTP via OkHttp (Range + keep-alive) ----- //
         val ok = OkHttpClient.Builder()
@@ -66,9 +75,10 @@ object PluxyPlayerFactory {
         val trackSelector = DefaultTrackSelector(context).apply {
             setParameters(
                 buildUponParameters()
-                    // Le tunneling laisse le flux HDR10 transiter directement vers
-                    // l'afficheur (HDR statique préservé, A/V sync matérielle).
-                    .setTunnelingEnabled(true)
+                    // Tunneling UNIQUEMENT sur Android TV (HDR10 passthrough vers la
+                    // dalle). Sur mobile, beaucoup de décodeurs gèrent mal le tunneling
+                    // (écran noir) -> on le désactive.
+                    .setTunnelingEnabled(isTv)
                     .setPreferredVideoMimeType(MimeTypes.VIDEO_H265)
                     // Langues par défaut (audio + sous-titres) : français.
                     .setPreferredAudioLanguage("fr")
@@ -91,5 +101,18 @@ object PluxyPlayerFactory {
             .setReleaseTimeoutMs(5000)
             .build()
             .also { it.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT }
+    }
+
+    private fun isTelevision(ctx: Context): Boolean {
+        val ui = ctx.getSystemService(Context.UI_MODE_SERVICE) as? UiModeManager
+        return ui?.currentModeType == Configuration.UI_MODE_TYPE_TELEVISION
+    }
+
+    /** Octets de buffer cible : min(demandé, ~1/4 de la mémoire de classe), borné. */
+    private fun targetBufferBytes(ctx: Context, requestedMb: Int): Int {
+        val am = ctx.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        val classMb = am.memoryClass                      // Mo alloués max au heap app
+        val capMb = (classMb / 4).coerceIn(32, requestedMb.coerceAtLeast(32))
+        return capMb * 1024 * 1024
     }
 }

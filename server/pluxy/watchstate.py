@@ -23,9 +23,8 @@ class WatchStore:
 
     def _save(self) -> None:
         try:
-            self.path.write_text(
-                json.dumps(self._data, ensure_ascii=False), encoding="utf-8"
-            )
+            from .paths import atomic_write_text
+            atomic_write_text(self.path, json.dumps(self._data, ensure_ascii=False))
         except Exception:
             pass
 

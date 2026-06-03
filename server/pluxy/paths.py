@@ -23,3 +23,14 @@ def data_dir() -> Path:
     d = Path(base) / "Pluxy"
     d.mkdir(parents=True, exist_ok=True)
     return d
+
+
+def atomic_write_text(path: Path, text: str) -> None:
+    """
+    Écriture ATOMIQUE : écrit dans un fichier temporaire du même dossier puis
+    `os.replace` (atomique sur le même volume). Une coupure pendant l'écriture
+    ne corrompt jamais le fichier cible (config / index / reprise préservés).
+    """
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(text, encoding="utf-8")
+    os.replace(tmp, path)

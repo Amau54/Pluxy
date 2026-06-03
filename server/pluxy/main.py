@@ -21,9 +21,14 @@ async def lifespan(app: FastAPI):
     app.state.pluxy = AppState(BASE_DIR)
 
     async def reaper():
+        # try/except OBLIGATOIRE : sans lui, une exception (terminate/rmtree) tuerait
+        # la boucle -> plus aucune session nettoyée -> fuite GPU permanente.
         while True:
             await asyncio.sleep(30)
-            app.state.pluxy.transcoder.reap_idle()
+            try:
+                app.state.pluxy.transcoder.reap_idle()
+            except Exception:
+                pass
 
     task = asyncio.create_task(reaper())
     yield

@@ -12,8 +12,15 @@ from pathlib import Path
 from typing import Dict, List
 
 from .config import ConfigManager
-from .models import MediaItem
+from .models import MediaItem, SubtitleTrack
 from .probe import probe
+
+# Codes langue ISO courants reconnus dans les noms de sous-titres sidecar.
+_LANG_CODES = {
+    "fr", "fre", "fra", "en", "eng", "es", "spa", "de", "ger", "deu",
+    "it", "ita", "pt", "por", "nl", "dut", "ru", "rus", "ja", "jpn",
+    "ko", "kor", "zh", "chi", "ar", "ara", "vff", "vfq", "vostfr",
+}
 
 
 class Library:
@@ -62,22 +69,27 @@ class Library:
 
     def _save_index(self) -> None:
         try:
+            from .paths import atomic_write_text
             with self._lock:
                 payload = [i.model_dump() for i in self._items.values()]
-            self.index_path.write_text(
-                json.dumps(payload, ensure_ascii=False), encoding="utf-8"
-            )
+            atomic_write_text(self.index_path, json.dumps(payload, ensure_ascii=False))
         except Exception:
             pass
 
     # -- Scan -------------------------------------------------------------- #
     def scan(self) -> int:
         """(Re)construit l'index et le persiste. Retourne le nombre d'éléments."""
+        # Garde de ré-entrance : un seul scan à la fois (évite la corruption d'index
+        # et les écritures entrelacées de .pluxy_library.json).
+        with self._lock:
+            if self._scanning:
+                return len(self._items)
+            self._scanning = True
+
         cfg = self.cfgm.cfg
         exts = {e.lower() for e in cfg.server.scan_extensions}
         sub_exts = {e.lower() for e in cfg.subtitles.external_extensions}
         found: Dict[str, MediaItem] = {}
-        self._scanning = True
         try:
             for root in cfg.server.media_dirs:
                 base = Path(root)
@@ -92,6 +104,8 @@ class Library:
                     if existing and existing.size == _safe_size(f):
                         found[item_id] = existing
                         continue
+                    subs = self._sidecar_subs(f, sub_exts)
+                    sub_tracks = self._sub_tracks(f, subs)
                     try:
                         info = probe(cfg.ffmpeg.ffprobe_path, str(f))
                     except Exception:
@@ -100,18 +114,17 @@ class Library:
                             id=item_id, title=f.stem, path=str(f),
                             container=f.suffix.lstrip(".").lower(),
                             size=_safe_size(f), duration=0.0,
-                            external_subs=[str(s) for s in self._sidecar_subs(f, sub_exts)],
+                            external_subs=[str(s) for s in subs], subtitles=sub_tracks,
                         )
                         continue
 
                     v = info.video
-                    subs = self._sidecar_subs(f, sub_exts)
                     found[item_id] = MediaItem(
                         id=item_id, title=f.stem, path=str(f),
                         container=info.container, size=info.size, duration=info.duration,
                         width=v.width if v else None, height=v.height if v else None,
                         video_codec=v.codec if v else None, is_hdr=v.is_hdr if v else False,
-                        external_subs=[str(s) for s in subs],
+                        external_subs=[str(s) for s in subs], subtitles=sub_tracks,
                     )
 
             with self._lock:
@@ -122,13 +135,36 @@ class Library:
             self._scanning = False
 
     @staticmethod
+    def _sub_tracks(media: Path, subs: List[Path]) -> List[SubtitleTrack]:
+        """Décrit chaque sous-titre sidecar : langue (déduite du nom) + format."""
+        stem = media.stem.lower()
+        out: List[SubtitleTrack] = []
+        for i, s in enumerate(subs):
+            fmt = s.suffix.lstrip(".").lower() or "srt"
+            # "Film.fr.srt" -> suffixe "fr" entre le stem et l'extension.
+            extra = s.stem.lower()
+            if extra.startswith(stem):
+                extra = extra[len(stem):].strip(". ")
+            lang = extra if extra in _LANG_CODES else None
+            label = (lang.upper() if lang else "Sous-titres") + f" ({fmt})"
+            out.append(SubtitleTrack(index=i, lang=lang, format=fmt, label=label))
+        return out
+
+    @staticmethod
     def _sidecar_subs(media: Path, sub_exts: set[str]) -> List[Path]:
+        """Sous-titres sidecar : `Film.srt` ou `Film.fr.srt` (convention Plex).
+
+        Appariement STRICT : nom identique OU préfixe suivi d'un point — évite que
+        `Film2.srt` ou `Film Part2.srt` soit rattaché par erreur à `Film.mkv`.
+        """
         out: List[Path] = []
         stem = media.stem.lower()
         try:
             for sib in media.parent.iterdir():
-                if (sib.is_file() and sib.suffix.lower() in sub_exts
-                        and sib.stem.lower().startswith(stem)):
+                if not (sib.is_file() and sib.suffix.lower() in sub_exts):
+                    continue
+                sub_stem = sib.stem.lower()
+                if sub_stem == stem or sub_stem.startswith(stem + "."):
                     out.append(sib)
         except Exception:
             pass

@@ -11,13 +11,19 @@ router = APIRouter(prefix="/api/library", tags=["library"])
 
 
 def _enrich(item: MediaItem, st: AppState) -> MediaItem:
-    """Attache poster/année depuis le cache de métadonnées (sans réseau)."""
+    """Copie publique enrichie : poster/année depuis le cache + chemin disque MASQUÉ.
+
+    On ne renvoie jamais le chemin absolu réel au client (fuite d'info sur le
+    serveur). On travaille sur une COPIE pour ne pas muter l'objet indexé.
+    """
+    pub = item.model_copy()
+    pub.path = ""                              # ne pas exposer le chemin serveur
     meta = st.metadata.cached(item.id)
     if meta:
-        item.year = meta.year
-        item.poster_url = meta.poster_url
-        item.has_metadata = meta.matched
-    return item
+        pub.year = meta.year
+        pub.poster_url = meta.poster_url
+        pub.has_metadata = meta.matched
+    return pub
 
 
 @router.post("/scan")

@@ -66,6 +66,12 @@ class PluxyApi(private val baseUrl: String) {
         ).execute().use { it.bodyOrThrow() }
     }
 
+    suspend fun scanStatus(): ScanStatus =
+        withContext(Dispatchers.IO) {
+            runCatching { getJson<ScanStatus>("/api/library/scan-status") }
+                .getOrDefault(ScanStatus())
+        }
+
     suspend fun clientRuntime(): ClientRuntime =
         withContext(Dispatchers.IO) { getJson("/api/settings/client") }
 

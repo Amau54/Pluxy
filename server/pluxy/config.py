@@ -161,9 +161,9 @@ class ConfigManager:
         # l'emplacement stable pour figer la persistance.
         if src != self.path:
             try:
-                self.path.write_text(
-                    json.dumps(cfg.model_dump(), indent=2, ensure_ascii=False),
-                    encoding="utf-8",
+                from .paths import atomic_write_text
+                atomic_write_text(
+                    self.path, json.dumps(cfg.model_dump(), indent=2, ensure_ascii=False)
                 )
             except Exception:
                 pass
@@ -183,10 +183,11 @@ class ConfigManager:
             return self._cfg
 
     def save(self) -> None:
+        from .paths import atomic_write_text
         with self._lock:
-            self.path.write_text(
+            atomic_write_text(
+                self.path,
                 json.dumps(self._cfg.model_dump(), indent=2, ensure_ascii=False),
-                encoding="utf-8",
             )
 
     @staticmethod

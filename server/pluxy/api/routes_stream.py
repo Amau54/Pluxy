@@ -23,10 +23,13 @@ from fastapi.responses import (
     StreamingResponse,
 )
 
+from pydantic import BaseModel
+
 from ..decision import decide
 from ..models import ClientCapabilities, MediaInfo, PlaybackDecision, PlaybackMode
 from ..probe import probe
 from ..state import AppState, get_state
+from ..tools import NO_WINDOW
 from ..transcoder import build_direct_stream_cmd, build_transcode_cmd
 import subprocess
 
@@ -88,15 +91,16 @@ def get_progress(item_id: str, request: Request) -> dict:
     return get_state(request).watch.get(item_id)
 
 
+class ProgressBody(BaseModel):
+    position_ms: int = 0
+    duration_ms: int = 0
+
+
 @router.post("/api/playback/progress/{item_id}")
-async def set_progress(item_id: str, request: Request) -> dict:
-    body = await request.json()
+def set_progress(item_id: str, body: ProgressBody, request: Request) -> dict:
+    # Pydantic valide/convertit -> 422 propre au lieu d'un 500 sur entrée invalide.
     st = get_state(request)
-    st.watch.set(
-        item_id,
-        int(body.get("position_ms", 0)),
-        int(body.get("duration_ms", 0)),
-    )
+    st.watch.set(item_id, max(0, body.position_ms), max(0, body.duration_ms))
     return st.watch.get(item_id)
 
 
@@ -111,6 +115,9 @@ def stream_direct(item_id: str, request: Request):
         raise HTTPException(404, "Média introuvable")
 
     path = it.path
+    if not os.path.isfile(path):
+        # Index périmé / disque externe débranché : 404 propre (pas un 500).
+        raise HTTPException(404, "Fichier introuvable sur le disque")
     file_size = os.path.getsize(path)
     range_header = request.headers.get("range")
     media_type = _mime_for(it.container)
@@ -122,6 +129,9 @@ def stream_direct(item_id: str, request: Request):
     if not m:
         raise HTTPException(416, "Range invalide")
     start = int(m.group(1))
+    if start >= file_size:                     # Range hors limites -> 416
+        raise HTTPException(416, "Range non satisfiable",
+                            headers={"Content-Range": f"bytes */{file_size}"})
     end = int(m.group(2)) if m.group(2) else file_size - 1
     end = min(end, file_size - 1)
     length = end - start + 1
@@ -163,7 +173,8 @@ def stream_remux(item_id: str, request: Request):
     cmd = build_direct_stream_cmd(media, dec, cfg)
 
     try:
-        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
+                                stderr=subprocess.DEVNULL, creationflags=NO_WINDOW)
     except FileNotFoundError:
         # FFmpeg absent -> repli Direct Play (fichier brut).
         return RedirectResponse(url=f"/stream/direct/{item_id}", status_code=302)
@@ -176,8 +187,17 @@ def stream_remux(item_id: str, request: Request):
                     break
                 yield data
         finally:
+            # Nettoyage complet : terminate -> wait -> kill de secours -> close.
             if proc.poll() is None:
                 proc.terminate()
+                try:
+                    proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+            try:
+                proc.stdout.close()
+            except Exception:
+                pass
 
     return StreamingResponse(pump(), media_type="video/x-matroska")
 
@@ -191,12 +211,14 @@ def hls_playlist(item_id: str, variant: str, request: Request):
     it = st.library.get(item_id)
     if not it:
         raise HTTPException(404, "Média introuvable")
+    if variant not in ("main", "compat"):
+        raise HTTPException(404, "Variante inconnue")
     compat = variant == "compat"
     sid = f"{item_id}_{variant}"
 
     cfg = st.cfgm.cfg
     sess = st.transcoder.get(sid)
-    if sess is None:
+    if sess is None or not sess.is_alive():
         media = _safe_probe(cfg.ffmpeg.ffprobe_path, it.path)
         dec = decide(media, ClientCapabilities(), cfg)
 
@@ -204,7 +226,8 @@ def hls_playlist(item_id: str, variant: str, request: Request):
             return build_transcode_cmd(media, dec, cfg, out_dir, compat=compat)
 
         try:
-            sess = st.transcoder.start(sid, builder)
+            # get_or_start : création/réutilisation ATOMIQUE (anti double-lancement).
+            sess = st.transcoder.get_or_start(sid, builder)
         except FileNotFoundError:
             # FFmpeg absent : on NE redirige PAS (un MKV sous .m3u8 = manifeste
             # malformé côté lecteur). Erreur propre -> le client bascule en repli.
@@ -220,15 +243,22 @@ def hls_playlist(item_id: str, variant: str, request: Request):
     )
 
 
+# Seuls ces noms de segments sont servis (anti path-traversal Windows/Unix).
+_SEGMENT_RE = re.compile(r"^(?:seg_\d{1,7}\.m4s|init\.mp4)$")
+
+
 @router.get("/stream/hls/{item_id}/{variant}/{segment}")
 def hls_segment(item_id: str, variant: str, segment: str, request: Request):
     st = get_state(request)
+    if not _SEGMENT_RE.match(segment):
+        # Rejette '..\..\x.m4s', '/etc/..', etc. — aucun chemin, seul un nom canonique.
+        raise HTTPException(404, "Segment invalide")
     sess = st.transcoder.get(f"{item_id}_{variant}")
-    # Segments fMP4 (.m4s) + segment d'initialisation (init.mp4).
-    if sess is None or not (segment.endswith(".m4s") or segment == "init.mp4"):
+    if sess is None:
         raise HTTPException(404, "Segment indisponible")
     seg_path = sess.out_dir / segment
-    if not seg_path.exists():
+    # Confinement strict dans le dossier de session (défense en profondeur).
+    if not seg_path.exists() or sess.out_dir.resolve() not in seg_path.resolve().parents:
         raise HTTPException(404, "Segment indisponible")
     return FileResponse(seg_path, media_type="video/mp4")
 
@@ -248,9 +278,12 @@ def hls_stop(item_id: str, request: Request) -> dict:
 def stream_subs(item_id: str, sub_index: int, request: Request):
     st = get_state(request)
     it = st.library.get(item_id)
-    if not it or sub_index >= len(it.external_subs):
+    # Borne stricte : rejette les index négatifs (sinon external_subs[-1] servi).
+    if not it or sub_index < 0 or sub_index >= len(it.external_subs):
         raise HTTPException(404, "Sous-titre introuvable")
     path = it.external_subs[sub_index]
+    if not os.path.isfile(path):
+        raise HTTPException(404, "Fichier de sous-titres introuvable")
     return FileResponse(path, media_type=_sub_mime(path))
 
 

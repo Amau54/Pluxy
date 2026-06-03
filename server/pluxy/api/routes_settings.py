@@ -20,9 +20,31 @@ async def patch_settings(request: Request) -> PluxyConfig:
     """
     Applique un patch partiel envoyé par l'UI. Exemple :
         { "transcoding": { "hardware_acceleration": false, "max_bitrate_mbps": 30 } }
+
+    SÉCURITÉ : les chemins d'exécutables (ffmpeg/ffprobe) et le dossier de cache
+    NE sont PAS modifiables via l'API (vecteur d'exécution de commande arbitraire).
+    Ils ne se changent que dans le fichier config local, sur la machine serveur.
     """
     patch = await request.json()
-    return get_state(request).cfgm.update(patch)
+    discovery_changed = isinstance(patch, dict) and "discovery" in patch
+    if isinstance(patch, dict):
+        ff = patch.get("ffmpeg")
+        if isinstance(ff, dict):
+            ff.pop("ffmpeg_path", None)
+            ff.pop("ffprobe_path", None)
+        srv = patch.get("server")
+        if isinstance(srv, dict):
+            srv.pop("transcode_temp_dir", None)
+    st = get_state(request)
+    cfg = st.cfgm.update(patch)
+    # Redémarre le répondeur de découverte si ses réglages ont changé.
+    if discovery_changed:
+        try:
+            st.discovery.stop()
+            st.discovery.start()
+        except Exception:
+            pass
+    return cfg
 
 
 @router.get("/client", tags=["settings"])
