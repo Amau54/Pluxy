@@ -261,7 +261,7 @@ def hls_segment(item_id: str, variant: str, segment: str, request: Request):
         raise HTTPException(404, "Segment invalide")
     _ensure_vod_ctx(st, item_id, variant)
     # Transcodage À LA DEMANDE de ce segment (et cache).
-    path = st.vod.segment(st.cfgm.cfg, item_id, variant, int(m.group(1)))
+    path = st.vod.get_segment(st.cfgm.cfg, item_id, variant, int(m.group(1)))
     if path is None or not path.exists():
         raise HTTPException(503, "Segment indisponible (transcodage)")
     return FileResponse(path, media_type="video/mp2t")

@@ -1,16 +1,18 @@
 """
-HLS VOD à la demande : barre de lecture = film ENTIER + seek partout.
+HLS VOD à transcodage en SESSION CONTINUE (architecture façon Plex/Jellyfin).
 
-Au lieu d'un flux « live » à durée inconnue, on génère une playlist VOD complète
-(tous les segments listés, durée totale connue) ; chaque segment n'est transcodé
-QU'À LA DEMANDE quand le lecteur le réclame (clic sur la barre). Résultat : une
-barre de lecture classique sur laquelle on peut aller n'importe où, même sans
-pré-chargement.
+- Playlist VOD complète (durée connue) -> barre de lecture = film entier, seek partout.
+- UN seul FFmpeg par flux produit des segments mpegts PARFAITEMENT ALIGNÉS (keyframes
+  forcées) -> AUCUNE coupure son/vidéo aux frontières (contrairement au transcodage
+  segment-par-segment).
+- Lecture séquentielle : le segment demandé est servi dès qu'il est prêt (le transcodage
+  va plus vite que le temps réel et reste en avance).
+- Seek : si le segment demandé est loin devant la production -> on REDÉMARRE la session
+  à cet instant (les segments déjà produits restent en cache pour les retours arrière).
 """
 from __future__ import annotations
 
 import math
-import os
 import shutil
 import subprocess
 import threading
@@ -19,29 +21,78 @@ from pathlib import Path
 from typing import Dict, Optional, Tuple
 
 from .config import PluxyConfig
-from .models import MediaInfo, PlaybackDecision, PlaybackMode
+from .models import MediaInfo, PlaybackDecision
 from .tools import NO_WINDOW
 from .transcoder import build_transcode_cmd
 
 
+class VodSession:
+    def __init__(self, out_dir: Path, cmd: list, start_seg: int):
+        self.out_dir = out_dir
+        self.cmd = cmd
+        self.start_seg = start_seg
+        self.proc: Optional[subprocess.Popen] = None
+        self._errlog = None
+        self.last_access = time.time()
+
+    def start(self) -> None:
+        self.out_dir.mkdir(parents=True, exist_ok=True)
+        self._errlog = open(self.out_dir / "ffmpeg.log", "wb")
+        self.proc = subprocess.Popen(
+            self.cmd, stdout=subprocess.DEVNULL, stderr=self._errlog,
+            cwd=str(self.out_dir), creationflags=NO_WINDOW,
+        )
+
+    def is_alive(self) -> bool:
+        return self.proc is not None and self.proc.poll() is None
+
+    def seg(self, i: int) -> Path:
+        return self.out_dir / f"seg_{i:05d}.ts"
+
+    def produced_max(self) -> int:
+        mx = self.start_seg - 1
+        for p in self.out_dir.glob("seg_*.ts"):
+            try:
+                mx = max(mx, int(p.stem.split("_")[1]))
+            except Exception:
+                pass
+        return mx
+
+    def stop_proc(self) -> None:
+        if self.proc and self.proc.poll() is None:
+            self.proc.terminate()
+            try:
+                self.proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self.proc.kill()
+        if self._errlog:
+            try:
+                self._errlog.close()
+            except Exception:
+                pass
+            self._errlog = None
+
+
 class VodHls:
+    # Au-delà de (produit + LOOKAHEAD) segments d'avance, c'est un seek -> redémarrage.
+    LOOKAHEAD = 5
+    WAIT_TIMEOUT = 30.0
+
     def __init__(self, cfg: PluxyConfig, _base_dir: Path):
         self.base = Path(cfg.server.transcode_temp_dir).resolve()
         self.base.mkdir(parents=True, exist_ok=True)
-        self.seg_time = float(max(3, cfg.network.hls_segment_duration))
+        self.seg_time = float(max(2, cfg.network.hls_segment_duration))
+        self._ctx: Dict[str, Tuple[MediaInfo, PlaybackDecision]] = {}
+        self._sessions: Dict[str, VodSession] = {}
         self._locks: Dict[str, threading.Lock] = {}
         self._glock = threading.Lock()
-        # Limite le nombre de segments transcodés en parallèle (charge GPU maîtrisée).
-        self._sem = threading.Semaphore(2)
-        # Décision + media enregistrés au moment du /decide, réutilisés par segment.
-        self._ctx: Dict[str, Tuple[MediaInfo, PlaybackDecision]] = {}
 
-    # -- Contexte (media + décision) -------------------------------------- #
+    # -- Contexte --------------------------------------------------------- #
     def register(self, item_id: str, variant: str, media: MediaInfo,
                  decision: PlaybackDecision) -> None:
         self._ctx[f"{item_id}_{variant}"] = (media, decision)
 
-    def _context(self, item_id: str, variant: str) -> Optional[Tuple[MediaInfo, PlaybackDecision]]:
+    def _context(self, item_id: str, variant: str):
         return self._ctx.get(f"{item_id}_{variant}")
 
     # -- Playlist VOD ----------------------------------------------------- #
@@ -59,69 +110,96 @@ class VodHls:
         out.append("#EXT-X-ENDLIST")
         return "\n".join(out) + "\n"
 
-    # -- Segment à la demande --------------------------------------------- #
-    def _dir(self, item_id: str, variant: str) -> Path:
-        return self.base / f"vod_{item_id}_{variant}"
+    # -- Segment (session continue) --------------------------------------- #
+    def _dir(self, sid: str) -> Path:
+        return self.base / f"vods_{sid}"
 
-    def segment(self, cfg: PluxyConfig, item_id: str, variant: str, index: int) -> Optional[Path]:
+    def _lock(self, sid: str) -> threading.Lock:
+        with self._glock:
+            return self._locks.setdefault(sid, threading.Lock())
+
+    def get_segment(self, cfg: PluxyConfig, item_id: str, variant: str,
+                    i: int) -> Optional[Path]:
+        if self._context(item_id, variant) is None:
+            return None
+        sid = f"{item_id}_{variant}"
+        out_dir = self._dir(sid)
+
+        with self._lock(sid):
+            seg = out_dir / f"seg_{i:05d}.ts"
+            if seg.exists() and seg.stat().st_size > 0:        # cache hit
+                s = self._sessions.get(sid)
+                if s:
+                    s.last_access = time.time()
+                return seg
+
+            sess = self._sessions.get(sid)
+            alive = sess.is_alive() if sess else False
+            pmax = sess.produced_max() if (sess and alive) else None
+            need_restart = (
+                sess is None
+                or (not alive)
+                or (i < sess.start_seg)
+                or (pmax is not None and i > pmax + self.LOOKAHEAD)
+            )
+            if need_restart:
+                if sess:
+                    sess.stop_proc()
+                sess = self._make_session(cfg, item_id, variant, out_dir, i)
+                if sess is None:
+                    return None
+                sess.start()
+                self._sessions[sid] = sess
+            sess.last_access = time.time()
+            target = sess.seg(i)
+            proc_sess = sess
+
+        return self._wait(proc_sess, target)
+
+    def _make_session(self, cfg, item_id, variant, out_dir, start_seg) -> Optional[VodSession]:
         ctx = self._context(item_id, variant)
         if ctx is None:
             return None
         media, decision = ctx
-        d = self._dir(item_id, variant)
-        d.mkdir(parents=True, exist_ok=True)
-        out = d / f"seg_{index:05d}.ts"
-        if out.exists() and out.stat().st_size > 0:
-            _touch(d)
-            return out
+        out_dir.mkdir(parents=True, exist_ok=True)
+        cmd = build_transcode_cmd(
+            media, decision, cfg, out_dir,
+            start_time=start_seg * self.seg_time,
+            compat=(variant == "compat"),
+            seg_duration=self.seg_time,
+            hls_session=True, start_number=start_seg,
+        )
+        return VodSession(out_dir, cmd, start_seg)
 
-        lock = self._lock_for(f"{item_id}_{variant}_{index}")
-        with lock:
-            if out.exists() and out.stat().st_size > 0:
-                return out
-            start = index * self.seg_time
-            tmp = d / f"seg_{index:05d}.part"
-            cmd = build_transcode_cmd(
-                media, decision, cfg, d,
-                start_time=start, compat=(variant == "compat"),
-                segment_out=tmp, seg_duration=self.seg_time,
-            )
-            with self._sem:
-                try:
-                    p = subprocess.run(cmd, stdout=subprocess.DEVNULL,
-                                       stderr=subprocess.DEVNULL, cwd=str(d),
-                                       creationflags=NO_WINDOW, timeout=120)
-                except Exception:
-                    return None
-            if p.returncode != 0 or not tmp.exists() or tmp.stat().st_size == 0:
-                tmp.unlink(missing_ok=True)
-                return None
-            os.replace(tmp, out)
-        _touch(d)
-        return out
-
-    def _lock_for(self, key: str) -> threading.Lock:
-        with self._glock:
-            return self._locks.setdefault(key, threading.Lock())
+    def _wait(self, sess: VodSession, target: Path) -> Optional[Path]:
+        deadline = time.time() + self.WAIT_TIMEOUT
+        while time.time() < deadline:
+            if target.exists() and target.stat().st_size > 0:
+                return target
+            if not sess.is_alive():
+                # Le process s'est arrêté ; laisse un court instant pour le flush final.
+                time.sleep(0.3)
+                return target if (target.exists() and target.stat().st_size > 0) else None
+            time.sleep(0.2)
+        return target if (target.exists() and target.stat().st_size > 0) else None
 
     # -- Nettoyage -------------------------------------------------------- #
     def cleanup_item(self, item_id: str) -> None:
         for variant in ("main", "compat"):
-            self._ctx.pop(f"{item_id}_{variant}", None)
-            shutil.rmtree(self._dir(item_id, variant), ignore_errors=True)
+            sid = f"{item_id}_{variant}"
+            self._ctx.pop(sid, None)
+            sess = self._sessions.pop(sid, None)
+            if sess:
+                sess.stop_proc()
+            shutil.rmtree(self._dir(sid), ignore_errors=True)
 
     def reap_idle(self, max_idle: float = 900.0) -> None:
         now = time.time()
-        for d in self.base.glob("vod_*"):
-            try:
-                if now - d.stat().st_mtime > max_idle:
-                    shutil.rmtree(d, ignore_errors=True)
-            except Exception:
-                pass
-
-
-def _touch(p: Path) -> None:
-    try:
-        os.utime(p, None)
-    except Exception:
-        pass
+        with self._glock:
+            stale = [sid for sid, s in list(self._sessions.items())
+                     if now - s.last_access > max_idle]
+        for sid in stale:
+            sess = self._sessions.pop(sid, None)
+            if sess:
+                sess.stop_proc()
+            shutil.rmtree(self._dir(sid), ignore_errors=True)

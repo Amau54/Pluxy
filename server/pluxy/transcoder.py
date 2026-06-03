@@ -99,6 +99,8 @@ def build_transcode_cmd(
     compat: bool = False,
     segment_out: Path | None = None,
     seg_duration: float | None = None,
+    hls_session: bool = False,
+    start_number: int = 0,
 ) -> List[str]:
     """
     Transcode matériel NVENC.
@@ -168,13 +170,16 @@ def build_transcode_cmd(
             "-bufsize", f"{comp_mbps * 2}M",
         ]
         if tc.hardware_acceleration:
-            cmd += ["-gpu", str(tc.gpu_index)]
+            # -forced-idr 1 : OBLIGATOIRE pour que NVENC respecte les keyframes
+            # forcées (segments HLS de durée exacte). Sans ça : segments non alignés.
+            cmd += ["-gpu", str(tc.gpu_index), "-forced-idr", "1"]
     elif tc.hardware_acceleration:
         cmd += [
             "-c:v", tc.encoder,                        # hevc_nvenc
             "-preset", tc.preset, "-tune", tc.tune, "-rc", tc.rc_mode,
             "-b:v", f"{cap_mbps}M", "-maxrate", f"{cap_mbps}M", "-bufsize", f"{bufsize}M",
             "-spatial_aq", "1", "-rc-lookahead", "20", "-gpu", str(tc.gpu_index),
+            "-forced-idr", "1",                        # keyframes forcées respectées
         ]
         # PAS de `-pix_fmt p010le` (échec conversion CPU sur frames CUDA).
         # Profil main10 + flags couleur HDR si la source est HDR (HDR -> HDR) :
@@ -199,11 +204,28 @@ def build_transcode_cmd(
         cmd += _audio_args(decision, cfg)
 
     # ---- Sortie ---------------------------------------------------------- #
+    if hls_session:
+        # SESSION CONTINUE (façon Plex/Jellyfin) : un seul FFmpeg produit des segments
+        # mpegts PARFAITEMENT alignés (keyframes forcées toutes les T s) -> aucune
+        # coupure son/vidéo aux frontières. `-output_ts_offset` + `-start_number`
+        # placent la session sur la bonne position de la timeline (pour le seek).
+        T = seg_duration or float(cfg.network.hls_segment_duration)
+        cmd += [
+            "-output_ts_offset", f"{start_time:.3f}",
+            "-force_key_frames", f"expr:gte(t,n_forced*{T})",
+            "-f", "hls",
+            "-hls_time", f"{T}",
+            "-hls_list_size", "0",
+            "-hls_flags", "independent_segments+temp_file",
+            "-hls_segment_type", "mpegts",
+            "-start_number", str(start_number),
+            "-hls_segment_filename", str(out_dir / "seg_%05d.ts"),
+            str(out_dir / "_live.m3u8"),
+        ]
+        return cmd
+
     if segment_out is not None:
-        # Un segment mpegts autonome (HLS VOD à la demande).
-        # CRITIQUE : `-output_ts_offset {start}` aligne les timestamps du segment sur
-        # sa position dans le film (segment @45min -> PTS≈2700s). SANS ça, chaque
-        # segment redémarre à PTS 0 -> ExoPlayer ne peut plus enchaîner -> boucle/freeze.
+        # Un segment mpegts autonome (héritage VOD à la demande).
         cmd += [
             "-output_ts_offset", f"{start_time:.3f}",
             "-muxdelay", "0", "-muxpreload", "0",
