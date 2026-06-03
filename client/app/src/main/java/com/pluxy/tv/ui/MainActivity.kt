@@ -54,6 +54,7 @@ class MainActivity : AppCompatActivity() {
 
         findViewById<Button>(R.id.changeServer).setOnClickListener { openSetup() }
         findViewById<Button>(R.id.reload).setOnClickListener { refresh() }
+        findViewById<Button>(R.id.emptyAction).setOnClickListener { openSetup() }
         swipe.setOnRefreshListener { refresh() }
         swipe.setColorSchemeColors(0xFFE5A00D.toInt())
 
@@ -92,25 +93,32 @@ class MainActivity : AppCompatActivity() {
             PluxyApplication.serverBaseUrl(this).removePrefix("http://").removePrefix("https://")
         loadJob?.cancel()
         val api = PluxyApi.create()
-        loadJob = lifecycleScope.launch { fetchAndShow(api); loadedOnce = true }
+        // loadedOnce seulement si le chargement réussit -> réessai possible sinon.
+        loadJob = lifecycleScope.launch { if (fetchAndShow(api)) loadedOnce = true }
     }
 
-    private suspend fun fetchAndShow(api: PluxyApi) {
-        try {
+    private suspend fun fetchAndShow(api: PluxyApi): Boolean {
+        val emptyAction = findViewById<Button>(R.id.emptyAction)
+        return try {
             val items = groupSimilar(api.listItems())
             if (items.isEmpty()) {
                 empty.text = "Aucun média. Ajoutez des dossiers et scannez depuis l'UI serveur."
                 empty.visibility = View.VISIBLE
+                emptyAction.visibility = View.GONE
                 grid.adapter = null
             } else {
                 empty.visibility = View.GONE
+                emptyAction.visibility = View.GONE
                 grid.adapter = MediaAdapter(items) { open(it) }
             }
+            true
         } catch (e: Exception) {
             if (grid.adapter == null) {
-                empty.text = "Serveur injoignable : ${e.message}"
+                empty.text = "Serveur injoignable.\n${PluxyApplication.serverBaseUrl(this)}"
                 empty.visibility = View.VISIBLE
+                emptyAction.visibility = View.VISIBLE      // bouton pour relancer la recherche
             }
+            false
         }
     }
 
