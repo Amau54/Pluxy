@@ -46,6 +46,16 @@
             android:backgroundTint="#e5a00d" />
 
         <Button
+            android:id="@+id/settings"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="8dp"
+            android:text="⚙ Réglages"
+            android:textColor="#e7eaf0"
+            android:textSize="12sp"
+            android:backgroundTint="#2a3142" />
+
+        <Button
             android:id="@+id/changeServer"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"

@@ -15,6 +15,8 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
+import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
+import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy.LoadErrorInfo
 import com.pluxy.tv.api.BufferConfig
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
@@ -68,8 +70,19 @@ object PluxyPlayerFactory {
         val httpFactory = OkHttpDataSource.Factory(ok)
             .setDefaultRequestProperties(mapOf("User-Agent" to "PluxyTV/1.0"))
 
+        // Tolérance aux erreurs de chargement : un segment transcodé peut renvoyer un
+        // 503 passager (NVENC momentanément en retard sur une scène lourde). On RÉESSAIE
+        // plusieurs fois ce segment au lieu de faire échouer toute la lecture (écran noir).
+        val loadErrorPolicy = object : DefaultLoadErrorHandlingPolicy(/* minRetryCount */ 6) {
+            override fun getRetryDelayMsFor(info: LoadErrorInfo): Long {
+                // Backoff court et borné : on laisse au serveur le temps de produire.
+                return (1000L * (info.errorCount)).coerceAtMost(4000L)
+            }
+        }
+
         val mediaSourceFactory = DefaultMediaSourceFactory(context)
             .setDataSourceFactory(httpFactory)
+            .setLoadErrorHandlingPolicy(loadErrorPolicy)
 
         // ---- 4. Sélecteur de pistes : HDR10 + tunneling -------------------- //
         val trackSelector = DefaultTrackSelector(context).apply {

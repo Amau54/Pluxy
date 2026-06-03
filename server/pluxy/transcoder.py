@@ -191,15 +191,24 @@ def build_transcode_cmd(
             "-forced-idr", "1",                        # keyframes forcées respectées
         ]
         # PAS de `-pix_fmt p010le` (échec conversion CPU sur frames CUDA).
-        # Profil main10 + flags couleur HDR si la source est HDR (HDR -> HDR) :
-        # la TV reste en mode HDR (transfert PQ + primaires BT.2020 conservés).
+        # Profil main10 + signalisation HDR10 COMPLÈTE si la source est HDR (HDR -> HDR) :
+        # la TV bascule en mode HDR. Il ne suffit PAS des primaires/transfert : sans les
+        # métadonnées de mastering (SEI), beaucoup de TV (dont Philips) restent en SDR.
         if not decision.tone_map:
             pix = (v.pix_fmt or "") if v else ""
             if v and (v.is_hdr or "10" in pix):
                 cmd += ["-profile:v", "main10"]
             if v and v.is_hdr:
                 cmd += ["-color_primaries", "bt2020",
-                        "-color_trc", "smpte2084", "-colorspace", "bt2020nc"]
+                        "-color_trc", "smpte2084",
+                        "-colorspace", "bt2020nc",
+                        "-color_range", "tv"]
+                # Métadonnées HDR10 statiques (mastering display + content light level).
+                # Insérées en SEI par hevc_nvenc -> déclenche le mode HDR de la TV.
+                if v.master_display:
+                    cmd += ["-master_display", v.master_display]
+                if v.max_cll:
+                    cmd += ["-max_cll", v.max_cll]
     else:
         cmd += [
             "-c:v", "libx265", "-preset", "fast",

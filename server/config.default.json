@@ -1,4 +1,5 @@
 {
+  "schema_version": 2,
   "server": {
     "name": "Pluxy",
     "host": "0.0.0.0",
@@ -26,7 +27,7 @@
     "max_bitrate_mbps": 50,
     "vbv_bufsize_factor": 2.0,
     "gpu_index": 0,
-    "hdr_tone_mapping": "auto",
+    "hdr_tone_mapping": "never",
     "tone_map_algorithm": "hable",
     "tone_map_peak_nits": 100
   },

@@ -121,6 +121,27 @@ class PluxyApi(private val baseUrl: String) {
         }
     }
 
+    /** Configuration serveur complète (menu Réglages avancés). */
+    suspend fun getSettings(): ServerConfig =
+        withContext(Dispatchers.IO) { getJson("/api/settings") }
+
+    /**
+     * Applique un patch partiel à la config serveur et renvoie la config à jour.
+     * `patchJson` ex. : {"transcoding":{"hdr_tone_mapping":"never"}}
+     */
+    suspend fun patchSettings(patchJson: String): ServerConfig =
+        withContext(Dispatchers.IO) {
+            val req = Request.Builder()
+                .url("$baseUrl/api/settings")
+                .patch(patchJson.toRequestBody(jsonMedia))
+                .build()
+            http.newCall(req).execute().use { resp ->
+                val body = resp.bodyOrThrow()
+                moshi.adapter(ServerConfig::class.java).fromJson(body)
+                    ?: throw ApiException(resp.code, "Réglages illisibles")
+            }
+        }
+
     suspend fun stopHls(itemId: String) {
         withContext(Dispatchers.IO) {
             runCatching {

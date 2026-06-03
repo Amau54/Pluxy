@@ -25,6 +25,10 @@ class MediaStream(BaseModel):
     color_transfer: Optional[str] = None    # smpte2084 (PQ/HDR10), arib-std-b67 (HLG)...
     color_primaries: Optional[str] = None
     is_hdr: bool = False
+    # Métadonnées HDR10 statiques (réinjectées à l'encodage NVENC pour que la TV
+    # bascule bien en mode HDR). Pré-formatées pour FFmpeg `-master_display`/`-max_cll`.
+    master_display: Optional[str] = None     # ex. G(8500,39850)B(6550,2300)R(...)WP(...)L(max,min)
+    max_cll: Optional[str] = None            # ex. "1000,400"
     # Audio
     channels: Optional[int] = None
     # Commun

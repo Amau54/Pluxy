@@ -53,6 +53,9 @@ class MainActivity : AppCompatActivity() {
         grid.layoutManager = GridLayoutManager(this, (dp / 150).toInt().coerceIn(2, 8))
 
         findViewById<Button>(R.id.changeServer).setOnClickListener { openSetup() }
+        findViewById<Button>(R.id.settings).setOnClickListener {
+            startActivity(Intent(this, SettingsActivity::class.java))
+        }
         findViewById<Button>(R.id.reload).setOnClickListener { refresh() }
         findViewById<Button>(R.id.emptyAction).setOnClickListener { openSetup() }
         swipe.setOnRefreshListener { refresh() }

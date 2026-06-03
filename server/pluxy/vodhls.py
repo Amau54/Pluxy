@@ -74,14 +74,23 @@ class VodSession:
 
 
 class VodHls:
-    # Au-delà de (produit + LOOKAHEAD) segments d'avance, c'est un seek -> redémarrage.
-    LOOKAHEAD = 5
+    # Délai SANS progression de FFmpeg au-delà duquel on abandonne l'attente d'un segment.
     WAIT_TIMEOUT = 30.0
+    # Plafond ABSOLU d'attente d'un segment (même si FFmpeg progresse) -> garde-fou.
+    WAIT_HARD_CAP = 90.0
 
     def __init__(self, cfg: PluxyConfig, _base_dir: Path):
         self.base = Path(cfg.server.transcode_temp_dir).resolve()
         self.base.mkdir(parents=True, exist_ok=True)
         self.seg_time = float(max(2, cfg.network.hls_segment_duration))
+        # Tolérance vers l'AVANT (en segments) avant de considérer une requête comme un
+        # vrai seek nécessitant un redémarrage de session. Doit COUVRIR le pré-buffer
+        # du client : sinon une simple lecture séquentielle bufferisée (ExoPlayer charge
+        # jusqu'à max_buffer_ms d'avance) dépasse le seuil -> faux "seek" -> on tue le
+        # FFmpeg qui produisait justement ces segments -> écran noir + relance. C'était
+        # la cause des arrêts/rechargements rares. On dimensionne sur le buffer + marge.
+        buf_s = max(60.0, cfg.client_buffer.max_buffer_ms / 1000.0)
+        self.lookahead = int(math.ceil(buf_s / self.seg_time)) + 8
         self._ctx: Dict[str, Tuple[MediaInfo, PlaybackDecision]] = {}
         self._sessions: Dict[str, VodSession] = {}
         self._locks: Dict[str, threading.Lock] = {}
@@ -140,7 +149,7 @@ class VodHls:
                 sess is None
                 or (not alive)
                 or (i < sess.start_seg)
-                or (pmax is not None and i > pmax + self.LOOKAHEAD)
+                or (pmax is not None and i > pmax + self.lookahead)
             )
             if need_restart:
                 if sess:
@@ -172,16 +181,39 @@ class VodHls:
         return VodSession(out_dir, cmd, start_seg)
 
     def _wait(self, sess: VodSession, target: Path) -> Optional[Path]:
-        deadline = time.time() + self.WAIT_TIMEOUT
-        while time.time() < deadline:
-            if target.exists() and target.stat().st_size > 0:
+        """
+        Attend la production du segment `target`. PATIENT tant que FFmpeg est vivant ET
+        PROGRESSE (nouveaux segments produits) : une requête loin devant (gros pré-buffer
+        client, scène lourde qui ralentit momentanément NVENC) n'échoue plus en 503 —
+        ce qui provoquait l'arrêt/écran noir. On n'abandonne que si FFmpeg meurt, stagne
+        plus de WAIT_TIMEOUT sans produire, ou dépasse le plafond absolu WAIT_HARD_CAP.
+        """
+        def ready() -> bool:
+            try:
+                return target.exists() and target.stat().st_size > 0
+            except OSError:
+                return False
+
+        now = time.time()
+        hard_deadline = now + self.WAIT_HARD_CAP
+        stall_deadline = now + self.WAIT_TIMEOUT
+        last_pmax = sess.produced_max()
+        while time.time() < hard_deadline:
+            if ready():
                 return target
             if not sess.is_alive():
                 # Le process s'est arrêté ; laisse un court instant pour le flush final.
                 time.sleep(0.3)
-                return target if (target.exists() and target.stat().st_size > 0) else None
+                return target if ready() else None
+            now = time.time()
+            pmax = sess.produced_max()
+            if pmax > last_pmax:                 # FFmpeg avance -> on prolonge l'attente
+                last_pmax = pmax
+                stall_deadline = now + self.WAIT_TIMEOUT
+            elif now > stall_deadline:           # bloqué trop longtemps sans progresser
+                break
             time.sleep(0.2)
-        return target if (target.exists() and target.stat().st_size > 0) else None
+        return target if ready() else None
 
     # -- Nettoyage -------------------------------------------------------- #
     def cleanup_item(self, item_id: str) -> None:

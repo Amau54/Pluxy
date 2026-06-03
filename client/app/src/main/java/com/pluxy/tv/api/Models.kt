@@ -140,6 +140,56 @@ data class ClientRuntime(
     @Json(name = "server_name") val serverName: String,
 )
 
+// --------------------------------------------------------------------------- //
+//  Configuration serveur (menu Réglages avancés) — GET/PATCH /api/settings      //
+//  Seuls les champs pilotables depuis la TV sont modélisés ; Moshi ignore le    //
+//  reste de la config renvoyée par le serveur.                                  //
+// --------------------------------------------------------------------------- //
+@JsonClass(generateAdapter = true)
+data class TranscodingConfig(
+    @Json(name = "hardware_acceleration") val hardwareAcceleration: Boolean = true,
+    val preset: String = "p5",
+    @Json(name = "force_transcode") val forceTranscode: Boolean = false,
+    @Json(name = "prefer_direct_play") val preferDirectPlay: Boolean = true,
+    @Json(name = "max_bitrate_mbps") val maxBitrateMbps: Int = 50,
+    @Json(name = "hdr_tone_mapping") val hdrToneMapping: String = "never",
+)
+
+@JsonClass(generateAdapter = true)
+data class AudioConfig(
+    @Json(name = "target_codec") val targetCodec: String = "ac3",
+    @Json(name = "target_channels") val targetChannels: Int = 6,
+    @Json(name = "bitrate_kbps") val bitrateKbps: Int = 640,
+    @Json(name = "downmix_lossless") val downmixLossless: Boolean = true,
+)
+
+@JsonClass(generateAdapter = true)
+data class NetworkConfig(
+    @Json(name = "direct_play_enabled") val directPlayEnabled: Boolean = true,
+    @Json(name = "direct_stream_enabled") val directStreamEnabled: Boolean = true,
+    @Json(name = "hls_segment_duration") val hlsSegmentDuration: Int = 3,
+)
+
+@JsonClass(generateAdapter = true)
+data class ClientBufferConfig(
+    @Json(name = "min_buffer_ms") val minBufferMs: Int = 50_000,
+    @Json(name = "max_buffer_ms") val maxBufferMs: Int = 120_000,
+)
+
+@JsonClass(generateAdapter = true)
+data class ServerSection(
+    val name: String = "Pluxy",
+)
+
+@JsonClass(generateAdapter = true)
+data class ServerConfig(
+    val transcoding: TranscodingConfig = TranscodingConfig(),
+    val audio: AudioConfig = AudioConfig(),
+    val network: NetworkConfig = NetworkConfig(),
+    @Json(name = "client_buffer") val clientBuffer: ClientBufferConfig = ClientBufferConfig(),
+    val server: ServerSection = ServerSection(),
+)
+
 /** Position de reprise (watch-state) renvoyée/poussée par /api/playback/progress */
 @JsonClass(generateAdapter = true)
 data class PlaybackProgress(

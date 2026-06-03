@@ -136,10 +136,20 @@ object DeviceProfile {
                 val modeTypes = display.mode?.supportedHdrTypes ?: IntArray(0)
                 if (modeTypes.isNotEmpty()) return true
             }
-            false
+            // Repli : un panneau Android TV peut signaler à tort « pas de HDR » (selon
+            // l'état de la dalle au moment de la requête). Comme le décodeur gère le
+            // HEVC Main10, on considère la TV comme HDR-capable -> on ne dégrade PAS en
+            // SDR par erreur. (Le serveur a de toute façon le dernier mot via ses réglages.)
+            isTelevision(ctx) && hevcInfo().main10
         } catch (_: Throwable) {
             false
         }
+    }
+
+    private fun isTelevision(ctx: Context): Boolean {
+        val ui = ctx.getSystemService(Context.UI_MODE_SERVICE)
+            as? android.app.UiModeManager
+        return ui?.currentModeType == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION
     }
 
     private fun displaySize(ctx: Context): Pair<Int, Int> {

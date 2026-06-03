@@ -54,8 +54,12 @@ class TranscodingCfg(BaseModel):
     max_bitrate_mbps: int = 50
     vbv_bufsize_factor: float = 2.0
     gpu_index: int = 0
-    # auto = tone map seulement si client SDR ; always = toujours ; never = jamais.
-    hdr_tone_mapping: Literal["auto", "always", "never"] = "auto"
+    # never = HDR TOUJOURS préservé (HDR->HDR) ; auto = tone map si client SDR ;
+    # always = toujours convertir en SDR.
+    # Défaut « never » : un panneau HDR (Philips) peut signaler à tort SDR au moment
+    # de la requête -> on convertissait en SDR par erreur. On préserve donc le HDR par
+    # défaut (le repli compat H.264 pour appareils non-HEVC tone-map de toute façon).
+    hdr_tone_mapping: Literal["auto", "always", "never"] = "never"
     tone_map_algorithm: str = "hable"   # hable | mobius | reinhard | bt2390
     tone_map_peak_nits: int = 100
 
@@ -116,10 +120,15 @@ class DiscoveryCfg(BaseModel):
     udp_port: int = 8421
 
 
+# Version du schéma de config (incrémentée à chaque migration de réglages).
+SCHEMA_VERSION = 2
+
+
 # --------------------------------------------------------------------------- #
 #  Racine                                                                      #
 # --------------------------------------------------------------------------- #
 class PluxyConfig(BaseModel):
+    schema_version: int = SCHEMA_VERSION
     server: ServerCfg = Field(default_factory=ServerCfg)
     ffmpeg: FfmpegCfg = Field(default_factory=FfmpegCfg)
     transcoding: TranscodingCfg = Field(default_factory=TranscodingCfg)
@@ -155,16 +164,18 @@ class ConfigManager:
         else:
             src = self.default_path
 
+        migrated = False
         if src.exists():
             data = json.loads(src.read_text(encoding="utf-8"))
+            data, migrated = self._migrate(data)
             cfg = PluxyConfig.model_validate(data)
         else:
             cfg = PluxyConfig()
 
         Path(cfg.server.transcode_temp_dir).mkdir(parents=True, exist_ok=True)
-        # Si on a chargé depuis le défaut/legacy, on écrit immédiatement dans
-        # l'emplacement stable pour figer la persistance.
-        if src != self.path:
+        # Si on a chargé depuis le défaut/legacy OU appliqué une migration, on écrit
+        # immédiatement dans l'emplacement stable pour figer la persistance.
+        if src != self.path or migrated:
             try:
                 from .paths import atomic_write_text
                 atomic_write_text(
@@ -173,6 +184,28 @@ class ConfigManager:
             except Exception:
                 pass
         return cfg
+
+    @staticmethod
+    def _migrate(data: dict) -> tuple[dict, bool]:
+        """
+        Migre une config persistée vers le schéma courant. Renvoie (data, modifié).
+        Conserve les choix EXPLICITES de l'utilisateur ; ne corrige que les valeurs
+        héritées d'anciens défauts problématiques.
+        """
+        if not isinstance(data, dict):
+            return data, False
+        ver = data.get("schema_version", 1)
+        changed = False
+        # v1 -> v2 : l'ancien défaut hdr_tone_mapping="auto" convertissait le HDR en SDR
+        # quand un panneau HDR signalait à tort SDR. On force la préservation du HDR.
+        if ver < 2:
+            tc = data.get("transcoding")
+            if isinstance(tc, dict) and tc.get("hdr_tone_mapping") == "auto":
+                tc["hdr_tone_mapping"] = "never"
+            changed = True
+        if changed:
+            data["schema_version"] = SCHEMA_VERSION
+        return data, changed
 
     @property
     def cfg(self) -> PluxyConfig:
