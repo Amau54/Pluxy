@@ -41,5 +41,22 @@ class PluxyApplication : Application() {
                 .putString(KEY_NAME, name)
                 .apply()
         }
+
+        // --- Préférences de lecture (réglées en amont depuis la fiche film) --- //
+        private const val KEY_AUDIO_LANG = "pref_audio_lang"
+        private const val KEY_SUBS_MODE = "pref_subs_mode"   // auto | off
+
+        fun audioLang(ctx: Context): String =
+            prefs(ctx).getString(KEY_AUDIO_LANG, "fr") ?: "fr"
+
+        fun subsMode(ctx: Context): String =
+            prefs(ctx).getString(KEY_SUBS_MODE, "auto") ?: "auto"
+
+        fun setPlaybackPrefs(ctx: Context, audioLang: String, subsMode: String) {
+            prefs(ctx).edit()
+                .putString(KEY_AUDIO_LANG, audioLang)
+                .putString(KEY_SUBS_MODE, subsMode)
+                .apply()
+        }
     }
 }

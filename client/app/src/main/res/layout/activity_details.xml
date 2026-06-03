@@ -4,18 +4,17 @@
     android:layout_height="match_parent"
     android:background="#0d0f14">
 
-    <!-- Backdrop en fond -->
     <ImageView
         android:id="@+id/backdrop"
         android:layout_width="match_parent"
-        android:layout_height="420dp"
+        android:layout_height="460dp"
         android:scaleType="centerCrop"
-        android:alpha="0.35"
+        android:alpha="0.30"
         android:contentDescription="Backdrop" />
 
     <View
         android:layout_width="match_parent"
-        android:layout_height="420dp"
+        android:layout_height="460dp"
         android:background="@drawable/scrim" />
 
     <ScrollView
@@ -27,8 +26,10 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="40dp">
+            android:paddingHorizontal="48dp"
+            android:paddingVertical="40dp">
 
+            <!-- En-tête : affiche + infos + actions -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -74,15 +75,6 @@
                         android:textSize="14sp" />
 
                     <TextView
-                        android:id="@+id/overview"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="14dp"
-                        android:lineSpacingMultiplier="1.15"
-                        android:textColor="#d7dbe4"
-                        android:textSize="14sp" />
-
-                    <TextView
                         android:id="@+id/director"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
@@ -109,13 +101,42 @@
                             android:id="@+id/trailer"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginStart="14dp"
+                            android:layout_marginStart="12dp"
                             android:text="🎬  Bande-annonce"
+                            android:textColor="#e7eaf0"
+                            android:backgroundTint="#2a3142" />
+
+                        <Button
+                            android:id="@+id/playSettings"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="12dp"
+                            android:text="⚙  Réglages"
                             android:textColor="#e7eaf0"
                             android:backgroundTint="#2a3142" />
                     </LinearLayout>
                 </LinearLayout>
             </LinearLayout>
+
+            <!-- Synopsis EN PLEINE LARGEUR sous l'en-tête -->
+            <TextView
+                android:id="@+id/overviewLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="28dp"
+                android:text="Synopsis"
+                android:textColor="#e7eaf0"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/overview"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:lineSpacingMultiplier="1.25"
+                android:textColor="#d7dbe4"
+                android:textSize="15sp" />
 
             <TextView
                 android:layout_width="wrap_content"

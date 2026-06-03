@@ -29,6 +29,7 @@ import com.pluxy.tv.R
 import com.pluxy.tv.api.BufferConfig
 import com.pluxy.tv.api.MediaItem as PluxyItem
 import com.pluxy.tv.api.PluxyApi
+import com.pluxy.tv.util.Logger
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import kotlinx.coroutines.CoroutineScope
@@ -56,6 +57,12 @@ class PlayerActivity : AppCompatActivity() {
     private var savedPositionMs = 0L
     private var resumeHandled = false
     private var modeLabel = ""
+    // Seek dans un flux transcodé = relance FFmpeg à un offset -> on suit la base.
+    private var streamBaseMs = 0L
+    private var transcodeVariant = "main"
+    private val isTranscode get() = attempts.getOrNull(attemptIdx)?.second == "hls"
+    private fun absolutePositionMs(): Long = streamBaseMs + (player?.currentPosition ?: 0L)
+    private val durationMs get() = (item.duration * 1000).toLong()
 
     private val aspectModes = listOf(
         AspectRatioFrameLayout.RESIZE_MODE_FIT to "Ajusté",
@@ -84,11 +91,25 @@ class PlayerActivity : AppCompatActivity() {
         item = Moshi.Builder().add(KotlinJsonAdapterFactory()).build()
             .adapter(PluxyItem::class.java).fromJson(json) ?: run { finish(); return }
 
-        findViewById<Button>(R.id.btnAudio).setOnClickListener { pickTrack(C.TRACK_TYPE_AUDIO, "Piste audio") }
-        findViewById<Button>(R.id.btnSubs).setOnClickListener { pickSubtitles() }
-        findViewById<Button>(R.id.btnSpeed).setOnClickListener { pickSpeed() }
-        findViewById<Button>(R.id.btnAspect).setOnClickListener { cycleAspect() }
-        setTrackButtonsEnabled(false)
+        // Tout passe par la roue crantée unique.
+        findViewById<Button>(R.id.btnGear).setOnClickListener { openMenu() }
+    }
+
+    /** Menu unique (roue crantée) regroupant toutes les options de lecture. */
+    private fun openMenu() {
+        val ready = player?.playbackState == Player.STATE_READY
+        val entries = listOf(
+            "🎚  Piste audio" to { pickTrack(C.TRACK_TYPE_AUDIO, "Piste audio") },
+            "💬  Sous-titres" to { pickSubtitles() },
+            "⏩  Vitesse de lecture" to { pickSpeed() },
+            "🖼  Format d'image" to { cycleAspect() },
+            "⏱  Aller à un instant…" to { seekToTime() },
+            "ℹ  Infos & logs réseau" to { showDiagnostics() },
+        )
+        val labels = entries.map { it.first + if (!ready && it.first.contains("audio")) "  (analyse…)" else "" }
+        AlertDialog.Builder(this).setTitle("Options de lecture")
+            .setItems(labels.toTypedArray()) { _, w -> entries[w].second() }
+            .show()
     }
 
     // Création/destruction du player calées sur onStart/onStop : pas d'écran noir
@@ -119,13 +140,16 @@ class PlayerActivity : AppCompatActivity() {
                 buffer = api.clientRuntime().buffer
                 val progress = api.getProgress(item.id)
 
+                transcodeVariant = if ("/compat/" in decision.streamUrl) "compat" else "main"
                 attempts.clear()
                 attempts.add(decision.streamUrl to decision.delivery)
                 if (decision.delivery != "direct")
                     attempts.add("/stream/direct/${item.id}" to "direct")
-                attempts.add("/stream/hls/${item.id}/compat/index.m3u8" to "hls")
+                attempts.add("/stream/hls/${item.id}/compat/0/index.m3u8" to "hls")
                 attemptIdx = 0
+                streamBaseMs = 0L
                 modeLabel = decision.mode + if (decision.toneMap) " · HDR→SDR" else ""
+                Logger.log("decide", "mode=${decision.mode} compat=${decision.compat} url=${decision.streamUrl} reasons=${decision.reasons.joinToString(" | ")}")
 
                 buildPlayer()
 
@@ -158,9 +182,22 @@ class PlayerActivity : AppCompatActivity() {
         val mmss = "%02d:%02d".format(positionMs / 60000, (positionMs / 1000) % 60)
         AlertDialog.Builder(this)
             .setTitle("Reprendre la lecture ?")
-            .setPositiveButton("Reprendre ($mmss)") { _, _ -> player?.seekTo(positionMs) }
-            .setNegativeButton("Depuis le début") { _, _ -> player?.seekTo(0) }
+            .setPositiveButton("Reprendre ($mmss)") { _, _ -> goToAbsolute(positionMs) }
+            .setNegativeButton("Depuis le début") { _, _ -> goToAbsolute(0L) }
             .show()
+    }
+
+    /** Va à une position ABSOLUE : seek natif (Direct Play) ou relance transcodage. */
+    private fun goToAbsolute(targetMs: Long) {
+        val t = targetMs.coerceIn(0, if (durationMs > 0) durationMs else Long.MAX_VALUE)
+        if (isTranscode && t > 1000) {
+            streamBaseMs = t
+            attempts[attemptIdx] = "/stream/hls/${item.id}/$transcodeVariant/${t / 1000}/index.m3u8" to "hls"
+            Logger.log("seek", "transcode restart @ ${t / 1000}s")
+            loadAttempt(attemptIdx, restorePos = 0L)
+        } else {
+            player?.seekTo(t)
+        }
     }
 
     private fun buildMediaItem(url: String, delivery: String): MediaItem {
@@ -276,9 +313,52 @@ class PlayerActivity : AppCompatActivity() {
         Toast.makeText(this, "Format : ${aspectModes[aspectIdx].second}", Toast.LENGTH_SHORT).show()
     }
 
-    private fun setTrackButtonsEnabled(on: Boolean) {
-        intArrayOf(R.id.btnAudio, R.id.btnSubs).forEach { findViewById<Button>(it).isEnabled = on }
+    /** Aller à un instant : seek natif (Direct Play) ou RELANCE du transcodage. */
+    private fun seekToTime() {
+        val totalMin = (durationMs / 60000).toInt().coerceAtLeast(1)
+        val input = android.widget.EditText(this).apply {
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER
+            hint = "minute (0–$totalMin)"
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Aller à la minute…")
+            .setView(input)
+            .setPositiveButton("Aller") { _, _ ->
+                val min = input.text.toString().toIntOrNull() ?: return@setPositiveButton
+                goToAbsolute(min.toLong() * 60000)
+            }
+            .setNegativeButton("Annuler", null)
+            .show()
     }
+
+    private fun showDiagnostics() {
+        val p = player
+        val vf = p?.videoFormat
+        val af = p?.audioFormat
+        val absPos = absolutePositionMs()
+        val info = buildString {
+            appendLine("Serveur : ${PluxyApplication.serverBaseUrl(this@PlayerActivity)}")
+            appendLine("Film    : ${item.title}")
+            appendLine("Mode    : $modeLabel${if (isTranscode) " · transcodage" else ""}")
+            appendLine("Position: ${fmt(absPos)} / ${fmt(durationMs)}")
+            appendLine("Vidéo   : ${vf?.let { "${it.sampleMimeType?.substringAfter('/')?.uppercase()} ${it.width}x${it.height} @${it.frameRate.toInt()}fps" } ?: "—"}")
+            appendLine("Audio   : ${af?.let { "${it.sampleMimeType?.substringAfter('/')?.uppercase()} ${it.channelCount}ch ${it.sampleRate}Hz" } ?: "—"}")
+            appendLine("Buffer  : ${((p?.totalBufferedDuration ?: 0L) / 1000)} s en avance")
+            appendLine("Débit   : ~${vf?.bitrate?.let { it / 1_000_000 } ?: af?.bitrate?.let { it / 1000 } ?: 0} ${if (vf?.bitrate != null) "Mbps" else "kbps"}")
+            appendLine()
+            appendLine("— Journal —")
+            append(Logger.dump().takeLast(2000))
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Infos & logs réseau")
+            .setMessage(info)
+            .setPositiveButton("Fermer", null)
+            .setNeutralButton("Effacer logs") { _, _ -> Logger.clear() }
+            .show()
+    }
+
+    private fun fmt(ms: Long): String =
+        "%02d:%02d:%02d".format(ms / 3600000, (ms / 60000) % 60, (ms / 1000) % 60)
 
     private fun codecShort(mime: String?): String = when {
         mime == null -> ""
@@ -291,16 +371,29 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     // ----- Erreurs / repli ----------------------------------------------- //
+    private var subsApplied = false
     private fun playerListener() = object : Player.Listener {
         override fun onPlaybackStateChanged(state: Int) {
             when (state) {
                 Player.STATE_BUFFERING -> statusView.text = "Mise en mémoire tampon… ($modeLabel)"
-                Player.STATE_READY -> { retries = 0; statusView.text = ""; setTrackButtonsEnabled(true) }
+                Player.STATE_READY -> {
+                    retries = 0; statusView.text = ""
+                    // Préférence « sous-titres désactivés » appliquée une fois.
+                    if (!subsApplied) {
+                        subsApplied = true
+                        if (PluxyApplication.subsMode(this@PlayerActivity) == "off")
+                            player?.let {
+                                it.trackSelectionParameters = it.trackSelectionParameters
+                                    .buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true).build()
+                            }
+                    }
+                }
                 Player.STATE_ENDED -> statusView.text = "Lecture terminée"
             }
         }
 
         override fun onPlayerError(error: PlaybackException) {
+            Logger.log("error", "${error.errorCodeName} (attempt $attemptIdx)")
             // 1) Avance dans la chaîne de repli (décodage/manifeste/HTTP).
             if (attemptIdx + 1 < attempts.size) {
                 statusView.text = when (attempts[attemptIdx + 1].second) {
@@ -339,10 +432,10 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun saveProgress() {
-        val p = player ?: return
-        val pos = p.currentPosition
-        // En HLS, p.duration == TIME_UNSET : on retombe sur la durée connue du média.
-        val dur = if (p.duration > 0) p.duration else (item.duration * 1000).toLong()
+        if (player == null) return
+        // Position ABSOLUE (offset de seek transcodé + position courante).
+        val pos = absolutePositionMs()
+        val dur = durationMs.takeIf { it > 0 } ?: (player?.duration ?: 0L)
         if (pos > 0 && dur > 0) ioScope.launch { api.setProgress(item.id, pos, dur) }
     }
 

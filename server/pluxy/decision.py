@@ -94,19 +94,25 @@ def decide(
     if tone_map:
         video_needs_transcode = True
 
-    # ---- 3. Faut-il toucher à l'AUDIO ? ---------------------------------- #
+    # ---- 3. Faut-il toucher à l'AUDIO ? (passthrough si possible) -------- #
+    # On NE downmixe PLUS systématiquement : si le lecteur (ou l'ampli via HDMI/eARC)
+    # sait décoder le format (DTS-HD, TrueHD, Atmos, EAC3…), on transmet le flux
+    # audio TEL QUEL (bitstream / passthrough) -> qualité maximale.
     audio_needs_transcode = False
     a = media.audios[0] if media.audios else None
     if a is not None:
-        lossless = a.codec in {c.lower() for c in cfg.audio.lossless_codecs}
-        unsupported = a.codec not in {c.lower() for c in client.supported_audio_codecs}
+        client_audio = {c.lower() for c in client.supported_audio_codecs}
+        client_supports = a.codec in client_audio
         too_many_ch = (a.channels or 0) > client.max_audio_channels
-        if (cfg.audio.downmix_lossless and lossless) or unsupported or too_many_ch:
+        # Downmix lossless seulement si le client NE sait PAS le décoder (sinon passthrough).
+        if not client_supports or too_many_ch:
             audio_needs_transcode = True
             reasons.append(
-                f"Audio {a.codec} {a.channels}ch -> "
-                f"{cfg.audio.target_codec} {cfg.audio.target_channels}ch (ARC)."
+                f"Audio {a.codec} {a.channels}ch non géré -> "
+                f"{cfg.audio.target_codec} {cfg.audio.target_channels}ch."
             )
+        else:
+            reasons.append(f"Audio {a.codec} {a.channels}ch transmis tel quel (passthrough).")
 
     # ---- 4. Faut-il ré-encapsuler (conteneur) ? -------------------------- #
     container_ok = media.container in client.supported_containers
@@ -162,19 +168,29 @@ def decide(
 
     compat = need_compat and mode == PlaybackMode.TRANSCODE
 
+    # ---- Action audio (passthrough quand possible) ---------------------- #
+    # Direct Play / Direct Stream : copie si l'audio n'a pas besoin d'être touché
+    # (passthrough bitstream DTS-HD/TrueHD/Atmos vers l'ampli).
+    # Transcode HLS fMP4 : on peut COPIER un codec porté par le fMP4 (AAC/AC3/EAC3,
+    # ce qui préserve l'Atmos en EAC3) ; sinon ré-encodage vers la cible.
+    if compat:
+        audio_action = "transcode"          # compat = AAC stéréo universel
+    elif mode == PlaybackMode.TRANSCODE:
+        fmp4_safe = bool(a and a.codec in {"aac", "ac3", "eac3"})
+        client_ok = bool(a and a.codec in {c.lower() for c in client.supported_audio_codecs})
+        audio_action = "copy" if (fmp4_safe and client_ok and not audio_needs_transcode) else "transcode"
+    else:
+        audio_action = "transcode" if audio_needs_transcode else "copy"
+
     return PlaybackDecision(
         mode=mode,
         reasons=reasons,
         compat=compat,
         video_action="transcode" if mode == PlaybackMode.TRANSCODE else "copy",
-        audio_action="transcode"
-        if (audio_needs_transcode or mode == PlaybackMode.TRANSCODE)
-        else "copy",
+        audio_action=audio_action,
         tone_map=tone_map,
         target_video_codec=target_codec,
-        target_audio_codec=cfg.audio.target_codec
-        if (audio_needs_transcode or mode == PlaybackMode.TRANSCODE)
-        else None,
+        target_audio_codec=cfg.audio.target_codec if audio_action == "transcode" else None,
         target_bitrate_mbps=cap_mbps if mode == PlaybackMode.TRANSCODE else None,
         container=container,
         delivery=delivery,

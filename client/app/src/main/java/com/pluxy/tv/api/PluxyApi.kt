@@ -4,6 +4,7 @@ import com.pluxy.tv.PluxyApplication
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.Types
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
+import androidx.media3.common.util.UnstableApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -87,6 +88,7 @@ class PluxyApi(private val baseUrl: String) {
     suspend fun serverInfo(): ServerInfo? =
         withContext(Dispatchers.IO) { runCatching { getJson<ServerInfo>("/api/server/info") }.getOrNull() }
 
+    @OptIn(UnstableApi::class)
     suspend fun decide(itemId: String): PlaybackDecision = withContext(Dispatchers.IO) {
         val payload = DecideRequest(itemId, DeviceProfile.capabilities())
         val json = moshi.adapter(DecideRequest::class.java).toJson(payload)

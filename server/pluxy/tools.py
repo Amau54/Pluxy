@@ -31,3 +31,20 @@ def ffmpeg_available(cfg: PluxyConfig) -> bool:
 
 def ffprobe_available(cfg: PluxyConfig) -> bool:
     return _which(cfg.ffmpeg.ffprobe_path)
+
+
+@lru_cache(maxsize=4)
+def _has_filter(ffmpeg_path: str, name: str) -> bool:
+    try:
+        out = subprocess.run([ffmpeg_path, "-hide_banner", "-filters"],
+                             capture_output=True, text=True, timeout=10,
+                             creationflags=NO_WINDOW)
+        return any(line.split()[1:2] == [name]
+                   for line in out.stdout.splitlines() if line.strip())
+    except Exception:
+        return False
+
+
+def has_libplacebo(cfg: PluxyConfig) -> bool:
+    """libplacebo (tone mapping HDR->SDR de très haute qualité, GPU Vulkan)."""
+    return _has_filter(cfg.ffmpeg.ffmpeg_path, "libplacebo")

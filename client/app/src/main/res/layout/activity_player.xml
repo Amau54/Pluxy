@@ -15,35 +15,20 @@
         app:use_controller="true"
         app:show_subtitle_button="false" />
 
-    <!-- Barre d'options (audio / sous-titres / vitesse / format) -->
-    <LinearLayout
-        android:id="@+id/optionsBar"
+    <!-- Roue crantée unique : regroupe audio / sous-titres / vitesse / format /
+         aller à un instant / infos & logs -->
+    <Button
+        android:id="@+id/btnGear"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="top|end"
         android:layout_margin="20dp"
-        android:orientation="horizontal">
-
-        <Button
-            android:id="@+id/btnAudio"
-            style="@style/PluxyPlayerBtn"
-            android:text="Audio" />
-
-        <Button
-            android:id="@+id/btnSubs"
-            style="@style/PluxyPlayerBtn"
-            android:text="Sous-titres" />
-
-        <Button
-            android:id="@+id/btnSpeed"
-            style="@style/PluxyPlayerBtn"
-            android:text="Vitesse" />
-
-        <Button
-            android:id="@+id/btnAspect"
-            style="@style/PluxyPlayerBtn"
-            android:text="Format" />
-    </LinearLayout>
+        android:text="⚙"
+        android:textSize="20sp"
+        android:textColor="#e7eaf0"
+        android:backgroundTint="#cc2a3142"
+        android:minWidth="56dp"
+        android:focusable="true" />
 
     <TextView
         android:id="@+id/status"

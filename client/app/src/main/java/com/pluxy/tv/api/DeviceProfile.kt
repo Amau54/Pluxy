@@ -6,6 +6,9 @@ import android.media.MediaCodecList
 import android.media.MediaFormat
 import android.os.Build
 import android.view.Display
+import androidx.media3.common.C
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.audio.AudioCapabilities
 import com.pluxy.tv.PluxyApplication
 
 /**
@@ -16,9 +19,11 @@ import com.pluxy.tv.PluxyApplication
  */
 object DeviceProfile {
 
+    @UnstableApi
     fun capabilities(): ClientCapabilities {
         val ctx = PluxyApplication.instance
         val hevc = hevcInfo()            // (supporté, main10, hauteurMax)
+        val (audioCodecs, maxCh) = audioCapabilities(ctx)
         return ClientCapabilities(
             supportsHevc = hevc.supported,
             supportsHevc10bit = hevc.main10,
@@ -26,13 +31,37 @@ object DeviceProfile {
             supportsHdr10 = supportsHdr10(ctx),
             supportsHdr = supportsHdr10(ctx),
             supportedContainers = listOf("mp4", "mkv", "webm", "ts"),
-            supportedAudioCodecs = listOf("aac", "ac3", "eac3", "mp3"),
-            maxAudioChannels = 6,
+            supportedAudioCodecs = audioCodecs,
+            maxAudioChannels = maxCh,
             maxBitrateMbps = null,
             maxVideoHeight = hevc.maxHeight,
             screenWidth = displaySize(ctx).first,
             screenHeight = displaySize(ctx).second,
         )
+    }
+
+    /**
+     * Codecs audio réellement restituables (décodage logiciel + PASSTHROUGH/bitstream
+     * vers l'ampli via HDMI/eARC) : DTS, DTS-HD, TrueHD, Dolby Atmos (EAC3 JOC)…
+     * Le serveur s'en sert pour transmettre l'audio TEL QUEL quand c'est possible.
+     */
+    @UnstableApi
+    private fun audioCapabilities(ctx: Context): Pair<List<String>, Int> {
+        val codecs = linkedSetOf("aac", "mp3", "ac3", "eac3")   // décodés logiciellement
+        var maxCh = 6
+        try {
+            val caps = AudioCapabilities.getCapabilities(ctx)
+            fun pt(enc: Int, name: String) { if (caps.supportsEncoding(enc)) codecs.add(name) }
+            pt(C.ENCODING_AC3, "ac3")
+            pt(C.ENCODING_E_AC3, "eac3")
+            pt(C.ENCODING_E_AC3_JOC, "eac3")            // Dolby Atmos (EAC3+JOC)
+            pt(C.ENCODING_DTS, "dts")
+            pt(C.ENCODING_DTS_HD, "dtshd")
+            pt(C.ENCODING_DOLBY_TRUEHD, "truehd")       // Dolby TrueHD / Atmos
+            maxCh = caps.maxChannelCount.coerceAtLeast(6)
+        } catch (_: Throwable) {
+        }
+        return codecs.toList() to maxCh
     }
 
     private data class HevcInfo(val supported: Boolean, val main10: Boolean, val maxHeight: Int)

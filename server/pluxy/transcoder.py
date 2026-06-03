@@ -19,7 +19,7 @@ from typing import Dict, List, Optional
 
 from .config import PluxyConfig
 from .models import MediaInfo, PlaybackDecision
-from .tools import NO_WINDOW
+from .tools import NO_WINDOW, has_libplacebo
 
 
 # ===========================================================================
@@ -61,24 +61,33 @@ def build_direct_stream_cmd(
     return cmd
 
 
-def _tone_map_filter(cfg: PluxyConfig) -> str:
+def _tone_map_chain(cfg: PluxyConfig) -> tuple[str, bool]:
     """
-    Chaîne de tone mapping HDR10 (PQ) -> SDR (BT.709).
+    Tone mapping HDR10 (PQ/BT.2020) -> SDR (BT.709). Décodage NVDEC (frames CUDA) :
+    on rapatrie en p010le puis on traite. Retourne (filtre, besoin_device_vulkan).
 
-    NVDEC décode sur GPU -> on rapatrie en p010le -> zscale linéarise et applique
-    l'algo de tone mapping -> reconversion BT.709 -> hwupload_cuda pour NVENC.
+    - Si libplacebo dispo : tone mapping GPU Vulkan haute qualité (bt.2390 + détection
+      du pic de luminance + correction de gamut) — rendu nettement plus naturel.
+    - Sinon : repli zscale/tonemap (désaturation des hautes lumières activée).
+    La chaîne se termine en yuv420p système ; NVENC encode directement (pas de re-upload).
     """
     tc = cfg.transcoding
-    return (
+    if has_libplacebo(cfg):
+        chain = (
+            "hwdownload,format=p010le,hwupload,"
+            "libplacebo=tonemapping=bt.2390:colorspace=bt709:color_primaries=bt709:"
+            "color_trc=bt709:peak_detect=true:gamut_mode=perceptual:format=yuv420p,"
+            "hwdownload,format=yuv420p"
+        )
+        return chain, True
+    chain = (
         "hwdownload,format=p010le,"
         f"zscale=transfer=linear:npl={tc.tone_map_peak_nits},"
-        "format=gbrpf32le,"
-        "zscale=primaries=bt709,"
-        f"tonemap=tonemap={tc.tone_map_algorithm}:desat=0,"
-        "zscale=transfer=bt709:matrix=bt709:range=tv,"
-        "format=yuv420p,"
-        "hwupload_cuda"
+        "format=gbrpf32le,zscale=primaries=bt709,"
+        f"tonemap=tonemap={tc.tone_map_algorithm}:desat=4.5,"
+        "zscale=transfer=bt709:matrix=bt709:range=tv,format=yuv420p"
     )
+    return chain, False
 
 
 def build_transcode_cmd(
@@ -101,10 +110,27 @@ def build_transcode_cmd(
     v = media.video
     src_hdr = bool(v and v.is_hdr)
 
+    # ---- Détermine la chaîne de filtres + le besoin d'un device Vulkan ---- #
+    vf: List[str] = []
+    needs_vulkan = False
+    do_tonemap = (decision.tone_map or (compat and src_hdr)) and tc.hardware_acceleration
+    if do_tonemap:
+        chain, needs_vulkan = _tone_map_chain(cfg)
+        vf.append(chain)
+        if compat:
+            vf.append("scale=-2:1080")               # après tonemap (frames système)
+    elif compat and tc.hardware_acceleration:
+        vf.append("scale_cuda=-2:1080:format=nv12")  # SDR : downscale GPU
+    elif compat:
+        vf.append("scale=-2:1080,format=yuv420p")
+
     cmd: List[str] = [
         cfg.ffmpeg.ffmpeg_path,
         "-hide_banner", "-loglevel", cfg.ffmpeg.log_level,
     ]
+    # Device Vulkan pour libplacebo (doit être initialisé avant l'entrée).
+    if needs_vulkan:
+        cmd += ["-init_hw_device", "vulkan=vk:0", "-filter_hw_device", "vk"]
 
     # Décodage matériel NVDEC + frames résidentes en VRAM (CUDA).
     if tc.hardware_acceleration:
@@ -118,21 +144,6 @@ def build_transcode_cmd(
         cmd += ["-ss", f"{start_time:.3f}"]
 
     cmd += ["-i", media.path]
-
-    # ---- Filtres vidéo --------------------------------------------------- #
-    vf: List[str] = []
-    if compat:
-        # Mode compatibilité maximale : H.264 1080p 8-bit (décodable partout).
-        # HDR -> tone mapping SDR puis downscale ; sinon downscale GPU.
-        if src_hdr and tc.hardware_acceleration:
-            vf.append(_tone_map_filter(cfg) + ",hwdownload,format=yuv420p,scale=-2:1080")
-        elif tc.hardware_acceleration:
-            vf.append("scale_cuda=-2:1080:format=nv12")
-        else:
-            vf.append("scale=-2:1080,format=yuv420p")
-    elif decision.tone_map and tc.hardware_acceleration:
-        vf.append(_tone_map_filter(cfg))
-    # (Mode normal sans tone map : résolution native conservée, on bride le débit.)
 
     cmd += ["-map", "0:v:0"]
     if vf:
@@ -307,6 +318,28 @@ class TranscodeManager:
             s = self._sessions.pop(session_id, None)
         if s:
             s.stop()
+
+    def stop_prefix(self, prefix: str) -> None:
+        """Arrête toutes les sessions dont l'id commence par `prefix`."""
+        with self._lock:
+            ids = [sid for sid in self._sessions if sid.startswith(prefix)]
+            victims = [self._sessions.pop(sid) for sid in ids]
+        for s in victims:
+            try:
+                s.stop()
+            except Exception:
+                pass
+
+    def stop_others(self, prefix: str, keep: str) -> None:
+        """Arrête les sessions `prefix*` sauf `keep` (un seul flux de seek actif)."""
+        with self._lock:
+            ids = [sid for sid in self._sessions if sid.startswith(prefix) and sid != keep]
+            victims = [self._sessions.pop(sid) for sid in ids]
+        for s in victims:
+            try:
+                s.stop()
+            except Exception:
+                pass
 
     def reap_idle(self, max_idle: float = 120.0) -> None:
         """Tue les sessions inactives (client parti) pour libérer le GPU."""

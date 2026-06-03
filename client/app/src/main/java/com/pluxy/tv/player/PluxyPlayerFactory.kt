@@ -80,8 +80,10 @@ object PluxyPlayerFactory {
                     // (écran noir) -> on le désactive.
                     .setTunnelingEnabled(isTv)
                     .setPreferredVideoMimeType(MimeTypes.VIDEO_H265)
-                    // Langues par défaut (audio + sous-titres) : français.
-                    .setPreferredAudioLanguage("fr")
+                    // Langue audio préférée = réglage utilisateur (fiche film).
+                    .setPreferredAudioLanguage(
+                        com.pluxy.tv.PluxyApplication.audioLang(context).ifBlank { null }
+                    )
                     .setPreferredTextLanguage("fr")
                     // 4K natif : aucun bridage de résolution côté client.
                     .clearVideoSizeConstraints()

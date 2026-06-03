@@ -79,7 +79,7 @@ async def playback_decide(request: Request) -> PlaybackDecision:
         dec.stream_url = f"/stream/remux/{item_id}"
     else:
         variant = "compat" if dec.compat else "main"
-        dec.stream_url = f"/stream/hls/{item_id}/{variant}/index.m3u8"
+        dec.stream_url = f"/stream/hls/{item_id}/{variant}/0/index.m3u8"
     return dec
 
 
@@ -205,16 +205,18 @@ def stream_remux(item_id: str, request: Request):
 # --------------------------------------------------------------------------- #
 #  2c. Transcode — HLS NVENC fMP4 (variante main = HEVC ; compat = H.264 1080p)#
 # --------------------------------------------------------------------------- #
-@router.get("/stream/hls/{item_id}/{variant}/index.m3u8")
-def hls_playlist(item_id: str, variant: str, request: Request):
+# L'OFFSET (en secondes) dans le chemin permet de relancer le transcodage à
+# n'importe quel instant du film -> seek/saut même sans pré-chargement.
+@router.get("/stream/hls/{item_id}/{variant}/{offset}/index.m3u8")
+def hls_playlist(item_id: str, variant: str, offset: int, request: Request):
     st: AppState = get_state(request)
     it = st.library.get(item_id)
     if not it:
         raise HTTPException(404, "Média introuvable")
-    if variant not in ("main", "compat"):
-        raise HTTPException(404, "Variante inconnue")
+    if variant not in ("main", "compat") or offset < 0:
+        raise HTTPException(404, "Variante/offset invalide")
     compat = variant == "compat"
-    sid = f"{item_id}_{variant}"
+    sid = f"{item_id}_{variant}_{offset}"
 
     cfg = st.cfgm.cfg
     sess = st.transcoder.get(sid)
@@ -223,14 +225,14 @@ def hls_playlist(item_id: str, variant: str, request: Request):
         dec = decide(media, ClientCapabilities(), cfg)
 
         def builder(out_dir: Path):
-            return build_transcode_cmd(media, dec, cfg, out_dir, compat=compat)
+            return build_transcode_cmd(media, dec, cfg, out_dir,
+                                       start_time=float(offset), compat=compat)
 
         try:
-            # get_or_start : création/réutilisation ATOMIQUE (anti double-lancement).
+            # On arrête les AUTRES offsets de ce média/variante (un seul flux actif).
+            st.transcoder.stop_others(f"{item_id}_{variant}_", keep=sid)
             sess = st.transcoder.get_or_start(sid, builder)
         except FileNotFoundError:
-            # FFmpeg absent : on NE redirige PAS (un MKV sous .m3u8 = manifeste
-            # malformé côté lecteur). Erreur propre -> le client bascule en repli.
             raise HTTPException(503, "FFmpeg indisponible pour le transcodage")
         if not sess.wait_for_playlist():
             st.transcoder.stop(sid)
@@ -247,17 +249,15 @@ def hls_playlist(item_id: str, variant: str, request: Request):
 _SEGMENT_RE = re.compile(r"^(?:seg_\d{1,7}\.m4s|init\.mp4)$")
 
 
-@router.get("/stream/hls/{item_id}/{variant}/{segment}")
-def hls_segment(item_id: str, variant: str, segment: str, request: Request):
+@router.get("/stream/hls/{item_id}/{variant}/{offset}/{segment}")
+def hls_segment(item_id: str, variant: str, offset: int, segment: str, request: Request):
     st = get_state(request)
     if not _SEGMENT_RE.match(segment):
-        # Rejette '..\..\x.m4s', '/etc/..', etc. — aucun chemin, seul un nom canonique.
         raise HTTPException(404, "Segment invalide")
-    sess = st.transcoder.get(f"{item_id}_{variant}")
+    sess = st.transcoder.get(f"{item_id}_{variant}_{offset}")
     if sess is None:
         raise HTTPException(404, "Segment indisponible")
     seg_path = sess.out_dir / segment
-    # Confinement strict dans le dossier de session (défense en profondeur).
     if not seg_path.exists() or sess.out_dir.resolve() not in seg_path.resolve().parents:
         raise HTTPException(404, "Segment indisponible")
     return FileResponse(seg_path, media_type="video/mp4")
@@ -265,9 +265,8 @@ def hls_segment(item_id: str, variant: str, segment: str, request: Request):
 
 @router.delete("/stream/hls/{item_id}")
 def hls_stop(item_id: str, request: Request) -> dict:
-    tr = get_state(request).transcoder
-    for variant in ("main", "compat"):
-        tr.stop(f"{item_id}_{variant}")
+    # Arrête toutes les sessions du média (toutes variantes + tous offsets de seek).
+    get_state(request).transcoder.stop_prefix(f"{item_id}_")
     return {"stopped": item_id}
 
 

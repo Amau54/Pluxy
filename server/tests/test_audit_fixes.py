@@ -27,7 +27,7 @@ def test_atomic_write():
 def test_app_imports():
     from pluxy.main import app
     paths = {r.path for r in app.routes}
-    assert "/stream/hls/{item_id}/{variant}/index.m3u8" in paths
+    assert "/stream/hls/{item_id}/{variant}/{offset}/index.m3u8" in paths
 
 
 def test_sub_lang_detection():

@@ -108,6 +108,7 @@ data class DecideRequest(
 data class PlaybackDecision(
     val mode: String,                                   // direct_play | direct_stream | transcode
     val reasons: List<String> = emptyList(),
+    val compat: Boolean = false,
     @Json(name = "tone_map") val toneMap: Boolean = false,
     @Json(name = "target_bitrate_mbps") val targetBitrateMbps: Int? = null,
     val delivery: String = "direct",                    // direct | hls

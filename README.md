@@ -55,9 +55,15 @@ que le `versionCode` augmente.
   genres, note, affiches/backdrops et **bande-annonce** YouTube.
 - **Reconnaissance de noms robuste** : parser multi-passes (titres numériques
   *2012/1917/300*, sagas, scene-names, VOSTFR/MULTI, éditions…) validé sur 16 cas.
-- **Lecteur complet (parité Plex)** : reprise de lecture, sélection piste audio,
-  sélection/désactivation des sous-titres, vitesse (0.5×–2×), format d'image
-  (ajusté/zoom/étiré), saut ±10 s, reconnexion auto, style des sous-titres.
+- **Lecteur complet (parité Plex)** : reprise, **roue crantée unique** (audio,
+  sous-titres, vitesse 0.5×–2×, format d'image, **aller à un instant**, **infos & logs**),
+  saut ±10 s, reconnexion auto, style des sous-titres, réglages de lecture **en amont**.
+- **Audio passthrough** : DTS-HD / TrueHD / **Dolby Atmos** transmis tel quel (bitstream)
+  vers l'ampli quand l'appareil/HDMI le permet ; sinon downmix AC3/EAC3.
+- **Tone mapping HDR→SDR haute qualité** (libplacebo bt.2390 + détection du pic),
+  repli zscale.
+- **Seek dans le transcodage** : relance FFmpeg à l'instant choisi -> aller à 45 min
+  même sans pré-chargement (le Direct Play seeke nativement via HTTP Range).
 - **Bibliothèque persistante** : l'index survit aux redémarrages (liste instantanée),
   scan en arrière-plan, bouton **Actualiser** + pull-to-refresh côté app, et
   **regroupement des titres similaires** (sagas côte à côte).

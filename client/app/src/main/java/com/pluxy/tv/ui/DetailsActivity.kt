@@ -10,12 +10,14 @@ import android.widget.Button
 import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.util.UnstableApi
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import coil.load
+import com.pluxy.tv.PluxyApplication
 import com.pluxy.tv.R
 import com.pluxy.tv.api.CastMember
 import com.pluxy.tv.api.MediaItem
@@ -50,8 +52,40 @@ class DetailsActivity : AppCompatActivity() {
         playBtn.setOnClickListener { play() }
         playBtn.requestFocus()
         findViewById<Button>(R.id.trailer).visibility = View.GONE
+        findViewById<Button>(R.id.playSettings).setOnClickListener { showPlaybackSettings() }
 
         loadMetadata()
+    }
+
+    /** Réglages de lecture EN AMONT : langue audio préférée + sous-titres. */
+    private fun showPlaybackSettings() {
+        val langs = listOf("fr" to "Français", "en" to "English", "es" to "Español",
+            "de" to "Deutsch", "it" to "Italiano", "" to "Original (auto)")
+        val current = PluxyApplication.audioLang(this)
+        var pickedLang = current
+        AlertDialog.Builder(this)
+            .setTitle("Langue audio préférée")
+            .setSingleChoiceItems(langs.map { it.second }.toTypedArray(),
+                langs.indexOfFirst { it.first == current }.coerceAtLeast(0)) { _, w ->
+                pickedLang = langs[w].first
+            }
+            .setPositiveButton("Suivant") { _, _ -> chooseSubsThen(pickedLang) }
+            .setNegativeButton("Annuler", null)
+            .show()
+    }
+
+    private fun chooseSubsThen(lang: String) {
+        val modes = listOf("auto" to "Sous-titres : automatiques", "off" to "Sous-titres : désactivés")
+        val current = PluxyApplication.subsMode(this)
+        AlertDialog.Builder(this)
+            .setTitle("Sous-titres")
+            .setSingleChoiceItems(modes.map { it.second }.toTypedArray(),
+                modes.indexOfFirst { it.first == current }.coerceAtLeast(0)) { d, w ->
+                PluxyApplication.setPlaybackPrefs(this, lang, modes[w].first)
+                Toast.makeText(this, "Réglages enregistrés", Toast.LENGTH_SHORT).show()
+                d.dismiss()
+            }
+            .show()
     }
 
     private fun loadMetadata() {
@@ -86,7 +120,10 @@ class DetailsActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.tagline).apply {
             text = m.tagline ?: ""; visibility = if (m.tagline.isNullOrBlank()) View.GONE else View.VISIBLE
         }
+        val hasOverview = !m.overview.isNullOrBlank()
         findViewById<TextView>(R.id.overview).text = m.overview ?: ""
+        findViewById<TextView>(R.id.overview).visibility = if (hasOverview) View.VISIBLE else View.GONE
+        findViewById<TextView>(R.id.overviewLabel).visibility = if (hasOverview) View.VISIBLE else View.GONE
         findViewById<TextView>(R.id.director).apply {
             text = m.director?.let { "Réalisé par $it" } ?: ""
             visibility = if (m.director.isNullOrBlank()) View.GONE else View.VISIBLE
