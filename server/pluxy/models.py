@@ -107,10 +107,12 @@ class ClientCapabilities(BaseModel):
     Le Philips 803 supporte HEVC Main10 + HDR10 ; ARC classique => audio limité.
     """
     supports_hevc: bool = True
+    supports_hevc_10bit: bool = True       # profil HEVC Main10 (10 bits)
     supports_h264: bool = True
     supports_av1: bool = False
     supports_hdr10: bool = True
     supports_hdr: bool = True              # tout type HDR (HDR10/HLG/DV)
+    max_video_height: int = 2160           # hauteur max décodable (4K=2160)
     # Conteneurs lisibles directement par ExoPlayer.
     supported_containers: List[str] = Field(
         default_factory=lambda: ["mp4", "mkv", "webm", "ts"]
@@ -135,6 +137,9 @@ class PlaybackMode(str, Enum):
 class PlaybackDecision(BaseModel):
     mode: PlaybackMode
     reasons: List[str] = Field(default_factory=list)
+    # Transcodage en mode "compatibilité maximale" (H.264 1080p) car le lecteur
+    # ne sait pas décoder la vidéo source (ex. HEVC Main10 non supporté).
+    compat: bool = False
     # Détails effectifs du flux servi.
     video_action: str = "copy"             # copy | transcode
     audio_action: str = "copy"             # copy | transcode

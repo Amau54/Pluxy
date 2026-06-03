@@ -218,16 +218,21 @@ class TranscodeSession:
     def playlist_path(self) -> Path:
         return self.out_dir / "index.m3u8"
 
-    def wait_for_playlist(self, timeout: float = 20.0) -> bool:
-        """Attend que FFmpeg écrive au moins le premier segment + la playlist."""
+    def wait_for_playlist(self, timeout: float = 25.0) -> bool:
+        """
+        Attend que FFmpeg écrive la playlist + le segment d'init fMP4 + au moins
+        un segment média. (Segments fMP4 = `.m4s`, fallback `.ts` pour mpegts.)
+        """
         deadline = time.time() + timeout
         pl = self.playlist_path()
         while time.time() < deadline:
-            if pl.exists() and any(self.out_dir.glob("seg_*.ts")):
+            has_seg = any(self.out_dir.glob("seg_*.m4s")) or any(self.out_dir.glob("seg_*.ts"))
+            has_init = (self.out_dir / "init.mp4").exists()
+            if pl.exists() and has_seg and has_init:
                 return True
             if self.proc and self.proc.poll() is not None:
                 return False        # FFmpeg s'est arrêté prématurément
-            time.sleep(0.2)
+            time.sleep(0.15)
         return False
 
     def stop(self) -> None:
@@ -242,7 +247,10 @@ class TranscodeSession:
 
 class TranscodeManager:
     def __init__(self, cfg: PluxyConfig):
-        self.base = Path(cfg.server.transcode_temp_dir)
+        # ABSOLU obligatoire : FFmpeg tourne avec cwd=out_dir (pour écrire init.mp4
+        # au bon endroit). Un chemin relatif provoquerait des segments imbriqués
+        # introuvables -> "transcodage n'a pas pu démarrer". On résout donc en absolu.
+        self.base = Path(cfg.server.transcode_temp_dir).resolve()
         self.base.mkdir(parents=True, exist_ok=True)
         self._sessions: Dict[str, TranscodeSession] = {}
         self._lock = threading.RLock()

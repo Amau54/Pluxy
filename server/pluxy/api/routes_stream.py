@@ -75,7 +75,8 @@ async def playback_decide(request: Request) -> PlaybackDecision:
     elif dec.mode == PlaybackMode.DIRECT_STREAM:
         dec.stream_url = f"/stream/remux/{item_id}"
     else:
-        dec.stream_url = f"/stream/hls/{item_id}/main/index.m3u8"
+        variant = "compat" if dec.compat else "main"
+        dec.stream_url = f"/stream/hls/{item_id}/{variant}/index.m3u8"
     return dec
 
 
@@ -205,10 +206,12 @@ def hls_playlist(item_id: str, variant: str, request: Request):
         try:
             sess = st.transcoder.start(sid, builder)
         except FileNotFoundError:
-            return RedirectResponse(url=f"/stream/direct/{item_id}", status_code=302)
+            # FFmpeg absent : on NE redirige PAS (un MKV sous .m3u8 = manifeste
+            # malformé côté lecteur). Erreur propre -> le client bascule en repli.
+            raise HTTPException(503, "FFmpeg indisponible pour le transcodage")
         if not sess.wait_for_playlist():
             st.transcoder.stop(sid)
-            return RedirectResponse(url=f"/stream/direct/{item_id}", status_code=302)
+            raise HTTPException(503, "Le transcodage n'a pas pu démarrer")
 
     return FileResponse(
         sess.playlist_path(),

@@ -67,6 +67,7 @@ data class MovieMetadata(
 @JsonClass(generateAdapter = true)
 data class ClientCapabilities(
     @Json(name = "supports_hevc") val supportsHevc: Boolean,
+    @Json(name = "supports_hevc_10bit") val supportsHevc10bit: Boolean,
     @Json(name = "supports_h264") val supportsH264: Boolean,
     @Json(name = "supports_hdr10") val supportsHdr10: Boolean,
     @Json(name = "supports_hdr") val supportsHdr: Boolean,
@@ -74,6 +75,7 @@ data class ClientCapabilities(
     @Json(name = "supported_audio_codecs") val supportedAudioCodecs: List<String>,
     @Json(name = "max_audio_channels") val maxAudioChannels: Int,
     @Json(name = "max_bitrate_mbps") val maxBitrateMbps: Int?,
+    @Json(name = "max_video_height") val maxVideoHeight: Int,
     @Json(name = "screen_width") val screenWidth: Int,
     @Json(name = "screen_height") val screenHeight: Int,
 )

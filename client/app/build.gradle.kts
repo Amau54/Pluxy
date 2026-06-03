@@ -11,12 +11,12 @@ android {
         applicationId = "com.pluxy.tv"
         minSdk = 23            // Android TV 6.0+ ET mobile (Android 6+)
         targetSdk = 34
-        versionCode = 5
-        versionName = "1.0.4"
+        versionCode = 6
+        versionName = "1.0.5"
     }
 
-    // Clé de signature STABLE et versionnée : permet de mettre à jour l'app
-    // par-dessus l'existante (même signature) sans avoir à la désinstaller.
+    // Cle de signature STABLE et versionnee : permet de mettre a jour l'app
+    // par-dessus l'existante (meme signature) sans avoir a la desinstaller.
     signingConfigs {
         create("pluxy") {
             storeFile = rootProject.file("keystore/pluxy.jks")
@@ -45,7 +45,7 @@ android {
 }
 
 dependencies {
-    // Media3 1.4.1 : compile contre compileSdk 34 (aucun SDK 35 à télécharger).
+    // Media3 1.4.1 : compile contre compileSdk 34 (aucun SDK 35 a telecharger).
     val media3 = "1.4.1"
     implementation("androidx.media3:media3-exoplayer:$media3")
     implementation("androidx.media3:media3-exoplayer-hls:$media3")
@@ -61,7 +61,7 @@ dependencies {
     implementation("androidx.recyclerview:recyclerview:1.3.2")
     implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.1.0")
 
-    // Réseau / JSON
+    // Reseau / JSON
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.squareup.moshi:moshi-kotlin:1.15.1")
 

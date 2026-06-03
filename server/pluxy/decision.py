@@ -36,6 +36,9 @@ def decide(
 
     # ---- 1. Faut-il transcoder la VIDÉO ? --------------------------------- #
     video_needs_transcode = False
+    # need_compat : le lecteur ne sait PAS décoder la vidéo source
+    # (codec/profil/résolution) -> transcodage H.264 1080p "compatibilité maximale".
+    need_compat = False
 
     if tc.force_transcode:
         video_needs_transcode = True
@@ -44,12 +47,29 @@ def decide(
     if v is None:
         reasons.append("Aucune piste vidéo détectée.")
     else:
-        codec_ok = v.codec in _VIDEO_CODEC_OK and (
-            client.supports_hevc if v.codec in ("hevc", "h265") else client.supports_h264
-        )
+        is_hevc = v.codec in ("hevc", "h265")
+        is_10bit = bool(v.is_hdr or "10" in (v.pix_fmt or ""))
+        # Le client décode-t-il réellement cette vidéo ?
+        if is_hevc:
+            codec_ok = client.supports_hevc and (client.supports_hevc_10bit or not is_10bit)
+        elif v.codec in _VIDEO_CODEC_OK:
+            codec_ok = client.supports_h264
+        else:
+            codec_ok = False
+
         if not codec_ok:
             video_needs_transcode = True
-            reasons.append(f"Codec vidéo {v.codec} non supporté par le client.")
+            need_compat = True
+            detail = "HEVC 10 bits (Main10)" if (is_hevc and is_10bit) else v.codec
+            reasons.append(f"Lecteur incompatible avec {detail} -> transcodage H.264.")
+
+        # Résolution supérieure à ce que le lecteur décode.
+        if v.height and client.max_video_height and v.height > client.max_video_height:
+            video_needs_transcode = True
+            need_compat = True
+            reasons.append(
+                f"Résolution {v.height}p > max décodable {client.max_video_height}p."
+            )
 
         # Débit trop élevé pour la liaison Wi-Fi -> transcode avec bitrate cap.
         src_mbps = (media.overall_bitrate or 0) / 1_000_000
@@ -135,10 +155,14 @@ def decide(
         delivery = "direct"
         container = media.container
         audio_needs_transcode = False
+        need_compat = False
+
+    compat = need_compat and mode == PlaybackMode.TRANSCODE
 
     return PlaybackDecision(
         mode=mode,
         reasons=reasons,
+        compat=compat,
         video_action="transcode" if mode == PlaybackMode.TRANSCODE else "copy",
         audio_action="transcode"
         if (audio_needs_transcode or mode == PlaybackMode.TRANSCODE)
