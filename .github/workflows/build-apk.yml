@@ -72,9 +72,16 @@ jobs:
           path: dist/Pluxy-${{ steps.ver.outputs.version }}.apk
           if-no-files-found: error
 
+      # Le corps de la Release = message du tag annoté (comme les versions
+      # précédentes, qui ont des notes rédigées).
+      - name: Notes de version (message du tag)
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: git tag -l --format='%(contents)' "${{ github.ref_name }}" > ../RELEASE_NOTES.md
+
       - name: Publier la Release (sur tag v*)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
+          name: Pluxy ${{ github.ref_name }}
+          body_path: RELEASE_NOTES.md
           files: dist/Pluxy-${{ steps.ver.outputs.version }}.apk
-          generate_release_notes: true
