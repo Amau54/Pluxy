@@ -1,10 +1,11 @@
 name: Build APK
 
-# Construit automatiquement l'APK Pluxy (mobile + Android TV) :
-#  - à chaque push sur main touchant le client (ou le workflow) ;
-#  - manuellement depuis l'onglet Actions ;
-#  - sur un tag v* -> publie en plus une Release avec l'APK attachée
-#    (le lien « releases/latest » du README pointe alors sur la dernière version).
+# Construit l'APK Pluxy (mobile + Android TV) :
+#  - à chaque push sur main touchant le client (ou le workflow) -> artifact ;
+#  - manuellement depuis l'onglet Actions (Run workflow) ;
+#       · « publish_release = true » -> crée en plus le tag v<version> ET la
+#         Release GitHub (notes = RELEASE_NOTES.md), APK attachée.
+#  - sur un tag v* déjà existant -> publie aussi la Release.
 on:
   push:
     branches: [ main ]
@@ -14,9 +15,14 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      publish_release:
+        description: "Publier une Release (tag v<version> + APK) ?"
+        type: boolean
+        default: false
 
 permissions:
-  contents: write   # nécessaire pour créer la Release sur tag
+  contents: write   # créer le tag + la Release
 
 jobs:
   build:
@@ -72,16 +78,17 @@ jobs:
           path: dist/Pluxy-${{ steps.ver.outputs.version }}.apk
           if-no-files-found: error
 
-      # Le corps de la Release = message du tag annoté (comme les versions
-      # précédentes, qui ont des notes rédigées).
-      - name: Notes de version (message du tag)
-        if: startsWith(github.ref, 'refs/tags/v')
-        run: git tag -l --format='%(contents)' "${{ github.ref_name }}" > ../RELEASE_NOTES.md
-
-      - name: Publier la Release (sur tag v*)
-        if: startsWith(github.ref, 'refs/tags/v')
+      # Publication d'une Release :
+      #   - sur un push de tag v*  (le tag existe déjà), OU
+      #   - sur déclenchement manuel avec publish_release = true
+      #     (le tag v<version> est alors créé par l'action au commit courant).
+      # Le corps de la Release vient de RELEASE_NOTES.md (notes rédigées,
+      # comme les versions précédentes).
+      - name: Publier la Release
+        if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.publish_release == 'true'
         uses: softprops/action-gh-release@v2
         with:
-          name: Pluxy ${{ github.ref_name }}
+          tag_name: v${{ steps.ver.outputs.version }}
+          name: Pluxy v${{ steps.ver.outputs.version }}
           body_path: RELEASE_NOTES.md
           files: dist/Pluxy-${{ steps.ver.outputs.version }}.apk
