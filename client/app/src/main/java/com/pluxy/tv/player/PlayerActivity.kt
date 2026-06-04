@@ -7,6 +7,7 @@ import android.os.Handler
 import android.os.Looper
 import android.view.KeyEvent
 import android.view.View
+import android.view.WindowManager
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -174,6 +175,15 @@ class PlayerActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_player)
+
+        // La TV lance son économiseur d'écran / sa mise en veille après quelques
+        // minutes SANS action télécommande. Pendant un film on ne touche à rien :
+        // au bout de ~5 min le système enclenche la veille et MET LA LECTURE EN PAUSE,
+        // puis recommence à chaque cycle. FLAG_KEEP_SCREEN_ON signale au système que
+        // l'écran est activement utilisé -> ni veille ni économiseur tant que le
+        // lecteur est ouvert. media3 PlayerView ne le pose pas tout seul.
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+
         playerView = findViewById(R.id.player_view)
         statusView = findViewById(R.id.status)
 
