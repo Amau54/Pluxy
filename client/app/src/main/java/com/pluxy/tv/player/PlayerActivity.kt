@@ -5,6 +5,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.view.KeyEvent
 import android.view.View
 import android.view.WindowManager
@@ -63,6 +64,17 @@ class PlayerActivity : AppCompatActivity() {
     private var resumeHandled = false
     private var modeLabel = ""
     private val isTranscode get() = attempts.getOrNull(attemptIdx)?.second == "hls"
+
+    // ---- Bascule adaptative au débit réseau (façon Plex « optimize for connection ») //
+    // Un rebuffering (le tampon se vide -> le lecteur se fige pour recharger) n'est PAS
+    // une erreur : la chaîne de repli sur erreur ne s'en occupe pas. On compte donc les
+    // rebufferings réels (hors démarrage et hors seek) sur une fenêtre glissante ; au-delà
+    // d'un seuil, on descend d'un palier de qualité pour tenir le débit réseau :
+    //   Direct Play  ->  HLS « main »  (HEVC/HDR transcodé à débit PLAFONNÉ, qualité quasi
+    //                                    intacte)  ->  HLS « compat » (H.264 1080p, sûr).
+    private val rebufferTimes = ArrayDeque<Long>()
+    private var wasReady = false
+    private var lastSeekAtMs = 0L
     // La playlist VOD couvre tout le film : position et durée sont absolues.
     private fun absolutePositionMs(): Long = player?.currentPosition ?: 0L
     private val durationMs get() = (item.duration * 1000).toLong()
@@ -132,6 +144,7 @@ class PlayerActivity : AppCompatActivity() {
         val p = player ?: run { dismissSeekOverlay(); return@Runnable }
         val dur = durationMs.takeIf { it > 0 } ?: (p.duration.takeIf { it > 0 } ?: Long.MAX_VALUE)
         val target = (seekBaseMs + seekAccumMs).coerceIn(0L, dur)
+        lastSeekAtMs = SystemClock.elapsedRealtime()
         p.seekTo(target)
         isSeeking = false
         seekAccumMs = 0L
@@ -271,7 +284,18 @@ class PlayerActivity : AppCompatActivity() {
                 attempts.add(decision.streamUrl to decision.delivery)
                 if (decision.delivery != "direct")
                     attempts.add("/stream/direct/${item.id}" to "direct")
-                attempts.add("/stream/hls/${item.id}/compat/index.m3u8" to "hls")
+                // Paliers de repli ET de bascule adaptative réseau :
+                //  - « main »   = HEVC/HDR transcodé à débit plafonné (qualité quasi
+                //    intacte). Pertinent seulement si l'appareil décode bien la source
+                //    (décision en lecture directe) ; inutile/incompatible sinon.
+                //  - « compat » = H.264 1080p universel, dernier recours garanti lisible.
+                val mainHls = "/stream/hls/${item.id}/main/index.m3u8"
+                val compatHls = "/stream/hls/${item.id}/compat/index.m3u8"
+                val deviceDecodesSource = decision.delivery == "direct"
+                if (deviceDecodesSource && attempts.none { it.first == mainHls })
+                    attempts.add(mainHls to "hls")
+                if (attempts.none { it.first == compatHls })
+                    attempts.add(compatHls to "hls")
                 attemptIdx = 0
                 modeLabel = decision.mode + if (decision.toneMap) " · HDR→SDR" else ""
                 Logger.log("decide", "mode=${decision.mode} compat=${decision.compat} url=${decision.streamUrl} reasons=${decision.reasons.joinToString(" | ")}")
@@ -298,6 +322,8 @@ class PlayerActivity : AppCompatActivity() {
         styleSubtitles()
         exo.addListener(playerListener())
         retries = 0
+        wasReady = false
+        rebufferTimes.clear()
         loadAttempt(attemptIdx, restorePos = savedPositionMs)
         handler.removeCallbacks(saveTick)
         handler.postDelayed(saveTick, 10_000)
@@ -316,6 +342,7 @@ class PlayerActivity : AppCompatActivity() {
      *  ExoPlayer demande le segment cible (transcodé à la demande) -> lecture. */
     private fun goToAbsolute(targetMs: Long) {
         val t = targetMs.coerceIn(0, if (durationMs > 0) durationMs else Long.MAX_VALUE)
+        lastSeekAtMs = SystemClock.elapsedRealtime()
         player?.seekTo(t)
     }
 
@@ -494,9 +521,21 @@ class PlayerActivity : AppCompatActivity() {
     private fun playerListener() = object : Player.Listener {
         override fun onPlaybackStateChanged(state: Int) {
             when (state) {
-                Player.STATE_BUFFERING -> statusView.text = "Mise en mémoire tampon… ($modeLabel)"
+                Player.STATE_BUFFERING -> {
+                    statusView.text = "Mise en mémoire tampon… ($modeLabel)"
+                    // Rebuffering RÉEL = on lisait (READY + playWhenReady) et le tampon
+                    // s'est vidé, hors fenêtre de seek. Le démarrage initial et les seeks
+                    // ne comptent pas.
+                    val p = player
+                    if (wasReady && p?.playWhenReady == true &&
+                        SystemClock.elapsedRealtime() - lastSeekAtMs > SEEK_GRACE_MS) {
+                        onRebuffer()
+                    }
+                    wasReady = false
+                }
                 Player.STATE_READY -> {
                     retries = 0; statusView.text = ""
+                    wasReady = true
                     // Préférence « sous-titres désactivés » appliquée une fois.
                     if (!subsApplied) {
                         subsApplied = true
@@ -543,11 +582,48 @@ class PlayerActivity : AppCompatActivity() {
         attemptIdx = idx
         retries = 0
         retryRunnable?.let { handler.removeCallbacks(it) }
+        // Nouveau flux : on repart d'un compteur de rebuffering vierge, et la salve de
+        // BUFFERING qui suit prepare()/seek ne doit pas être comptée comme un rebuffer.
+        rebufferTimes.clear()
+        wasReady = false
+        lastSeekAtMs = SystemClock.elapsedRealtime()
         val (url, delivery) = attempts[idx]
         p.setMediaItem(buildMediaItem(url, delivery))
         p.prepare()
         if (restorePos > 0) p.seekTo(restorePos)
         p.playWhenReady = true
+    }
+
+    /** Comptabilise un rebuffering et déclenche une bascule si le réseau ne suit plus. */
+    private fun onRebuffer() {
+        val now = SystemClock.elapsedRealtime()
+        rebufferTimes.addLast(now)
+        while (rebufferTimes.isNotEmpty() && now - rebufferTimes.first() > REBUFFER_WINDOW_MS)
+            rebufferTimes.removeFirst()
+        Logger.log("rebuffer", "count=${rebufferTimes.size}/$REBUFFER_THRESHOLD attempt=$attemptIdx")
+        if (rebufferTimes.size >= REBUFFER_THRESHOLD) maybeDownshift()
+    }
+
+    /** Descend d'un palier de qualité pour tenir le débit réseau (sans perdre la position).
+     *  Direct Play -> « main » (HEVC/HDR plafonné) -> « compat » (1080p). Au plus bas
+     *  palier, on ne fait rien (le compat 1080p tient sur n'importe quel réseau). */
+    private fun maybeDownshift() {
+        val curUrl = attempts.getOrNull(attemptIdx)?.first ?: return
+        val target = when {
+            !curUrl.contains("/hls/") -> attempts.indexOfFirst { it.first.contains("/main/") }
+            curUrl.contains("/main/") -> attempts.indexOfFirst { it.first.contains("/compat/") }
+            else -> -1
+        }
+        if (target <= attemptIdx) return            // déjà au palier le plus bas adapté
+        rebufferTimes.clear()
+        val toCompat = attempts[target].first.contains("/compat/")
+        val msg = if (toCompat) "Réseau limité : passage en 1080p compatible…"
+                  else "Réseau instable : qualité adaptée au débit…"
+        modeLabel = if (toCompat) "Compatibilité 1080p (réseau)" else "HDR · débit plafonné (réseau)"
+        statusView.text = msg
+        Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+        Logger.log("downshift", "-> attempt $target (${attempts[target].first})")
+        loadAttempt(target, restorePos = absolutePositionMs())
     }
 
     private fun saveProgress() {
@@ -560,6 +636,11 @@ class PlayerActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_ITEM = "extra_item_json"
+        // Bascule adaptative : N rebufferings réels dans la fenêtre -> on descend d'un palier.
+        private const val REBUFFER_WINDOW_MS = 90_000L
+        private const val REBUFFER_THRESHOLD = 3
+        // Un BUFFERING survenant juste après un seek n'est pas un rebuffer réseau.
+        private const val SEEK_GRACE_MS = 2_500L
         // Scope process-wide pour les nettoyages réseau qui doivent aboutir
         // même après destruction de l'activité (libération NVENC, dernière position).
         private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)

@@ -36,13 +36,16 @@ object PluxyPlayerFactory {
 
     fun build(context: Context, buffer: BufferConfig): ExoPlayer {
         // ---- 1. LoadControl : gros tampon réseau --------------------------- //
+        // Planchers de sécurité : même si la config serveur est conservatrice, on
+        // garantit un coussin minimal. Surtout, le coussin de REPRISE après un
+        // rebuffering est généreux -> on repart avec une vraie avance au lieu de
+        // re-bégayer aussitôt (cycle stall -> lecture -> stall) sur Wi-Fi instable.
+        val minBufMs       = buffer.minBufferMs.coerceAtLeast(60_000)
+        val maxBufMs       = buffer.maxBufferMs.coerceIn(minBufMs, 180_000)
+        val startMs        = buffer.bufferForPlaybackMs                       // démarrage rapide
+        val afterRebufMs   = buffer.bufferForPlaybackAfterRebufferMs.coerceAtLeast(15_000)
         val loadControl = DefaultLoadControl.Builder()
-            .setBufferDurationsMs(
-                buffer.minBufferMs,                            // ex. 50 s mini
-                buffer.maxBufferMs,                            // ex. 120 s maxi
-                buffer.bufferForPlaybackMs,                    // démarrage
-                buffer.bufferForPlaybackAfterRebufferMs        // reprise post-coupure
-            )
+            .setBufferDurationsMs(minBufMs, maxBufMs, startMs, afterRebufMs)
             // Plafond mémoire borné à la RAM dispo (évite l'OOM sur mobile faible) :
             // au plus la valeur demandée ET au plus ~1/4 de la mémoire de classe.
             .setTargetBufferBytes(targetBufferBytes(context, buffer.targetBufferBytesMb))

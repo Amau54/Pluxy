@@ -1,15 +1,18 @@
-Fin des pauses toutes les 5 minutes pendant la lecture
+Buffering plus intelligent : fini les pauses à répétition sur Wi-Fi instable
 
-L'économiseur d'écran / la mise en veille de l'Android TV s'enclenchait après
-quelques minutes sans action sur la télécommande et mettait le film en PAUSE,
-puis recommençait à chaque cycle (~5 min).
+Quand le réseau (Wi-Fi double saut) ne suivait pas le débit d'un film 4K HDR en
+lecture directe, le tampon se vidait et le lecteur se figeait pour recharger,
+parfois en boucle. La lecture ne réagissait pas (un rebuffering n'est pas une
+erreur). Deux améliorations, façon Plex/Jellyfin :
 
-Correctifs (client uniquement) :
-- L'écran est désormais maintenu éveillé tant que le lecteur est ouvert
-  (FLAG_KEEP_SCREEN_ON) : plus d'économiseur ni de veille pendant un film.
-- Wake lock CPU + Wi-Fi pendant la lecture (setWakeMode) : empêche
-  l'endormissement réseau qui pouvait couper le flux.
+- Tampon plus résilient : coussin minimal garanti et, surtout, REPRISE après un
+  blocage avec une vraie avance -> plus de cycle « pause / reprise / pause ».
+- Bascule adaptative automatique : si la lecture bégaie plusieurs fois, Pluxy
+  descend d'un palier pour tenir le débit, SANS perdre la position :
+    Lecture directe  ->  HEVC/HDR transcodé à débit plafonné (qualité quasi
+    intacte, HDR conservé)  ->  H.264 1080p compatible (dernier recours).
+  La qualité d'origine est retentée à la prochaine ouverture du film.
 
 Correctif client uniquement : pas besoin de redémarrer le serveur.
-Installez la v1.0.20 par-dessus l'existante (signature stable, aucune
+Installez la v1.0.21 par-dessus l'existante (signature stable, aucune
 désinstallation nécessaire).
