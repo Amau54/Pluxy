@@ -125,10 +125,11 @@ class PlayerActivity : AppCompatActivity() {
         val p = player ?: return
         if (!isSeeking) {
             // Première touche de cette séquence : mémoriser la position de départ.
+            // On GARDE les contrôles affichés : le seek se fait « sur la barre », et la
+            // masquer ici ferait perdre le focus de la timeline en plein appui maintenu.
             seekBaseMs = p.currentPosition
             seekAccumMs = 0L
             isSeeking = true
-            playerView.hideController()   // pas de double-affichage contrôleur + overlay
         }
         seekAccumMs += holdIncrement(repeatCount) * dir
         val dur = durationMs.takeIf { it > 0 } ?: (p.duration.takeIf { it > 0 } ?: Long.MAX_VALUE)
@@ -173,7 +174,12 @@ class PlayerActivity : AppCompatActivity() {
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         val isLeft  = event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT
         val isRight = event.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT
-        if ((isLeft || isRight) && player != null) {
+        // Le seek progressif ne s'active QUE lorsque l'utilisateur est « sur la barre »
+        // (contrôles ouverts ET focus sur la timeline). Hors de là, on NE capture PAS
+        // les flèches : la navigation native fait son travail (déplacer le focus entre
+        // les boutons, ou afficher les contrôles en lecture nue) -> les flèches ne
+        // cassent plus les menus/boutons.
+        if ((isLeft || isRight) && player != null && isSeekBarFocused()) {
             // ACTION_DOWN (répété tant que la touche est maintenue) → accumule.
             if (event.action == KeyEvent.ACTION_DOWN) {
                 seekStep(if (isRight) 1 else -1, event.repeatCount)
@@ -183,6 +189,12 @@ class PlayerActivity : AppCompatActivity() {
             if (event.action == KeyEvent.ACTION_UP) return true
         }
         return super.dispatchKeyEvent(event)
+    }
+
+    /** Vrai si les contrôles sont affichés ET le focus est sur la barre de progression. */
+    private fun isSeekBarFocused(): Boolean {
+        if (!playerView.isControllerFullyVisible) return false
+        return currentFocus?.id == androidx.media3.ui.R.id.exo_progress
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -636,9 +648,11 @@ class PlayerActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_ITEM = "extra_item_json"
-        // Bascule adaptative : N rebufferings réels dans la fenêtre -> on descend d'un palier.
-        private const val REBUFFER_WINDOW_MS = 90_000L
-        private const val REBUFFER_THRESHOLD = 3
+        // Bascule adaptative = simple FILET DE SECOURS : on ne descend d'un palier que si
+        // ça bégaie vraiment souvent (réseau réellement insuffisant), pas sur un pic
+        // ponctuel d'un gros fichier 4K — que le tampon costaud absorbe désormais.
+        private const val REBUFFER_WINDOW_MS = 120_000L
+        private const val REBUFFER_THRESHOLD = 5
         // Un BUFFERING survenant juste après un seek n'est pas un rebuffer réseau.
         private const val SEEK_GRACE_MS = 2_500L
         // Scope process-wide pour les nettoyages réseau qui doivent aboutir

@@ -90,11 +90,13 @@ class NetworkCfg(BaseModel):
 
 class ClientBufferCfg(BaseModel):
     """Paramètres transmis au client pour le pré-buffer ExoPlayer."""
-    min_buffer_ms: int = 50_000
+    min_buffer_ms: int = 60_000
     max_buffer_ms: int = 120_000
     buffer_for_playback_ms: int = 5_000
-    buffer_for_playback_after_rebuffer_ms: int = 10_000
-    target_buffer_bytes_mb: int = 256
+    buffer_for_playback_after_rebuffer_ms: int = 15_000
+    # Gros tampon octets : c'est le facteur limitant pour les 4K à haut débit crête
+    # (un plafond trop bas fige la lecture malgré une durée de buffer élevée).
+    target_buffer_bytes_mb: int = 600
     back_buffer_ms: int = 30_000
 
 

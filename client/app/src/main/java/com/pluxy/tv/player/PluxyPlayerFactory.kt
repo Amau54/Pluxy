@@ -133,11 +133,20 @@ object PluxyPlayerFactory {
         return ui?.currentModeType == Configuration.UI_MODE_TYPE_TELEVISION
     }
 
-    /** Octets de buffer cible : min(demandé, ~1/4 de la mémoire de classe), borné. */
+    /** Octets de buffer cible. C'est le facteur RÉELLEMENT limitant pour les 4K à haut
+     *  débit crête : un plafond trop bas fige la lecture malgré une durée de buffer élevée.
+     *  Sur TV (lecteur dédié, large heap) on autorise un GROS tampon : on se base sur le
+     *  largeMemoryClass et la moitié du heap, avec un plancher généreux pour absorber les
+     *  gros fichiers. Sur mobile on reste prudent (1/4 du heap standard) pour éviter l'OOM. */
     private fun targetBufferBytes(ctx: Context, requestedMb: Int): Int {
         val am = ctx.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-        val classMb = am.memoryClass                      // Mo alloués max au heap app
-        val capMb = (classMb / 4).coerceIn(32, requestedMb.coerceAtLeast(32))
+        val isTv = isTelevision(ctx)
+        // Plancher : sur TV on vise au moins 600 Mo de tampon octets pour les gros 4K,
+        // indépendamment d'une config serveur conservatrice.
+        val reqMb = if (isTv) requestedMb.coerceAtLeast(600) else requestedMb
+        val classMb = if (isTv) am.largeMemoryClass else am.memoryClass
+        val fraction = if (isTv) classMb / 2 else classMb / 4
+        val capMb = fraction.coerceIn(32, reqMb.coerceAtLeast(32))
         return capMb * 1024 * 1024
     }
 }

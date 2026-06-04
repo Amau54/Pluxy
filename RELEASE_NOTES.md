@@ -1,18 +1,23 @@
-Buffering plus intelligent : fini les pauses à répétition sur Wi-Fi instable
+Gros tampon pour les 4K + flèches qui ne cassent plus la navigation
 
-Quand le réseau (Wi-Fi double saut) ne suivait pas le débit d'un film 4K HDR en
-lecture directe, le tampon se vidait et le lecteur se figeait pour recharger,
-parfois en boucle. La lecture ne réagissait pas (un rebuffering n'est pas une
-erreur). Deux améliorations, façon Plex/Jellyfin :
+Deux améliorations attendues :
 
-- Tampon plus résilient : coussin minimal garanti et, surtout, REPRISE après un
-  blocage avec une vraie avance -> plus de cycle « pause / reprise / pause ».
-- Bascule adaptative automatique : si la lecture bégaie plusieurs fois, Pluxy
-  descend d'un palier pour tenir le débit, SANS perdre la position :
-    Lecture directe  ->  HEVC/HDR transcodé à débit plafonné (qualité quasi
-    intacte, HDR conservé)  ->  H.264 1080p compatible (dernier recours).
-  La qualité d'origine est retentée à la prochaine ouverture du film.
+1) Tampon costaud (gros fichiers 4K à haut débit)
+   Le vrai facteur limitant n'était pas la durée du tampon mais sa TAILLE en
+   octets, plafonnée bien trop bas sur TV (quelques secondes de 4K seulement).
+   - large heap activé + plafond d'octets relevé sur TV (jusqu'à la moitié du
+     grand heap), avec un plancher de 600 Mo -> le tampon retient désormais des
+     dizaines de secondes de 4K et absorbe les pics de débit.
+   - Coussin de reprise après blocage plus généreux.
+   - La bascule adaptative de qualité redevient un simple FILET DE SECOURS : elle
+     ne se déclenche plus que si le réseau est réellement insuffisant (pas sur un
+     pic ponctuel d'un gros fichier).
 
-Correctif client uniquement : pas besoin de redémarrer le serveur.
-Installez la v1.0.21 par-dessus l'existante (signature stable, aucune
-désinstallation nécessaire).
+2) Flèches gauche/droite (D-pad)
+   Le décalage temporel ne se fait plus QUE lorsque la barre de progression est
+   sélectionnée (contrôles ouverts, focus sur la timeline). En lecture nue ou
+   dans les menus, les flèches servent à la navigation normale -> elles ne
+   cassent plus le déplacement du focus.
+
+Correctif client uniquement (le serveur n'a que des défauts ajustés pour les
+nouvelles installations). Installez la v1.0.22 par-dessus l'existante.
