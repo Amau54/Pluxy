@@ -195,8 +195,19 @@ def decide(
     )
 
     if compat:
-        audio_action = "transcode"                 # compat = AAC stéréo universel
+        # Compat (H.264 1080p pour appareils sans HEVC) : AAC stéréo universel.
+        audio_action = "transcode"
         tgt_codec, tgt_ch = "aac", 2
+    elif cfg.audio.force_audio_passthrough:
+        # Passthrough forcé : copie le flux audio d'origine sans le réencoder.
+        # DTS-HD / TrueHD / Atmos / FLAC… transmis tels quels vers l'ampli via
+        # HDMI / ARC / eARC. Aucune perte de qualité. Actif par défaut.
+        audio_action = "copy"
+        tgt_codec, tgt_ch = None, src_ch
+        if a and a.codec not in client_audio:
+            reasons.append(
+                f"Audio {a.codec} {a.channels}ch : passthrough forcé vers l'ampli (ARC)."
+            )
     elif client_plays_audio:
         audio_action = "copy"                      # passthrough / lecture native
         tgt_codec, tgt_ch = None, src_ch

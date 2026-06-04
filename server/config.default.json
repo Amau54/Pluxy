@@ -1,5 +1,5 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "server": {
     "name": "Pluxy",
     "host": "0.0.0.0",
@@ -32,11 +32,11 @@
     "tone_map_peak_nits": 100
   },
   "audio": {
-    "downmix_lossless": true,
-    "lossless_codecs": ["truehd", "dts", "dtshd", "flac", "pcm_s24le", "pcm_s16le", "mlp"],
-    "target_codec": "ac3",
+    "force_audio_passthrough": true,
+    "target_codec": "eac3",
     "target_channels": 6,
-    "bitrate_kbps": 640
+    "bitrate_kbps": 640,
+    "downmix_lossless": false
   },
   "network": {
     "delivery": "hls",

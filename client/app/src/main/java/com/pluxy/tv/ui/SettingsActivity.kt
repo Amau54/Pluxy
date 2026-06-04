@@ -108,13 +108,26 @@ class SettingsActivity : AppCompatActivity() {
             hint = "Plus haut = meilleure image mais GPU plus sollicité.")
 
         section("Audio")
+        boolRow(
+            "Pleine qualité audio (passthrough)",
+            "audio", "force_audio_passthrough", c.audio.forceAudioPassthrough,
+            hint = "Transmet DTS-HD, TrueHD, Atmos, FLAC… tels quels à l'ampli " +
+                   "via HDMI/ARC/eARC. Aucune perte. Désactiver si l'audio est " +
+                   "silencieux (appareil sans ampli compatible)."
+        )
         enumRow("Codec audio de repli", "audio", "target_codec", c.audio.targetCodec,
-            listOf("AC3 (universel ampli/TV)" to "ac3", "E-AC3 / Dolby Digital+" to "eac3",
-                "AAC (toujours audible)" to "aac"),
-            hint = "Utilisé quand l'audio d'origine n'est pas géré par l'appareil.")
-        enumRow("Canaux audio", "audio", "target_channels", c.audio.targetChannels.toString(),
-            listOf("Stéréo (2.0)" to "2", "5.1 (6 canaux)" to "6", "7.1 (8 canaux)" to "8"))
-        enumRow("Débit audio", "audio", "bitrate_kbps", c.audio.bitrateKbps.toString(),
+            listOf(
+                "E-AC3 / Dolby Digital+ (recommandé)" to "eac3",
+                "AC3 / Dolby Digital 5.1" to "ac3",
+                "AAC (toujours audible)" to "aac",
+            ),
+            hint = "Utilisé uniquement si le passthrough est désactivé et que " +
+                   "le codec d'origine n'est pas géré par l'appareil.")
+        enumRow("Canaux audio de repli", "audio", "target_channels",
+            c.audio.targetChannels.toString(),
+            listOf("Stéréo (2.0)" to "2", "5.1 (6 canaux)" to "6", "7.1 (8 canaux)" to "8"),
+            hint = "Nombre de canaux lors du transcodage de repli.")
+        enumRow("Débit audio de repli", "audio", "bitrate_kbps", c.audio.bitrateKbps.toString(),
             listOf("384 kbps" to "384", "448 kbps" to "448", "640 kbps" to "640"))
 
         section("Réseau / lecture")

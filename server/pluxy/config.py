@@ -65,15 +65,18 @@ class TranscodingCfg(BaseModel):
 
 
 class AudioCfg(BaseModel):
-    # Downmix automatique des pistes lossless vers un codec compatible ARC.
-    downmix_lossless: bool = True
-    lossless_codecs: List[str] = Field(
-        default_factory=lambda: ["truehd", "dts", "dtshd", "flac",
-                                 "pcm_s24le", "pcm_s16le", "mlp"]
-    )
-    target_codec: str = "ac3"          # ac3 (universel ARC) | eac3
+    # Passthrough audio (pleine qualité) : copie le flux audio d'origine sans le
+    # réencoder — DTS-HD Master Audio, TrueHD, Atmos, FLAC… sont transmis tels
+    # quels. L'ampli HDMI/ARC/eARC les décode directement (aucune perte de qualité).
+    # Désactiver seulement si l'audio est silencieux (appareil sans ampli compatible).
+    force_audio_passthrough: bool = True
+    # Codec/canaux de REPLI : utilisés uniquement quand force_audio_passthrough=False
+    # ET que le client ne gère pas le codec source.
+    target_codec: str = "eac3"         # eac3 (Dolby D+) | ac3 | aac
     target_channels: int = 6
     bitrate_kbps: int = 640
+    # Champ hérité — conservé pour ne pas casser les configs existantes.
+    downmix_lossless: bool = False
 
 
 class NetworkCfg(BaseModel):
@@ -121,7 +124,7 @@ class DiscoveryCfg(BaseModel):
 
 
 # Version du schéma de config (incrémentée à chaque migration de réglages).
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 
 # --------------------------------------------------------------------------- #
@@ -196,12 +199,22 @@ class ConfigManager:
             return data, False
         ver = data.get("schema_version", 1)
         changed = False
-        # v1 -> v2 : l'ancien défaut hdr_tone_mapping="auto" convertissait le HDR en SDR
-        # quand un panneau HDR signalait à tort SDR. On force la préservation du HDR.
+        # v1 -> v2 : hdr_tone_mapping "auto" -> "never" (préserver le HDR).
         if ver < 2:
             tc = data.get("transcoding")
             if isinstance(tc, dict) and tc.get("hdr_tone_mapping") == "auto":
                 tc["hdr_tone_mapping"] = "never"
+            changed = True
+        # v2 -> v3 : activer force_audio_passthrough (pleine qualité audio).
+        # L'ancien champ downmix_lossless=True provoquait un downmix silencieux.
+        if ver < 3:
+            au = data.setdefault("audio", {})
+            if isinstance(au, dict):
+                au["force_audio_passthrough"] = True
+                au["downmix_lossless"] = False
+                # Codec de repli mis à jour (eac3 > ac3).
+                if au.get("target_codec") == "ac3":
+                    au["target_codec"] = "eac3"
             changed = True
         if changed:
             data["schema_version"] = SCHEMA_VERSION

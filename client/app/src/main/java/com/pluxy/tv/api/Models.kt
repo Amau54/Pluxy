@@ -157,10 +157,13 @@ data class TranscodingConfig(
 
 @JsonClass(generateAdapter = true)
 data class AudioConfig(
-    @Json(name = "target_codec") val targetCodec: String = "ac3",
+    /** Copie le flux audio d'origine sans le réencoder (DTS-HD, TrueHD, Atmos…).
+     *  L'ampli HDMI/ARC/eARC le décode directement. Actif par défaut. */
+    @Json(name = "force_audio_passthrough") val forceAudioPassthrough: Boolean = true,
+    @Json(name = "target_codec") val targetCodec: String = "eac3",
     @Json(name = "target_channels") val targetChannels: Int = 6,
     @Json(name = "bitrate_kbps") val bitrateKbps: Int = 640,
-    @Json(name = "downmix_lossless") val downmixLossless: Boolean = true,
+    @Json(name = "downmix_lossless") val downmixLossless: Boolean = false,
 )
 
 @JsonClass(generateAdapter = true)
