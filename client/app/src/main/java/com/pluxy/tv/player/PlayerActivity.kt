@@ -207,17 +207,24 @@ class PlayerActivity : AppCompatActivity() {
     private fun openMenu() {
         val ready = player?.playbackState == Player.STATE_READY
         val entries = listOf(
-            "🎚  Piste audio" to { pickTrack(C.TRACK_TYPE_AUDIO, "Piste audio") },
-            "💬  Sous-titres" to { pickSubtitles() },
-            "⏩  Vitesse de lecture" to { pickSpeed() },
-            "🖼  Format d'image" to { cycleAspect() },
+            "🎚  Piste audio"        to { pickTrack(C.TRACK_TYPE_AUDIO, "Piste audio") },
+            "💬  Sous-titres"        to { pickSubtitles() },
+            "⏩  Vitesse de lecture"  to { pickSpeed() },
+            "🖼  Format d'image"     to { cycleAspect() },
             "⏱  Aller à un instant…" to { seekToTime() },
+            "⚙  Réglages avancés"   to { openAdvancedSettings() },
             "ℹ  Infos & logs réseau" to { showDiagnostics() },
         )
         val labels = entries.map { it.first + if (!ready && it.first.contains("audio")) "  (analyse…)" else "" }
         AlertDialog.Builder(this).setTitle("Options de lecture")
             .setItems(labels.toTypedArray()) { _, w -> entries[w].second() }
             .show()
+    }
+
+    /** Ouvre l'écran de réglages avancés (serveur) sans quitter le lecteur.
+     *  La lecture continue en arrière-plan ; on reprend à la même position au retour. */
+    private fun openAdvancedSettings() {
+        startActivity(android.content.Intent(this, com.pluxy.tv.ui.SettingsActivity::class.java))
     }
 
     // Création/destruction du player calées sur onStart/onStop : pas d'écran noir
