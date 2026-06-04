@@ -40,4 +40,49 @@
         android:padding="8dp"
         android:textColor="#46c1ff"
         android:textSize="14sp" />
+
+    <!-- Overlay seek progressif : visible pendant le déplacement dans la timeline.
+         Centré sur l'écran, fond semi-transparent foncé, affiche :
+           ligne 1 → flèche directionnelle animée (⏪ / ⏩)
+           ligne 2 → delta accumulé en accent (+1m30s)
+           ligne 3 → position cible en gris (→ 01:23:45)                        -->
+    <LinearLayout
+        android:id="@+id/seekOverlay"
+        android:layout_width="220dp"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:background="#d01a2030"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:padding="24dp"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/seekArrow"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:textColor="#ffffff"
+            android:textSize="48sp" />
+
+        <TextView
+            android:id="@+id/seekDelta"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:gravity="center"
+            android:textColor="#e5a00d"
+            android:textSize="30sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/seekTarget"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:gravity="center"
+            android:textColor="#8a93a6"
+            android:textSize="17sp" />
+
+    </LinearLayout>
 </FrameLayout>

@@ -5,10 +5,13 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.view.KeyEvent
 import android.view.View
 import android.widget.Button
+import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import kotlin.math.abs
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
@@ -75,6 +78,99 @@ class PlayerActivity : AppCompatActivity() {
         override fun run() { saveProgress(); handler.postDelayed(this, 10_000) }
     }
 
+    // ---- Seek progressif ------------------------------------------------- //
+    // Accumule le décalage souhaité SANS toucher à ExoPlayer immédiatement.
+    // Un Runnable différé commit le seek réel après une courte inactivité.
+    // Pendant l'accumulation, un overlay centré affiche la direction, le delta
+    // et la position cible — le tout disparaît dès que le seek est appliqué.
+    private var isSeeking = false
+    private var seekBaseMs = 0L        // position au début de la séquence de touches
+    private var seekAccumMs = 0L       // delta accumulé (peut être négatif)
+
+    private lateinit var seekOverlay: LinearLayout
+    private lateinit var seekArrowView: TextView
+    private lateinit var seekDeltaView: TextView
+    private lateinit var seekTargetView: TextView
+
+    /** Délai avant de vraiment appliquer le seek.
+     *  Plus long en transcodage HLS pour éviter de redémarrer FFmpeg trop tôt. */
+    private val seekCommitDelayMs get() = if (isTranscode) 700L else 350L
+
+    /** Paliers de déplacement par événement D-pad selon le temps de maintien.
+     *  Android génère les répétitions à ~50 ms/unité après un délai initial de ~400 ms.
+     *  repeatCount 0 = premier appui (tap court) ; 20+ ≈ > 1,4 s maintenu. */
+    private fun holdIncrement(repeatCount: Int): Long = when {
+        repeatCount == 0  -> 10_000L   // tap : 10 s
+        repeatCount <= 3  -> 15_000L   // maintenu ~400-550 ms : 15 s / répét.
+        repeatCount <= 8  -> 30_000L   // maintenu ~600 ms-1 s : 30 s / répét.
+        repeatCount <= 20 -> 60_000L   // maintenu ~1-1,9 s : 1 min / répét.
+        else              -> 120_000L  // maintenu > 2 s : 2 min / répét.
+    }
+
+    /** Applique un pas de seek dans la direction indiquée et programme le commit. */
+    private fun seekStep(dir: Int, repeatCount: Int) {
+        val p = player ?: return
+        if (!isSeeking) {
+            // Première touche de cette séquence : mémoriser la position de départ.
+            seekBaseMs = p.currentPosition
+            seekAccumMs = 0L
+            isSeeking = true
+            playerView.hideController()   // pas de double-affichage contrôleur + overlay
+        }
+        seekAccumMs += holdIncrement(repeatCount) * dir
+        val dur = durationMs.takeIf { it > 0 } ?: (p.duration.takeIf { it > 0 } ?: Long.MAX_VALUE)
+        val target = (seekBaseMs + seekAccumMs).coerceIn(0L, dur)
+
+        showSeekOverlay(dir, seekAccumMs, target)
+
+        handler.removeCallbacks(seekCommitRunnable)
+        handler.postDelayed(seekCommitRunnable, seekCommitDelayMs)
+    }
+
+    private val seekCommitRunnable = Runnable {
+        val p = player ?: run { dismissSeekOverlay(); return@Runnable }
+        val dur = durationMs.takeIf { it > 0 } ?: (p.duration.takeIf { it > 0 } ?: Long.MAX_VALUE)
+        val target = (seekBaseMs + seekAccumMs).coerceIn(0L, dur)
+        p.seekTo(target)
+        isSeeking = false
+        seekAccumMs = 0L
+        dismissSeekOverlay()
+    }
+
+    private fun showSeekOverlay(dir: Int, accumMs: Long, targetMs: Long) {
+        seekOverlay.visibility = View.VISIBLE
+        seekArrowView.text = if (dir > 0) "⏩" else "⏪"
+        val sign  = if (accumMs >= 0) "+" else "−"
+        val secs  = abs(accumMs) / 1000
+        seekDeltaView.text = when {
+            secs < 60  -> "$sign${secs}s"
+            secs % 60 == 0L -> "$sign${secs / 60}min"
+            else -> "$sign${secs / 60}min ${secs % 60}s"
+        }
+        seekTargetView.text = "→ ${fmt(targetMs)}"
+    }
+
+    private fun dismissSeekOverlay() {
+        seekOverlay.visibility = View.GONE
+    }
+
+    /** Intercepte les flèches D-pad gauche/droite pour le seek progressif.
+     *  Consomme l'événement (return true) afin que PlayerView ne bouge pas le focus. */
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        val isLeft  = event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT
+        val isRight = event.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT
+        if ((isLeft || isRight) && player != null) {
+            // ACTION_DOWN (répété tant que la touche est maintenue) → accumule.
+            if (event.action == KeyEvent.ACTION_DOWN) {
+                seekStep(if (isRight) 1 else -1, event.repeatCount)
+                return true
+            }
+            // ACTION_UP → on consomme pour éviter que PlayerView repositionne le focus.
+            if (event.action == KeyEvent.ACTION_UP) return true
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_player)
@@ -89,6 +185,12 @@ class PlayerActivity : AppCompatActivity() {
         val json = intent.getStringExtra(EXTRA_ITEM) ?: run { finish(); return }
         item = Moshi.Builder().add(KotlinJsonAdapterFactory()).build()
             .adapter(PluxyItem::class.java).fromJson(json) ?: run { finish(); return }
+
+        // Overlay seek progressif.
+        seekOverlay   = findViewById(R.id.seekOverlay)
+        seekArrowView = findViewById(R.id.seekArrow)
+        seekDeltaView = findViewById(R.id.seekDelta)
+        seekTargetView= findViewById(R.id.seekTarget)
 
         // Roue crantée : visible UNIQUEMENT quand les contrôles du lecteur sont
         // affichés (au tap sur l'écran), comme un lecteur moderne.
@@ -129,6 +231,8 @@ class PlayerActivity : AppCompatActivity() {
         super.onStop()
         handler.removeCallbacksAndMessages(null)
         retryRunnable = null
+        isSeeking = false
+        dismissSeekOverlay()
         player?.let { savedPositionMs = it.currentPosition.coerceAtLeast(0) }
         saveProgress()
         // Nettoyages qui DOIVENT aboutir même si l'activité est détruite juste après.
