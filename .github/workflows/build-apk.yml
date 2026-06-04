@@ -1,11 +1,13 @@
 name: Build APK
 
-# Construit l'APK Pluxy (mobile + Android TV) :
-#  - à chaque push sur main touchant le client (ou le workflow) -> artifact ;
-#  - manuellement depuis l'onglet Actions (Run workflow) ;
-#       · « publish_release = true » -> crée en plus le tag v<version> ET la
-#         Release GitHub (notes = RELEASE_NOTES.md), APK attachée.
-#  - sur un tag v* déjà existant -> publie aussi la Release.
+# Construit l'APK Pluxy (mobile + Android TV) et publie les Releases :
+#  - à chaque push sur main touchant le client (ou le workflow) -> build + artifact ;
+#  - si la versionName ne correspond à AUCUNE Release existante, la Release
+#    v<version> est créée automatiquement (tag + APK + notes RELEASE_NOTES.md).
+#    -> il suffit donc de bumper la version et de pousser sur main pour publier
+#       « à la suite ». Les versions déjà publiées ne sont jamais re-créées.
+#  - déclenchement manuel (Run workflow) avec publish_release=true -> force la Release ;
+#  - push d'un tag v* -> publie aussi la Release.
 on:
   push:
     branches: [ main ]
@@ -78,14 +80,31 @@ jobs:
           path: dist/Pluxy-${{ steps.ver.outputs.version }}.apk
           if-no-files-found: error
 
-      # Publication d'une Release :
-      #   - sur un push de tag v*  (le tag existe déjà), OU
-      #   - sur déclenchement manuel avec publish_release = true
-      #     (le tag v<version> est alors créé par l'action au commit courant).
-      # Le corps de la Release vient de RELEASE_NOTES.md (notes rédigées,
-      # comme les versions précédentes).
+      # La Release v<version> existe-t-elle déjà ? (évite de re-publier.)
+      - name: Release déjà existante ?
+        id: relcheck
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          code=$(curl -s -o /dev/null -w '%{http_code}' \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/tags/v${{ steps.ver.outputs.version }}")
+          if [ "$code" = "200" ]; then exists=true; else exists=false; fi
+          echo "exists=$exists" >> "$GITHUB_OUTPUT"
+          echo "Release v${{ steps.ver.outputs.version }} -> HTTP $code (exists=$exists)"
+
+      # Publication :
+      #   - push d'un tag v* (le tag existe déjà), OU
+      #   - dispatch manuel publish_release=true, OU
+      #   - push sur main d'une version pas encore publiée.
+      # Le tag v<version> est créé par l'action au commit courant si besoin ;
+      # le corps vient de RELEASE_NOTES.md (notes rédigées).
       - name: Publier la Release
-        if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.publish_release == 'true'
+        if: >-
+          startsWith(github.ref, 'refs/tags/v') ||
+          github.event.inputs.publish_release == 'true' ||
+          (github.ref == 'refs/heads/main' && steps.relcheck.outputs.exists == 'false')
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.ver.outputs.version }}
