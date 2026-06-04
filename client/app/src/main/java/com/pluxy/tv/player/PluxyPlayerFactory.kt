@@ -115,7 +115,14 @@ object PluxyPlayerFactory {
             // Surdimensionne le back-buffer audio pour éviter les coupures son ARC.
             .setReleaseTimeoutMs(5000)
             .build()
-            .also { it.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT }
+            .also {
+                it.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT
+                // Maintient un wake lock CPU + Wi-Fi tant que la lecture est active :
+                // empêche l'endormissement réseau (et la veille système) qui coupait
+                // le flux après quelques minutes sans interaction. Complète le
+                // FLAG_KEEP_SCREEN_ON posé par l'activité.
+                it.setWakeMode(C.WAKE_MODE_NETWORK)
+            }
     }
 
     private fun isTelevision(ctx: Context): Boolean {
