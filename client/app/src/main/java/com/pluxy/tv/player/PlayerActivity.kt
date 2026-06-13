@@ -75,6 +75,17 @@ class PlayerActivity : AppCompatActivity() {
     private val rebufferTimes = ArrayDeque<Long>()
     private var wasReady = false
     private var lastSeekAtMs = 0L
+    // Horodatage du DERNIER (re)démarrage de lecture continue (entrée en READY).
+    // Un rebuffering ne compte comme « réseau » que si la lecture tournait depuis
+    // assez longtemps : une salve de buffering juste APRÈS un seek (tampon mince le
+    // temps que le transcodage reprenne son avance) n'est PAS un souci réseau.
+    private var playStartedAtMs = 0L
+    // Temps CUMULÉ passé en rebuffering réseau qualifié sur la fenêtre glissante.
+    // Capte la saturation SÉVÈRE : quand le débit s'effondre, les rebufferings sont
+    // rares mais LONGS -> le simple comptage d'événements ne les fait pas atteindre le
+    // seuil dans la fenêtre, alors que le cumul de durée, lui, le détecte.
+    private var networkStallStartMs = 0L
+    private val stallWindow = ArrayDeque<Pair<Long, Long>>()   // (instant de fin, durée ms)
     // La playlist VOD couvre tout le film : position et durée sont absolues.
     private fun absolutePositionMs(): Long = player?.currentPosition ?: 0L
     private val durationMs get() = (item.duration * 1000).toLong()
@@ -335,7 +346,10 @@ class PlayerActivity : AppCompatActivity() {
         exo.addListener(playerListener())
         retries = 0
         wasReady = false
+        playStartedAtMs = 0L
+        networkStallStartMs = 0L
         rebufferTimes.clear()
+        stallWindow.clear()
         loadAttempt(attemptIdx, restorePos = savedPositionMs)
         handler.removeCallbacks(saveTick)
         handler.postDelayed(saveTick, 10_000)
@@ -535,19 +549,36 @@ class PlayerActivity : AppCompatActivity() {
             when (state) {
                 Player.STATE_BUFFERING -> {
                     statusView.text = "Mise en mémoire tampon… ($modeLabel)"
-                    // Rebuffering RÉEL = on lisait (READY + playWhenReady) et le tampon
-                    // s'est vidé, hors fenêtre de seek. Le démarrage initial et les seeks
-                    // ne comptent pas.
+                    // Rebuffering RÉSEAU = on lisait (READY + playWhenReady), le tampon
+                    // s'est vidé, ET la lecture tournait de façon CONTINUE depuis assez
+                    // longtemps. Sont donc exclus :
+                    //   - le démarrage initial et chaque seek (grâce de seek) ;
+                    //   - les salves de buffering qui suivent un seek (tampon mince le
+                    //     temps que le transcodage reprenne de l'avance) : la lecture n'a
+                    //     alors duré que quelques secondes -> sous le seuil de stabilité.
+                    // C'est ce qui évitait de croire à tort « réseau saturé » quand on
+                    // recule plusieurs fois de -10 s.
                     val p = player
-                    if (wasReady && p?.playWhenReady == true &&
-                        SystemClock.elapsedRealtime() - lastSeekAtMs > SEEK_GRACE_MS) {
+                    val now = SystemClock.elapsedRealtime()
+                    val pastSeek = now - lastSeekAtMs > SEEK_GRACE_MS
+                    val playedLongEnough =
+                        playStartedAtMs > 0 && now - playStartedAtMs >= MIN_STABLE_PLAY_MS
+                    if (wasReady && p?.playWhenReady == true && pastSeek && playedLongEnough) {
+                        networkStallStartMs = now     // début d'un stall réseau qualifié
                         onRebuffer()
                     }
                     wasReady = false
+                    playStartedAtMs = 0L          // la lecture continue s'interrompt ici
                 }
                 Player.STATE_READY -> {
                     retries = 0; statusView.text = ""
                     wasReady = true
+                    // Fin d'un rebuffering réseau qualifié -> on cumule sa durée (détection
+                    // de la saturation sévère, rebufferings rares mais longs).
+                    if (networkStallStartMs > 0L) onNetworkStallEnd()
+                    // (Re)départ d'une plage de lecture continue : on mesure sa durée
+                    // pour distinguer un vrai rebuffering réseau d'une reprise post-seek.
+                    if (playStartedAtMs == 0L) playStartedAtMs = SystemClock.elapsedRealtime()
                     // Préférence « sous-titres désactivés » appliquée une fois.
                     if (!subsApplied) {
                         subsApplied = true
@@ -560,6 +591,36 @@ class PlayerActivity : AppCompatActivity() {
                 }
                 Player.STATE_ENDED -> statusView.text = "Lecture terminée"
             }
+        }
+
+        /** Source de vérité UNIQUE des seeks : couvre le seek progressif, les boutons
+         *  natifs (recul/avance), « aller à un instant » et toute reprise interne.
+         *  On marque l'instant du seek et on remet à zéro la plage de lecture continue,
+         *  pour que la salve de buffering qui suit ne soit pas comptée comme un
+         *  rebuffering réseau (cause de la rétrogradation intempestive quand on recule
+         *  plusieurs fois). */
+        override fun onPositionDiscontinuity(
+            oldPosition: Player.PositionInfo,
+            newPosition: Player.PositionInfo,
+            reason: Int,
+        ) {
+            if (reason == Player.DISCONTINUITY_REASON_SEEK) {
+                lastSeekAtMs = SystemClock.elapsedRealtime()
+                playStartedAtMs = 0L
+                networkStallStartMs = 0L          // le buffering qui suit est lié au seek
+            }
+        }
+
+        /** Pause / reprise utilisateur. À la PAUSE, la lecture continue s'arrête : on
+         *  remet à zéro l'horloge de stabilité pour qu'un buffering au moment de la
+         *  REPRISE (tampon dilué pendant une longue pause, session de transcodage en
+         *  veille) ne soit pas pris pour un rebuffering réseau. Ne se déclenche PAS sur
+         *  un simple buffering (playWhenReady reste vrai) -> n'interfère pas avec la
+         *  détection réseau. */
+        override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+            playStartedAtMs =
+                if (playWhenReady && player?.playbackState == Player.STATE_READY)
+                    SystemClock.elapsedRealtime() else 0L
         }
 
         override fun onPlayerError(error: PlaybackException) {
@@ -597,7 +658,10 @@ class PlayerActivity : AppCompatActivity() {
         // Nouveau flux : on repart d'un compteur de rebuffering vierge, et la salve de
         // BUFFERING qui suit prepare()/seek ne doit pas être comptée comme un rebuffer.
         rebufferTimes.clear()
+        stallWindow.clear()
+        networkStallStartMs = 0L
         wasReady = false
+        playStartedAtMs = 0L
         lastSeekAtMs = SystemClock.elapsedRealtime()
         val (url, delivery) = attempts[idx]
         p.setMediaItem(buildMediaItem(url, delivery))
@@ -606,7 +670,8 @@ class PlayerActivity : AppCompatActivity() {
         p.playWhenReady = true
     }
 
-    /** Comptabilise un rebuffering et déclenche une bascule si le réseau ne suit plus. */
+    /** Comptabilise un rebuffering (au DÉBUT du buffering) et déclenche une bascule si
+     *  les rebufferings sont trop FRÉQUENTS sur la fenêtre. */
     private fun onRebuffer() {
         val now = SystemClock.elapsedRealtime()
         rebufferTimes.addLast(now)
@@ -614,6 +679,22 @@ class PlayerActivity : AppCompatActivity() {
             rebufferTimes.removeFirst()
         Logger.log("rebuffer", "count=${rebufferTimes.size}/$REBUFFER_THRESHOLD attempt=$attemptIdx")
         if (rebufferTimes.size >= REBUFFER_THRESHOLD) maybeDownshift()
+    }
+
+    /** À la FIN d'un rebuffering réseau qualifié : cumule sa durée sur la fenêtre et
+     *  bascule si le temps total passé à attendre dépasse le budget. Capte la saturation
+     *  sévère (rebufferings rares mais longs) que le simple comptage d'événements rate :
+     *  plus le débit s'effondre, plus chaque attente s'allonge, donc MOINS d'événements
+     *  tiennent dans la fenêtre — le cumul de durée, lui, ne souffre pas de ce biais. */
+    private fun onNetworkStallEnd() {
+        val now = SystemClock.elapsedRealtime()
+        stallWindow.addLast(now to (now - networkStallStartMs))
+        networkStallStartMs = 0L
+        while (stallWindow.isNotEmpty() && now - stallWindow.first().first > REBUFFER_WINDOW_MS)
+            stallWindow.removeFirst()
+        val totalStall = stallWindow.sumOf { it.second }
+        Logger.log("stall", "cumul=${totalStall / 1000}s/${STALL_BUDGET_MS / 1000}s attempt=$attemptIdx")
+        if (totalStall >= STALL_BUDGET_MS) maybeDownshift()
     }
 
     /** Descend d'un palier de qualité pour tenir le débit réseau (sans perdre la position).
@@ -628,6 +709,8 @@ class PlayerActivity : AppCompatActivity() {
         }
         if (target <= attemptIdx) return            // déjà au palier le plus bas adapté
         rebufferTimes.clear()
+        stallWindow.clear()
+        networkStallStartMs = 0L
         val toCompat = attempts[target].first.contains("/compat/")
         val msg = if (toCompat) "Réseau limité : passage en 1080p compatible…"
                   else "Réseau instable : qualité adaptée au débit…"
@@ -653,8 +736,17 @@ class PlayerActivity : AppCompatActivity() {
         // ponctuel d'un gros fichier 4K — que le tampon costaud absorbe désormais.
         private const val REBUFFER_WINDOW_MS = 120_000L
         private const val REBUFFER_THRESHOLD = 5
+        // Budget de temps cumulé en rebuffering réseau sur la fenêtre : au-delà, on
+        // bascule même si le nombre d'événements n'a pas atteint le seuil (saturation
+        // sévère = peu de rebufferings mais très longs). 30 s d'attente sur 120 s = ko.
+        private const val STALL_BUDGET_MS = 30_000L
         // Un BUFFERING survenant juste après un seek n'est pas un rebuffer réseau.
         private const val SEEK_GRACE_MS = 2_500L
+        // Durée de lecture CONTINUE minimale avant qu'un buffering puisse compter comme
+        // un rebuffer réseau. Les reprises post-seek (tampon mince, transcodage qui
+        // rattrape) ne durent que quelques secondes -> exclues. Un vrai rebuffer réseau
+        // survient après ≥15 s de lecture (seuil ExoPlayer de reprise) -> bien au-dessus.
+        private const val MIN_STABLE_PLAY_MS = 10_000L
         // Scope process-wide pour les nettoyages réseau qui doivent aboutir
         // même après destruction de l'activité (libération NVENC, dernière position).
         private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
