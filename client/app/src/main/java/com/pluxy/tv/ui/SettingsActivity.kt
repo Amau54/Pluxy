@@ -12,6 +12,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.pluxy.tv.PluxyApplication
+import com.pluxy.tv.R
 import com.pluxy.tv.api.PluxyApi
 import com.pluxy.tv.api.ServerConfig
 import kotlinx.coroutines.launch
@@ -31,9 +32,9 @@ class SettingsActivity : AppCompatActivity() {
     private var busy = false
 
     private val accent = 0xFFE5A00D.toInt()
-    private val bg = 0xFF0D0F14.toInt()
-    private val card = 0xFF1A2030.toInt()
-    private val sub = 0xFF8A93A6.toInt()
+    private val bg = 0xFF0B0E14.toInt()
+    private val card = 0xFF161B26.toInt()
+    private val sub = 0xFFB4BCCC.toInt()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -43,7 +44,12 @@ class SettingsActivity : AppCompatActivity() {
             isFillViewport = true
             setPadding(dp(28), dp(24), dp(28), dp(28))
         }
-        rows = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        rows = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            clipChildren = false
+            clipToPadding = false
+        }
+        scroll.clipChildren = false
         scroll.addView(rows)
         setContentView(scroll)
 
@@ -149,8 +155,12 @@ class SettingsActivity : AppCompatActivity() {
         // Bouton de fermeture en bas.
         val close = Button(this).apply {
             text = "Fermer"
+            isAllCaps = false
             setTextColor(Color.WHITE)
-            setBackgroundColor(card)
+            setBackgroundResource(R.drawable.bg_btn_secondary)
+            stateListAnimator = android.animation.AnimatorInflater
+                .loadStateListAnimator(this@SettingsActivity, R.animator.focus_lift_btn)
+            setPadding(dp(24), dp(12), dp(24), dp(12))
             setOnClickListener { finish() }
         }
         rows.addView(close, lp().also { it.topMargin = dp(20) })
@@ -185,7 +195,10 @@ class SettingsActivity : AppCompatActivity() {
         b.isAllCaps = false
         b.gravity = Gravity.START or Gravity.CENTER_VERTICAL
         b.setTextColor(Color.WHITE)
-        b.setBackgroundColor(card)
+        b.background = null
+        b.setBackgroundResource(R.drawable.focus_card)
+        b.stateListAnimator = android.animation.AnimatorInflater
+            .loadStateListAnimator(this, R.animator.focus_lift_btn)
         b.setPadding(dp(18), dp(14), dp(18), dp(14))
         rows.addView(b, lp().also { it.topMargin = dp(8) })
         return b

@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Animation de focus pour les VIGNETTES (affiches, casting). Au focus télécommande :
+  la carte grossit (1.06) et se SOULÈVE (ombre portée via elevation) -> l'élément
+  sélectionné « saute » clairement à l'écran. C'est l'ergonomie clé d'une UI 10 pieds :
+  on ne perd jamais le focus des yeux. Retour fluide à l'état normal en sortie de focus.
+-->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true">
+        <set>
+            <objectAnimator
+                android:propertyName="scaleX"
+                android:valueTo="1.06"
+                android:valueType="floatType"
+                android:duration="160"
+                android:interpolator="@android:interpolator/decelerate_cubic" />
+            <objectAnimator
+                android:propertyName="scaleY"
+                android:valueTo="1.06"
+                android:valueType="floatType"
+                android:duration="160"
+                android:interpolator="@android:interpolator/decelerate_cubic" />
+            <objectAnimator
+                android:propertyName="translationZ"
+                android:valueTo="14dp"
+                android:valueType="floatType"
+                android:duration="160"
+                android:interpolator="@android:interpolator/decelerate_cubic" />
+        </set>
+    </item>
+    <item>
+        <set>
+            <objectAnimator
+                android:propertyName="scaleX"
+                android:valueTo="1.0"
+                android:valueType="floatType"
+                android:duration="160"
+                android:interpolator="@android:interpolator/accelerate_cubic" />
+            <objectAnimator
+                android:propertyName="scaleY"
+                android:valueTo="1.0"
+                android:valueType="floatType"
+                android:duration="160"
+                android:interpolator="@android:interpolator/accelerate_cubic" />
+            <objectAnimator
+                android:propertyName="translationZ"
+                android:valueTo="0dp"
+                android:valueType="floatType"
+                android:duration="160"
+                android:interpolator="@android:interpolator/accelerate_cubic" />
+        </set>
+    </item>
+</selector>

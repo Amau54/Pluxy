@@ -2,19 +2,20 @@
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#0d0f14"
-    android:padding="32dp">
+    android:background="@color/bg"
+    android:paddingHorizontal="@dimen/screen_pad"
+    android:paddingTop="28dp"
+    android:paddingBottom="20dp">
 
-    <!-- Barre de titre : logo + "Pluxy" à gauche (taille fixe), serveur au centre
-         (prend le reste), 3 boutons compacts icône-seule à droite.
-         Le texte minimal des boutons évite le débordement sur TV (overscan + grande police). -->
+    <!-- Barre de titre : logo + « Pluxy » (gauche, fixe) · serveur (centre, extensible)
+         · boutons icône (droite, largeur constante). -->
     <LinearLayout
+        android:id="@+id/topBar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:gravity="center_vertical"
         android:orientation="horizontal">
 
-        <!-- Bloc gauche : logo + titre (taille fixe, ne réduit JAMAIS) -->
         <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -22,9 +23,9 @@
             android:orientation="horizontal">
 
             <ImageView
-                android:layout_width="36dp"
-                android:layout_height="36dp"
-                android:layout_marginEnd="8dp"
+                android:layout_width="38dp"
+                android:layout_height="38dp"
+                android:layout_marginEnd="10dp"
                 android:src="@drawable/pluxy_logo"
                 android:contentDescription="Pluxy" />
 
@@ -32,64 +33,43 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="Pluxy"
-                android:textColor="#e5a00d"
+                android:textColor="@color/accent"
                 android:textSize="26sp"
-                android:textStyle="bold" />
+                android:textStyle="bold"
+                android:letterSpacing="0.01" />
         </LinearLayout>
 
-        <!-- Serveur : remplit l'espace restant, tronque si besoin -->
         <TextView
             android:id="@+id/serverLabel"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:layout_marginStart="14dp"
-            android:layout_marginEnd="8dp"
-            android:textColor="#8a93a6"
+            android:layout_marginStart="16dp"
+            android:layout_marginEnd="12dp"
+            android:drawablePadding="6dp"
+            android:textColor="@color/text_tertiary"
             android:textSize="12sp"
             android:maxLines="1"
             android:ellipsize="end" />
 
-        <!-- Boutons compacts (icône uniquement ou 1 mot) -->
         <Button
             android:id="@+id/reload"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
-            android:layout_marginEnd="6dp"
+            style="@style/Btn.Icon"
+            android:layout_marginEnd="10dp"
             android:text="↻"
-            android:textColor="#1a1205"
-            android:textSize="18sp"
-            android:padding="0dp"
-            android:minWidth="0dp"
-            android:minHeight="0dp"
-            android:backgroundTint="#e5a00d"
             android:contentDescription="Actualiser" />
 
         <Button
             android:id="@+id/settings"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
-            android:layout_marginEnd="6dp"
+            style="@style/Btn.Icon"
+            android:layout_marginEnd="10dp"
             android:text="⚙"
-            android:textColor="#e7eaf0"
-            android:textSize="18sp"
-            android:padding="0dp"
-            android:minWidth="0dp"
-            android:minHeight="0dp"
-            android:backgroundTint="#2a3142"
             android:contentDescription="Réglages" />
 
         <Button
             android:id="@+id/changeServer"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
-            android:text="☁"
-            android:textColor="#e7eaf0"
-            android:textSize="18sp"
-            android:padding="0dp"
-            android:minWidth="0dp"
-            android:minHeight="0dp"
-            android:backgroundTint="#2a3142"
+            style="@style/Btn.Icon"
+            android:text="⇄"
             android:contentDescription="Changer de serveur" />
     </LinearLayout>
 
@@ -97,13 +77,18 @@
         android:id="@+id/swipe"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:layout_marginTop="56dp">
+        android:layout_marginTop="60dp"
+        android:clipChildren="false"
+        android:clipToPadding="false">
 
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/grid"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:clipToPadding="false" />
+            android:clipChildren="false"
+            android:clipToPadding="false"
+            android:paddingTop="6dp"
+            android:paddingBottom="24dp" />
     </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
 
     <LinearLayout
@@ -118,18 +103,16 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:gravity="center"
-            android:textColor="#8a93a6"
+            android:lineSpacingMultiplier="1.3"
+            android:textColor="@color/text_secondary"
             android:textSize="16sp"
             android:visibility="gone" />
 
         <Button
             android:id="@+id/emptyAction"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
+            style="@style/Btn.Primary"
+            android:layout_marginTop="20dp"
             android:text="🔎  Rechercher un serveur"
-            android:textColor="#1a1205"
-            android:backgroundTint="#e5a00d"
             android:visibility="gone" />
     </LinearLayout>
 </FrameLayout>

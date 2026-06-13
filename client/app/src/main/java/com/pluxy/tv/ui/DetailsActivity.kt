@@ -8,6 +8,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
@@ -48,6 +49,9 @@ class DetailsActivity : AppCompatActivity() {
         findViewById<RecyclerView>(R.id.cast).layoutManager =
             LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
 
+        // Pastilles techniques disponibles d'emblée (sans réseau) : résolution, codec, HDR.
+        buildTechChips()
+
         val playBtn = findViewById<Button>(R.id.play)
         playBtn.setOnClickListener { play() }
         playBtn.requestFocus()
@@ -55,6 +59,41 @@ class DetailsActivity : AppCompatActivity() {
         findViewById<Button>(R.id.playSettings).setOnClickListener { showPlaybackSettings() }
 
         loadMetadata()
+    }
+
+    /** Pastilles techniques (résolution / codec / HDR / durée) issues du fichier. */
+    private fun buildTechChips() {
+        val chips = findViewById<LinearLayout>(R.id.chips)
+        chips.removeAllViews()
+        item.height?.let { h ->
+            val label = when {
+                h >= 2000 -> "4K"
+                h >= 1060 -> "1080p"
+                h >= 700 -> "720p"
+                else -> "${h}p"
+            }
+            chips.addView(chip(label, accent = h >= 2000))
+        }
+        item.videoCodec?.let { chips.addView(chip(it.uppercase(), accent = false)) }
+        if (item.isHdr) chips.addView(chip("HDR", accent = true))
+        val mins = (item.duration / 60).toInt()
+        if (mins > 0) chips.addView(chip("${mins} min", accent = false))
+    }
+
+    private fun chip(text: String, accent: Boolean): TextView {
+        val d = resources.displayMetrics.density
+        return TextView(this).apply {
+            this.text = text
+            setBackgroundResource(if (accent) R.drawable.bg_chip_accent else R.drawable.bg_chip)
+            setTextColor(if (accent) 0xFFE5A00D.toInt() else 0xFFB4BCCC.toInt())
+            textSize = 12f
+            letterSpacing = 0.03f
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            setPadding((12 * d).toInt(), (5 * d).toInt(), (12 * d).toInt(), (5 * d).toInt())
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { marginEnd = (8 * d).toInt() }
+        }
     }
 
     /** Réglages de lecture EN AMONT : langue audio préférée + sous-titres. */

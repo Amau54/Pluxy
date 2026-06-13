@@ -67,13 +67,23 @@ class ServerSetupActivity : AppCompatActivity() {
     }
 
     private fun addServerButton(info: ServerInfo) {
+        val d = resources.displayMetrics.density
         val b = Button(this).apply {
             text = "${info.name}  —  ${info.ip}:${info.port}"
-            setTextColor(0xFFE7EAF0.toInt())
-            setBackgroundColor(0xFF1B2740.toInt())
+            setTextColor(0xFFF5F7FB.toInt())
+            textSize = 16f
+            isAllCaps = false
+            setBackgroundResource(R.drawable.bg_btn_secondary)
+            stateListAnimator = android.animation.AnimatorInflater
+                .loadStateListAnimator(this@ServerSetupActivity, R.animator.focus_lift_btn)
             isFocusable = true
+            minHeight = (52 * d).toInt()
+            setPadding((24 * d).toInt(), (12 * d).toInt(), (24 * d).toInt(), (12 * d).toInt())
             setOnClickListener { select(info) }
         }
+        b.layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply { topMargin = (10 * d).toInt() }
         list.addView(b)
     }
 

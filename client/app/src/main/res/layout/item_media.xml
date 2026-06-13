@@ -1,22 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Vignette film de la grille d'accueil. Carte focalisable qui GROSSIT et se soulève
+     au focus télécommande (focus_lift) : repère visuel net en navigation 10 pieds. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_margin="8dp"
-    android:background="@drawable/item_bg"
+    android:layout_margin="10dp"
+    android:background="@drawable/focus_card"
+    android:clipChildren="false"
+    android:clipToPadding="false"
     android:focusable="true"
     android:orientation="vertical"
-    android:padding="8dp">
+    android:padding="8dp"
+    android:stateListAnimator="@animator/focus_lift">
 
     <FrameLayout
         android:layout_width="match_parent"
-        android:layout_height="240dp">
+        android:layout_height="225dp">
 
         <ImageView
             android:id="@+id/poster"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:background="#0f1219"
+            android:background="@drawable/poster_rounded"
+            android:clipToOutline="true"
             android:contentDescription="Affiche"
             android:scaleType="centerCrop" />
 
@@ -25,14 +31,15 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="top|end"
-            android:layout_margin="6dp"
-            android:background="#cc1a1205"
-            android:paddingHorizontal="6dp"
-            android:paddingVertical="2dp"
+            android:layout_margin="8dp"
+            android:background="@drawable/bg_chip_accent"
+            android:paddingHorizontal="8dp"
+            android:paddingVertical="3dp"
             android:text="HDR"
-            android:textColor="#e5a00d"
+            android:textColor="@color/accent"
             android:textSize="10sp"
             android:textStyle="bold"
+            android:letterSpacing="0.06"
             android:visibility="gone" />
     </FrameLayout>
 
@@ -40,10 +47,10 @@
         android:id="@+id/title"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
+        android:layout_marginTop="10dp"
         android:ellipsize="end"
         android:maxLines="1"
-        android:textColor="#e7eaf0"
+        android:textColor="@color/text_primary"
         android:textSize="14sp"
         android:textStyle="bold" />
 
@@ -51,9 +58,10 @@
         android:id="@+id/meta"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="2dp"
+        android:layout_marginTop="3dp"
         android:ellipsize="end"
         android:maxLines="1"
-        android:textColor="#8a93a6"
-        android:textSize="11sp" />
+        android:textColor="@color/text_tertiary"
+        android:textSize="11sp"
+        android:letterSpacing="0.02" />
 </LinearLayout>

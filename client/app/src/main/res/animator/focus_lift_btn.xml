@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Variante plus discrète pour les BOUTONS (grossissement léger + relief). -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true">
+        <set>
+            <objectAnimator android:propertyName="scaleX" android:valueTo="1.04"
+                android:valueType="floatType" android:duration="140"
+                android:interpolator="@android:interpolator/decelerate_cubic" />
+            <objectAnimator android:propertyName="scaleY" android:valueTo="1.04"
+                android:valueType="floatType" android:duration="140"
+                android:interpolator="@android:interpolator/decelerate_cubic" />
+            <objectAnimator android:propertyName="translationZ" android:valueTo="10dp"
+                android:valueType="floatType" android:duration="140"
+                android:interpolator="@android:interpolator/decelerate_cubic" />
+        </set>
+    </item>
+    <item>
+        <set>
+            <objectAnimator android:propertyName="scaleX" android:valueTo="1.0"
+                android:valueType="floatType" android:duration="140" />
+            <objectAnimator android:propertyName="scaleY" android:valueTo="1.0"
+                android:valueType="floatType" android:duration="140" />
+            <objectAnimator android:propertyName="translationZ" android:valueTo="0dp"
+                android:valueType="floatType" android:duration="140" />
+        </set>
+    </item>
+</selector>

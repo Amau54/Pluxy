@@ -2,32 +2,34 @@
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#0d0f14">
+    android:background="@color/bg">
 
     <ImageView
         android:id="@+id/backdrop"
         android:layout_width="match_parent"
-        android:layout_height="460dp"
+        android:layout_height="540dp"
         android:scaleType="centerCrop"
-        android:alpha="0.30"
+        android:alpha="0.45"
         android:contentDescription="Backdrop" />
 
     <View
         android:layout_width="match_parent"
-        android:layout_height="460dp"
-        android:background="@drawable/scrim" />
+        android:layout_height="540dp"
+        android:background="@drawable/scrim_backdrop" />
 
     <ScrollView
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:clipToPadding="false">
+        android:clipToPadding="false"
+        android:scrollbars="none">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:paddingHorizontal="48dp"
-            android:paddingVertical="40dp">
+            android:paddingHorizontal="@dimen/screen_pad"
+            android:paddingTop="56dp"
+            android:paddingBottom="44dp">
 
             <!-- En-tête : affiche + infos + actions -->
             <LinearLayout
@@ -37,131 +39,125 @@
 
                 <ImageView
                     android:id="@+id/poster"
-                    android:layout_width="200dp"
-                    android:layout_height="300dp"
-                    android:background="#0f1219"
+                    android:layout_width="196dp"
+                    android:layout_height="294dp"
+                    android:background="@drawable/poster_rounded"
+                    android:clipToOutline="true"
+                    android:elevation="12dp"
                     android:scaleType="centerCrop"
                     android:contentDescription="Affiche" />
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="28dp"
+                    android:layout_marginStart="32dp"
                     android:orientation="vertical">
 
                     <TextView
                         android:id="@+id/title"
+                        style="@style/Text.Display"
                         android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:textColor="#ffffff"
-                        android:textSize="32sp"
-                        android:textStyle="bold" />
+                        android:layout_height="wrap_content" />
 
                     <TextView
                         android:id="@+id/sub"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="6dp"
-                        android:textColor="#46c1ff"
-                        android:textSize="15sp" />
+                        android:layout_marginTop="10dp"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="15sp"
+                        android:letterSpacing="0.01" />
+
+                    <!-- Pastilles techniques (résolution, codec, HDR) renseignées en code -->
+                    <LinearLayout
+                        android:id="@+id/chips"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="14dp"
+                        android:orientation="horizontal" />
 
                     <TextView
                         android:id="@+id/tagline"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="6dp"
-                        android:textColor="#8a93a6"
+                        android:layout_marginTop="14dp"
+                        android:textColor="@color/text_secondary"
                         android:textStyle="italic"
-                        android:textSize="14sp" />
+                        android:textSize="15sp" />
 
                     <TextView
                         android:id="@+id/director"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="12dp"
-                        android:textColor="#8a93a6"
+                        android:layout_marginTop="10dp"
+                        android:textColor="@color/text_tertiary"
                         android:textSize="13sp" />
 
                     <LinearLayout
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="20dp"
+                        android:layout_marginTop="22dp"
                         android:orientation="horizontal">
 
                         <Button
                             android:id="@+id/play"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="▶  Lire"
-                            android:textColor="#1a1205"
-                            android:textStyle="bold"
-                            android:backgroundTint="#e5a00d" />
+                            style="@style/Btn.Primary"
+                            android:text="▶  Lire" />
 
                         <Button
                             android:id="@+id/trailer"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginStart="12dp"
-                            android:text="🎬  Bande-annonce"
-                            android:textColor="#e7eaf0"
-                            android:backgroundTint="#2a3142" />
+                            style="@style/Btn.Secondary"
+                            android:layout_marginStart="14dp"
+                            android:text="🎬  Bande-annonce" />
 
                         <Button
                             android:id="@+id/playSettings"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginStart="12dp"
-                            android:text="⚙  Réglages"
-                            android:textColor="#e7eaf0"
-                            android:backgroundTint="#2a3142" />
+                            style="@style/Btn.Secondary"
+                            android:layout_marginStart="14dp"
+                            android:text="⚙  Réglages" />
                     </LinearLayout>
                 </LinearLayout>
             </LinearLayout>
 
-            <!-- Synopsis EN PLEINE LARGEUR sous l'en-tête -->
             <TextView
                 android:id="@+id/overviewLabel"
+                style="@style/Text.Heading"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="28dp"
-                android:text="Synopsis"
-                android:textColor="#e7eaf0"
-                android:textSize="18sp"
-                android:textStyle="bold" />
+                android:layout_marginTop="34dp"
+                android:text="SYNOPSIS" />
 
             <TextView
                 android:id="@+id/overview"
+                style="@style/Text.Body"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="10dp"
-                android:lineSpacingMultiplier="1.25"
-                android:textColor="#d7dbe4"
-                android:textSize="15sp" />
+                android:textColor="#E1E6EF" />
 
             <TextView
+                style="@style/Text.Heading"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="28dp"
-                android:text="Distribution"
-                android:textColor="#e7eaf0"
-                android:textSize="18sp"
-                android:textStyle="bold" />
+                android:layout_marginTop="32dp"
+                android:text="DISTRIBUTION" />
 
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/cast"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
+                android:layout_marginTop="14dp"
+                android:clipChildren="false"
                 android:clipToPadding="false"
+                android:paddingBottom="12dp"
                 android:orientation="horizontal" />
 
             <TextView
                 android:id="@+id/status"
+                style="@style/Text.Caption"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:textColor="#8a93a6"
-                android:textSize="13sp" />
+                android:layout_marginTop="6dp" />
         </LinearLayout>
     </ScrollView>
 </FrameLayout>

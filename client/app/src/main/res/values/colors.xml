@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Jetons de couleur Pluxy (design system). Un thème sombre « cinéma » :
+  surfaces profondes à sous-ton bleu, accent or (façon Plex) pour l'action et le focus.
+  Centraliser ici garantit la cohérence visuelle sur tous les écrans.
+-->
+<resources>
+    <!-- Fonds / surfaces (du plus profond au plus clair) -->
+    <color name="bg">#0B0E14</color>
+    <color name="bg_elev">#10141D</color>
+    <color name="surface">#161B26</color>
+    <color name="surface_variant">#1C2331</color>
+    <color name="surface_focus">#26324A</color>
+
+    <!-- Accent (or) : action principale + état de focus -->
+    <color name="accent">#E5A00D</color>
+    <color name="accent_bright">#FFB323</color>
+    <color name="accent_dim">#B9820B</color>
+    <color name="accent_ink">#1A1205</color>
+
+    <!-- Accent secondaire (info / liens) -->
+    <color name="info">#5BC8FF</color>
+    <color name="success">#54D38B</color>
+
+    <!-- Texte -->
+    <color name="text_primary">#F5F7FB</color>
+    <color name="text_secondary">#B4BCCC</color>
+    <color name="text_tertiary">#7B859A</color>
+    <color name="text_on_accent">#1A1205</color>
+
+    <!-- Bordures / séparateurs -->
+    <color name="border">#2A3346</color>
+    <color name="border_subtle">#1F2736</color>
+    <color name="border_focus">#FFB323</color>
+
+    <!-- Voiles -->
+    <color name="scrim_strong">#CC0B0E14</color>
+    <color name="scrim_chip">#B3000000</color>
+
+    <!-- Tons transparents pour les dégradés (mêmes RVB que bg) -->
+    <color name="bg_trans">#000B0E14</color>
+    <color name="bg_full">#FF0B0E14</color>
+</resources>

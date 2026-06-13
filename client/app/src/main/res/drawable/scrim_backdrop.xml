@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Voile cinéma du backdrop : fondu vers le fond en bas ET à gauche, pour que le
+     texte de l'en-tête reste lisible par-dessus l'image. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:angle="90"
+                android:startColor="@color/bg_full"
+                android:centerColor="#990B0E14"
+                android:endColor="@color/bg_trans" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:angle="0"
+                android:startColor="@color/bg_full"
+                android:centerColor="#660B0E14"
+                android:endColor="@color/bg_trans" />
+        </shape>
+    </item>
+</layer-list>

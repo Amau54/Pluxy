@@ -1,26 +1,39 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Membre du casting : avatar arrondi qui se soulève au focus, nom + rôle dessous. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="120dp"
+    android:layout_width="124dp"
     android:layout_height="wrap_content"
-    android:layout_marginEnd="12dp"
-    android:orientation="vertical">
+    android:layout_marginEnd="14dp"
+    android:clipChildren="false"
+    android:clipToPadding="false"
+    android:focusable="true"
+    android:orientation="vertical"
+    android:stateListAnimator="@animator/focus_lift">
 
-    <ImageView
-        android:id="@+id/profile"
-        android:layout_width="120dp"
-        android:layout_height="150dp"
-        android:background="#161a23"
-        android:scaleType="centerCrop"
-        android:contentDescription="Acteur" />
+    <FrameLayout
+        android:layout_width="124dp"
+        android:layout_height="158dp"
+        android:duplicateParentState="true"
+        android:foreground="@drawable/focus_ring">
+
+        <ImageView
+            android:id="@+id/profile"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/poster_rounded"
+            android:clipToOutline="true"
+            android:contentDescription="Acteur"
+            android:scaleType="centerCrop" />
+    </FrameLayout>
 
     <TextView
         android:id="@+id/actor"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="6dp"
+        android:layout_marginTop="8dp"
         android:ellipsize="end"
         android:maxLines="1"
-        android:textColor="#e7eaf0"
+        android:textColor="@color/text_primary"
         android:textSize="12sp"
         android:textStyle="bold" />
 
@@ -28,8 +41,9 @@
         android:id="@+id/character"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_marginTop="1dp"
         android:ellipsize="end"
         android:maxLines="1"
-        android:textColor="#8a93a6"
+        android:textColor="@color/text_tertiary"
         android:textSize="11sp" />
 </LinearLayout>

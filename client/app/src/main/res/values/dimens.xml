@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Jetons d'espacement / rayons / tailles. Échelle 4 dp cohérente. -->
+<resources>
+    <!-- Espacement -->
+    <dimen name="space_xs">4dp</dimen>
+    <dimen name="space_sm">8dp</dimen>
+    <dimen name="space_md">16dp</dimen>
+    <dimen name="space_lg">24dp</dimen>
+    <dimen name="space_xl">40dp</dimen>
+    <!-- Marge sûre TV (overscan ~5 %) pour les bords d'écran -->
+    <dimen name="screen_pad">48dp</dimen>
+
+    <!-- Rayons -->
+    <dimen name="radius_sm">8dp</dimen>
+    <dimen name="radius_md">14dp</dimen>
+    <dimen name="radius_lg">20dp</dimen>
+    <dimen name="radius_pill">100dp</dimen>
+
+    <!-- Bordures de focus -->
+    <dimen name="focus_stroke">3dp</dimen>
+
+    <!-- Composants -->
+    <dimen name="poster_w">150dp</dimen>
+    <dimen name="poster_h">225dp</dimen>
+    <dimen name="btn_min_h">52dp</dimen>
+    <dimen name="icon_btn">48dp</dimen>
+</resources>
