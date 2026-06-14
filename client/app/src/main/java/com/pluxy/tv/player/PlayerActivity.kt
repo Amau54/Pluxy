@@ -86,6 +86,17 @@ class PlayerActivity : AppCompatActivity() {
     // seuil dans la fenêtre, alors que le cumul de durée, lui, le détecte.
     private var networkStallStartMs = 0L
     private val stallWindow = ArrayDeque<Pair<Long, Long>>()   // (instant de fin, durée ms)
+
+    // ---- Chien de garde de chargement -------------------------------------- //
+    // Un chargement (surtout en lecture directe) peut RESTER bloqué en BUFFERING sans
+    // jamais lever d'erreur : le flux ne démarre pas, ou s'arrête de charger. Sans
+    // garde-fou, la chaîne de repli ne s'active pas et l'écran reste figé. On surveille
+    // donc la progression du tampon : pas d'avancée pendant X s (ou buffering trop long)
+    // -> on bascule sur la tentative suivante (repli HLS) ou on recharge.
+    private var bufWatchLastPos = 0L
+    private var bufWatchProgressAtMs = 0L
+    private var bufWatchStartedAtMs = 0L
+    private var watchdogReloads = 0
     // La playlist VOD couvre tout le film : position et durée sont absolues.
     private fun absolutePositionMs(): Long = player?.currentPosition ?: 0L
     private val durationMs get() = (item.duration * 1000).toLong()
@@ -294,45 +305,64 @@ class PlayerActivity : AppCompatActivity() {
         player = null
     }
 
-    /** Première fois : décision serveur + buffer + chaîne de repli, puis lecture. */
+    /** Première fois : décision serveur + buffer + chaîne de repli, puis lecture.
+     *  La phase de décision est RÉESSAYÉE (un appel de contrôle qui échoue de façon
+     *  transitoire ne doit pas laisser l'écran figé sur « Analyse du flux… »). */
     private fun prepareAndPlay() {
         statusView.text = "Analyse du flux…"
         lifecycleScope.launch {
-            try {
-                val decision = api.decide(item.id)
-                buffer = api.clientRuntime().buffer
-                val progress = api.getProgress(item.id)
+            var lastErr: Exception? = null
+            repeat(PREPARE_ATTEMPTS) { attempt ->
+                try {
+                    val decision = api.decide(item.id)
+                    buffer = api.clientRuntime().buffer
+                    val progress = api.getProgress(item.id)
 
-                attempts.clear()
-                attempts.add(decision.streamUrl to decision.delivery)
-                if (decision.delivery != "direct")
-                    attempts.add("/stream/direct/${item.id}" to "direct")
-                // Paliers de repli ET de bascule adaptative réseau :
-                //  - « main »   = HEVC/HDR transcodé à débit plafonné (qualité quasi
-                //    intacte). Pertinent seulement si l'appareil décode bien la source
-                //    (décision en lecture directe) ; inutile/incompatible sinon.
-                //  - « compat » = H.264 1080p universel, dernier recours garanti lisible.
-                val mainHls = "/stream/hls/${item.id}/main/index.m3u8"
-                val compatHls = "/stream/hls/${item.id}/compat/index.m3u8"
-                val deviceDecodesSource = decision.delivery == "direct"
-                if (deviceDecodesSource && attempts.none { it.first == mainHls })
-                    attempts.add(mainHls to "hls")
-                if (attempts.none { it.first == compatHls })
-                    attempts.add(compatHls to "hls")
-                attemptIdx = 0
-                modeLabel = decision.mode + if (decision.toneMap) " · HDR→SDR" else ""
-                Logger.log("decide", "mode=${decision.mode} compat=${decision.compat} url=${decision.streamUrl} reasons=${decision.reasons.joinToString(" | ")}")
+                    attempts.clear()
+                    attempts.add(decision.streamUrl to decision.delivery)
+                    if (decision.delivery != "direct")
+                        attempts.add("/stream/direct/${item.id}" to "direct")
+                    // Paliers de repli ET de bascule adaptative réseau :
+                    //  - « main »   = HEVC/HDR transcodé à débit plafonné (qualité quasi
+                    //    intacte). Pertinent seulement si l'appareil décode bien la source
+                    //    (décision en lecture directe) ; inutile/incompatible sinon.
+                    //  - « compat » = H.264 1080p universel, dernier recours garanti lisible.
+                    val mainHls = "/stream/hls/${item.id}/main/index.m3u8"
+                    val compatHls = "/stream/hls/${item.id}/compat/index.m3u8"
+                    val deviceDecodesSource = decision.delivery == "direct"
+                    if (deviceDecodesSource && attempts.none { it.first == mainHls })
+                        attempts.add(mainHls to "hls")
+                    if (attempts.none { it.first == compatHls })
+                        attempts.add(compatHls to "hls")
+                    attemptIdx = 0
+                    modeLabel = decision.mode + if (decision.toneMap) " · HDR→SDR" else ""
+                    Logger.log("decide", "mode=${decision.mode} compat=${decision.compat} url=${decision.streamUrl} reasons=${decision.reasons.joinToString(" | ")}")
 
-                buildPlayer()
+                    buildPlayer()
 
-                if (!resumeHandled && progress.positionMs > 10_000 && !progress.watched) {
-                    resumeHandled = true
-                    askResume(progress.positionMs)
+                    if (!resumeHandled && progress.positionMs > 10_000 && !progress.watched) {
+                        resumeHandled = true
+                        askResume(progress.positionMs)
+                    }
+                    statusView.text = "Mode : $modeLabel"
+                    return@launch
+                } catch (e: Exception) {
+                    lastErr = e
+                    Logger.log("decide", "échec préparation (${attempt + 1}/$PREPARE_ATTEMPTS) : ${e.message}")
+                    if (attempt < PREPARE_ATTEMPTS - 1) {
+                        statusView.text = "Connexion au serveur… (${attempt + 1}/$PREPARE_ATTEMPTS)"
+                        kotlinx.coroutines.delay(1200L * (attempt + 1))
+                    }
                 }
-                statusView.text = "Mode : $modeLabel"
-            } catch (e: Exception) {
-                statusView.text = "Erreur : ${e.message}"
             }
+            // Échec persistant : message clair + bouton pour relancer manuellement.
+            statusView.text = "Serveur injoignable : ${lastErr?.message}\nAppuyez sur OK pour réessayer."
+            if (!isFinishing) AlertDialog.Builder(this@PlayerActivity)
+                .setTitle("Lecture impossible")
+                .setMessage("Le serveur n'a pas répondu.")
+                .setPositiveButton("Réessayer") { _, _ -> prepareAndPlay() }
+                .setNegativeButton("Quitter") { _, _ -> finish() }
+                .show()
         }
     }
 
@@ -348,6 +378,7 @@ class PlayerActivity : AppCompatActivity() {
         wasReady = false
         playStartedAtMs = 0L
         networkStallStartMs = 0L
+        watchdogReloads = 0
         rebufferTimes.clear()
         stallWindow.clear()
         loadAttempt(attemptIdx, restorePos = savedPositionMs)
@@ -569,9 +600,13 @@ class PlayerActivity : AppCompatActivity() {
                     }
                     wasReady = false
                     playStartedAtMs = 0L          // la lecture continue s'interrompt ici
+                    // Surveille un chargement qui ne démarre pas / ne progresse plus
+                    // (typiquement une lecture directe figée sans erreur) -> repli auto.
+                    startBufferWatchdog()
                 }
                 Player.STATE_READY -> {
                     retries = 0; statusView.text = ""
+                    handler.removeCallbacks(bufferWatchdog)   // le chargement a abouti
                     wasReady = true
                     // Fin d'un rebuffering réseau qualifié -> on cumule sa durée (détection
                     // de la saturation sévère, rebufferings rares mais longs).
@@ -589,7 +624,10 @@ class PlayerActivity : AppCompatActivity() {
                             }
                     }
                 }
-                Player.STATE_ENDED -> statusView.text = "Lecture terminée"
+                Player.STATE_ENDED -> {
+                    handler.removeCallbacks(bufferWatchdog)
+                    statusView.text = "Lecture terminée"
+                }
             }
         }
 
@@ -621,6 +659,11 @@ class PlayerActivity : AppCompatActivity() {
             playStartedAtMs =
                 if (playWhenReady && player?.playbackState == Player.STATE_READY)
                     SystemClock.elapsedRealtime() else 0L
+            // Reprise PENDANT un buffering (une pause ne change pas l'état BUFFERING, donc
+            // aucun nouveau STATE_BUFFERING ne ré-arme le chien de garde) : on le ré-arme
+            // ici pour ne pas compter le temps de pause dans le budget « bloqué ».
+            if (playWhenReady && player?.playbackState == Player.STATE_BUFFERING)
+                startBufferWatchdog()
         }
 
         override fun onPlayerError(error: PlaybackException) {
@@ -650,11 +693,78 @@ class PlayerActivity : AppCompatActivity() {
         }
     }
 
+    // ---- Chien de garde : chargement bloqué ------------------------------- //
+    /** Seuil « plus aucune progression du tampon » avant de basculer. Plus long en
+     *  transcodage HLS (le serveur peut légitimement mettre du temps à produire le
+     *  1er segment, surtout après un seek). Court en lecture directe : si rien n'arrive
+     *  en quelques secondes, c'est bloqué. */
+    private fun stuckNoProgressMs(): Long = if (isTranscode) 45_000L else 12_000L
+    /** Plafond absolu de buffering : UNIQUEMENT en lecture directe (un flux qui progresse
+     *  trop lentement pour jamais démarrer -> repli vers le transcodage à débit plafonné).
+     *  En transcodage on N'impose PAS de plafond : le serveur peut produire lentement mais
+     *  sûrement (jusqu'à ~90 s après un seek) ; seule l'absence de progression fait basculer. */
+    private fun stuckMaxBufferingMs(): Long = if (isTranscode) Long.MAX_VALUE else 40_000L
+
+    private fun startBufferWatchdog() {
+        val p = player ?: return
+        handler.removeCallbacks(bufferWatchdog)
+        bufWatchLastPos = p.bufferedPosition.coerceAtLeast(0)
+        bufWatchProgressAtMs = SystemClock.elapsedRealtime()
+        bufWatchStartedAtMs = bufWatchProgressAtMs
+        handler.postDelayed(bufferWatchdog, BUF_WATCH_POLL_MS)
+    }
+
+    private val bufferWatchdog = object : Runnable {
+        override fun run() {
+            val p = player ?: return
+            if (p.playbackState != Player.STATE_BUFFERING) return   // chargement terminé
+            if (!p.playWhenReady) {                                 // en pause : on attend
+                handler.postDelayed(this, BUF_WATCH_POLL_MS); return
+            }
+            val now = SystemClock.elapsedRealtime()
+            val pos = p.bufferedPosition.coerceAtLeast(0)
+            if (pos > bufWatchLastPos + 200) {          // le tampon avance -> ça charge
+                bufWatchLastPos = pos
+                bufWatchProgressAtMs = now
+            }
+            val noProgress = now - bufWatchProgressAtMs >= stuckNoProgressMs()
+            val tooLong = now - bufWatchStartedAtMs >= stuckMaxBufferingMs()
+            if (noProgress || tooLong) { onLoadStuck(); return }
+            handler.postDelayed(this, BUF_WATCH_POLL_MS)
+        }
+    }
+
+    /** Chargement bloqué : on bascule sur la tentative suivante (repli), sinon on
+     *  recharge la tentative courante (nombre borné) pour ne pas rester figé. */
+    private fun onLoadStuck() {
+        handler.removeCallbacks(bufferWatchdog)
+        val pos = player?.currentPosition?.coerceAtLeast(0) ?: savedPositionMs
+        Logger.log("stuck", "chargement bloqué mode=${if (isTranscode) "hls" else "direct"} attempt=$attemptIdx pos=$pos")
+        when {
+            attemptIdx + 1 < attempts.size -> {
+                statusView.text = "Chargement lent — bascule…"
+                loadAttempt(attemptIdx + 1, restorePos = pos)
+            }
+            watchdogReloads < 2 -> {
+                watchdogReloads++
+                statusView.text = "Chargement bloqué — nouvelle tentative…"
+                loadAttempt(attemptIdx, restorePos = pos)
+            }
+            else -> statusView.text = "Lecture impossible (chargement bloqué)."
+        }
+    }
+
     private fun loadAttempt(idx: Int, restorePos: Long) {
         val p = player ?: return
+        // Réinitialise le compteur d'erreurs UNIQUEMENT en changeant de palier : sinon un
+        // rechargement du MÊME palier (retry d'erreur ou chien de garde) remettrait le
+        // compteur à zéro et la borne « retries < 3 » ne serait jamais atteinte -> boucle
+        // de re-préparation ~toutes les 1,5 s au dernier palier. (buildPlayer remet déjà
+        // retries=0 pour un démarrage neuf.)
+        if (idx != attemptIdx) retries = 0
         attemptIdx = idx
-        retries = 0
         retryRunnable?.let { handler.removeCallbacks(it) }
+        handler.removeCallbacks(bufferWatchdog)
         // Nouveau flux : on repart d'un compteur de rebuffering vierge, et la salve de
         // BUFFERING qui suit prepare()/seek ne doit pas être comptée comme un rebuffer.
         rebufferTimes.clear()
@@ -742,6 +852,10 @@ class PlayerActivity : AppCompatActivity() {
         private const val STALL_BUDGET_MS = 30_000L
         // Un BUFFERING survenant juste après un seek n'est pas un rebuffer réseau.
         private const val SEEK_GRACE_MS = 2_500L
+        // Fréquence d'inspection du chien de garde de chargement.
+        private const val BUF_WATCH_POLL_MS = 2_000L
+        // Nombre de tentatives de la phase de décision (appels de contrôle au serveur).
+        private const val PREPARE_ATTEMPTS = 3
         // Durée de lecture CONTINUE minimale avant qu'un buffering puisse compter comme
         // un rebuffer réseau. Les reprises post-seek (tampon mince, transcodage qui
         // rattrape) ne durent que quelques secondes -> exclues. Un vrai rebuffer réseau
