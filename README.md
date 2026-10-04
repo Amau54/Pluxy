@@ -47,8 +47,11 @@ utilisez le serveur PC.
 ### Avec un PC Windows
 
 1. Téléchargez et extrayez le ZIP du projet.
-2. Installez **Python 3.11+**, puis lancez [Pluxy-Server.bat](Pluxy-Server.bat).
-   Le lanceur crée l'environnement Python et ouvre la configuration dans le navigateur.
+2. Lancez [Pluxy-Server.bat](Pluxy-Server.bat) sur **Windows 10 ou 11**.
+   Le lanceur réutilise Python 3.11 à 3.14 s'il est disponible ; sinon, il télécharge
+   et installe Python automatiquement pour votre compte, sans droits administrateur.
+   Une connexion Internet est nécessaire à la première installation. Les composants
+   Pluxy sont préparés, puis la configuration s'ouvre dès que le serveur est prêt.
 3. Choisissez vos dossiers. Le lecteur Android découvre le serveur automatiquement ;
    vous pouvez aussi saisir son adresse manuellement.
 

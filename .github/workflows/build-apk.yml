@@ -8,6 +8,9 @@ on:
       - 'client/**'
       - 'server/**'
       - 'tools/**'
+      - '!tools/PC-Launcher.ps1'
+      - '!tools/Start-PC.ps1'
+      - '!tools/tests/test_pc_launcher.py'
       - '.github/dependabot.yml'
       - '.github/workflows/build-apk.yml'
   pull_request:
@@ -16,6 +19,9 @@ on:
       - 'client/**'
       - 'server/**'
       - 'tools/**'
+      - '!tools/PC-Launcher.ps1'
+      - '!tools/Start-PC.ps1'
+      - '!tools/tests/test_pc_launcher.py'
       - '.github/dependabot.yml'
       - '.github/workflows/build-apk.yml'
   workflow_dispatch:

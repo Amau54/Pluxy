@@ -1,7 +1,9 @@
 # Python 3.11–3.14. Versions directes épinglées pour rendre les installations et
 # l'audit reproductibles. Dependabot propose les mises à jour après passage de la CI.
 fastapi==0.139.2
-uvicorn[standard]==0.51.0
+# Les accelerateurs optionnels n'ont pas tous des wheels Windows ARM64/x86.
+uvicorn[standard]==0.51.0 ; sys_platform != "win32" or platform_machine == "AMD64"
+uvicorn==0.51.0 ; sys_platform == "win32" and platform_machine != "AMD64"
 pydantic==2.13.4
 aiofiles==25.1.0
 python-multipart==0.0.32

@@ -1,6 +1,7 @@
 # ---------- Serveur Python ----------
 # Environnement virtuel
 server/.venv/
+server/.venv-backup-*/
 # Caches Python
 **/__pycache__/
 *.pyc

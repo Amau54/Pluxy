@@ -2,11 +2,13 @@
 
 ## Réinstallation
 
-1. Installer Git et Python 3.11+ sur le nouveau PC.
+1. Installer Git sur le nouveau PC, ou télécharger et extraire le ZIP du dépôt.
 2. Cloner `https://github.com/Amau54/Pluxy.git` ; se connecter à GitHub si l'accès
    au dépôt le demande.
-3. Pour le serveur PC, installer Python 3.11+ avec PATH, puis lancer
-   `Pluxy-Server.bat`. L'environnement Python est recréé automatiquement.
+3. Pour le serveur PC sous Windows 10 ou 11, lancer `Pluxy-Server.bat`.
+   Python est installé automatiquement s'il manque, sans droits administrateur ni
+   modification du PATH. L'environnement et les composants Pluxy sont préparés
+   automatiquement ; une connexion Internet est nécessaire la première fois.
 4. Pour Android, réinstaller le JDK et le SDK indiqués par le workflow
    `.github/workflows/build-apk.yml`, puis utiliser les scripts de construction.
    Ne pas restaurer les caches Gradle ni les chemins SDK de l'ancien PC.
