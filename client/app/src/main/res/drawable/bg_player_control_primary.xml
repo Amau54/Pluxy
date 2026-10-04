@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_pressed="true">
+        <shape android:shape="oval">
+            <solid android:color="@color/accent_dim" />
+            <stroke android:width="3dp" android:color="@color/accent_bright" />
+        </shape>
+    </item>
+    <item android:state_focused="true">
+        <shape android:shape="oval">
+            <solid android:color="@color/accent_bright" />
+            <stroke android:width="3dp" android:color="@color/text_primary" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="oval">
+            <gradient android:angle="315" android:startColor="@color/accent" android:endColor="#EBA080" />
+        </shape>
+    </item>
+</selector>

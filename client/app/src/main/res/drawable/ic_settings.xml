@@ -1,0 +1,17 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Réglages type Material : trois curseurs fins, plus contemporains qu'un engrenage plein. -->
+    <path
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:pathData="M5,4L5,20M12,4L12,20M19,4L19,20" />
+    <path
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="3.8"
+        android:strokeLineCap="round"
+        android:pathData="M5,8L5,8M12,15L12,15M19,10.5L19,10.5" />
+</vector>

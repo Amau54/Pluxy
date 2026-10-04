@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fitsSystemWindows="true"
+    android:background="@drawable/bg_tv_ambient"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:padding="32dp">
+
+        <ImageView
+            android:id="@+id/audioCover"
+            android:layout_width="180dp"
+            android:layout_height="180dp"
+            android:background="@drawable/poster_rounded"
+            android:clipToOutline="true"
+            android:contentDescription="@string/description_audio_cover"
+            android:elevation="8dp"
+            android:scaleType="centerCrop"
+            android:src="@drawable/ic_music_placeholder" />
+
+        <TextView
+            android:id="@+id/audioTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="22dp"
+            android:ellipsize="end"
+            android:gravity="center"
+            android:maxLines="1"
+            android:textColor="@color/text_primary"
+            android:textSize="26sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/audioMeta"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="7dp"
+            android:ellipsize="end"
+            android:gravity="center"
+            android:maxLines="1"
+            android:textColor="@color/text_secondary"
+            android:textSize="15sp" />
+
+        <ProgressBar
+            android:id="@+id/audioLoading"
+            android:layout_width="42dp"
+            android:layout_height="42dp"
+            android:layout_marginTop="20dp"
+            android:indeterminateTint="@color/accent" />
+
+        <TextView
+            android:id="@+id/audioError"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:gravity="center"
+            android:textColor="@color/text_secondary"
+            android:textSize="15sp"
+            android:visibility="gone" />
+
+        <androidx.media3.ui.PlayerControlView
+            android:id="@+id/audioControls"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:focusable="true"
+            app:show_fastforward_button="true"
+            app:show_next_button="true"
+            app:show_previous_button="true"
+            app:show_rewind_button="true"
+            app:show_shuffle_button="false"
+            app:show_subtitle_button="false"
+            app:show_timeout="0" />
+
+        <Button
+            android:id="@+id/audioQueue"
+            style="@style/PlayerControl.Secondary"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="@string/audio_queue_title"
+            android:visibility="gone" />
+
+        <Button
+            android:id="@+id/audioStop"
+            style="@style/PlayerControl.Secondary"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="@string/audio_stop" />
+
+        <Button
+            android:id="@+id/audioRetry"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:background="@drawable/bg_btn_secondary"
+            android:minHeight="48dp"
+            android:paddingHorizontal="24dp"
+            android:stateListAnimator="@animator/focus_lift_btn"
+            android:text="@string/action_retry"
+            android:textAllCaps="false"
+            android:textColor="@color/text_primary"
+            android:visibility="gone" />
+    </LinearLayout>
+</ScrollView>

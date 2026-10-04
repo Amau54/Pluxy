@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Jetons d'espacement / rayons / tailles. Échelle 4 dp cohérente. -->
+<resources>
+    <!-- Marge sûre TV (overscan ~5 %) pour les bords d'écran -->
+    <dimen name="screen_pad">48dp</dimen>
+
+    <!-- Rayons -->
+    <dimen name="radius_sm">8dp</dimen>
+    <dimen name="radius_md">14dp</dimen>
+    <dimen name="radius_lg">18dp</dimen>
+    <dimen name="radius_pill">100dp</dimen>
+
+    <!-- Bordures de focus -->
+    <dimen name="focus_stroke">2dp</dimen>
+
+    <!-- Composants -->
+    <dimen name="btn_min_h">52dp</dimen>
+    <dimen name="library_card_width">148dp</dimen>
+    <dimen name="library_shelf_height">302dp</dimen>
+    <dimen name="card_title_size">15sp</dimen>
+    <dimen name="card_meta_size">14sp</dimen>
+    <dimen name="library_bottom_pad">20dp</dimen>
+    <dimen name="details_meta_size">15sp</dimen>
+    <dimen name="details_caption_size">13sp</dimen>
+    <dimen name="server_address_width">224dp</dimen>
+</resources>

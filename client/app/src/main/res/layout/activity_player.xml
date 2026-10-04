@@ -1,0 +1,351 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@android:color/black"
+    android:fitsSystemWindows="true">
+
+    <!-- Le rendu vidéo reste indépendant des contrôles : aucun panneau générique Media3
+         ne peut recouvrir, rogner ou déplacer notre interface Android TV. -->
+    <androidx.media3.ui.PlayerView
+        android:id="@+id/player_view"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:focusable="true"
+        android:background="@android:color/black"
+        app:shutter_background_color="@android:color/black"
+        app:keep_content_on_player_reset="true"
+        app:resize_mode="fit"
+        app:show_buffering="never"
+        app:show_subtitle_button="false"
+        app:surface_type="surface_view"
+        app:use_controller="false" />
+
+    <!-- Custom buffering feedback because the native PlayerView controller is disabled. -->
+    <ProgressBar
+        android:id="@+id/playerLoading"
+        style="?android:attr/progressBarStyleLarge"
+        android:layout_width="56dp"
+        android:layout_height="56dp"
+        android:layout_gravity="center"
+        android:elevation="28dp"
+        android:focusable="false"
+        android:importantForAccessibility="no"
+        android:indeterminate="true"
+        android:indeterminateTint="@color/accent_bright"
+        android:visibility="gone" />
+
+    <!-- Statut technique discret, hors de la zone de titre et protégé de l'overscan. -->
+    <TextView
+        android:id="@+id/status"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|end"
+        android:layout_marginStart="@dimen/media_viewer_screen_pad"
+        android:layout_marginTop="104dp"
+        android:layout_marginEnd="@dimen/media_viewer_screen_pad"
+        android:background="@drawable/bg_pill_dark"
+        android:elevation="24dp"
+        android:ellipsize="end"
+        android:maxLines="2"
+        android:maxWidth="560dp"
+        android:paddingStart="14dp"
+        android:paddingTop="8dp"
+        android:paddingEnd="14dp"
+        android:paddingBottom="8dp"
+        android:textColor="@color/info"
+        android:textSize="13sp"
+        android:visibility="gone" />
+
+    <!-- Contrôles cinéma Pluxy. Le contenu utile reste à 48 dp des bords pour toutes
+         les TV et les anciens réglages d'overscan. -->
+    <FrameLayout
+        android:id="@+id/controlsOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@drawable/player_controls_scrim"
+        android:clickable="false"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:id="@+id/playerBottomPanel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom"
+            android:orientation="vertical"
+            android:paddingStart="@dimen/media_viewer_screen_pad"
+            android:paddingEnd="@dimen/media_viewer_screen_pad"
+            android:paddingBottom="28dp">
+
+            <TextView
+                android:id="@+id/mediaTitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:ellipsize="end"
+                android:fontFamily="sans-serif-medium"
+                android:maxLines="1"
+                android:textColor="@color/text_primary"
+                android:textSize="23sp" />
+
+            <!-- Conservé pour les messages de compatibilité, masqué en lecture normale. -->
+            <TextView
+                android:id="@+id/modeText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="@color/text_secondary"
+                android:textSize="13sp"
+                android:visibility="gone" />
+
+            <!-- Prévisualisation du seek intégrée à la timeline : plus de gros compteur
+                 de secondes au milieu de l'image. -->
+            <LinearLayout
+                android:id="@+id/seekOverlay"
+                android:layout_width="wrap_content"
+                android:layout_height="44dp"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginBottom="6dp"
+                android:background="@drawable/bg_seek_overlay"
+                android:elevation="12dp"
+                android:gravity="center"
+                android:orientation="horizontal"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/seekArrow"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textColor="@color/accent_bright"
+                    android:textSize="18sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/seekTarget"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="10dp"
+                    android:fontFamily="sans-serif-medium"
+                    android:letterSpacing="0.03"
+                    android:textColor="@color/text_primary"
+                    android:textSize="20sp" />
+
+                <TextView
+                    android:id="@+id/seekDelta"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="12dp"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="13sp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/timePosition"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="sans-serif-medium"
+                    android:text="@string/player_zero_time"
+                    android:textColor="@color/text_primary"
+                    android:textSize="14sp" />
+
+                <Space
+                    android:layout_width="0dp"
+                    android:layout_height="1dp"
+                    android:layout_weight="1" />
+
+                <TextView
+                    android:id="@+id/timeDuration"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="sans-serif-medium"
+                    android:text="@string/player_zero_time"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="14sp" />
+            </LinearLayout>
+
+            <androidx.media3.ui.DefaultTimeBar
+                android:id="@+id/playbackTimeline"
+                android:layout_width="match_parent"
+                android:layout_height="40dp"
+                android:contentDescription="@string/player_timeline_description"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:nextFocusDown="@id/btnPlayPause"
+                app:bar_height="6dp"
+                app:buffered_color="@color/player_buffered"
+                app:played_color="@color/accent_bright"
+                app:scrubber_color="@color/accent_bright"
+                app:scrubber_dragged_size="20dp"
+                app:scrubber_enabled_size="14dp"
+                app:touch_target_height="40dp"
+                app:unplayed_color="@color/player_unplayed" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="76dp"
+                android:layout_marginTop="4dp"
+                android:orientation="horizontal"
+                android:gravity="center">
+
+                <ImageButton
+                    android:id="@+id/btnRestart"
+                    style="@style/PlayerControl.Icon"
+                    android:layout_marginEnd="12dp"
+                    android:contentDescription="@string/player_restart"
+                    android:nextFocusLeft="@id/btnForward"
+                    android:nextFocusRight="@id/btnRewind"
+                    android:nextFocusUp="@id/playbackTimeline"
+                    android:nextFocusDown="@id/btnTracks"
+                    android:src="@drawable/ic_player_restart" />
+
+                <ImageButton
+                    android:id="@+id/btnRewind"
+                    style="@style/PlayerControl.Icon"
+                    android:contentDescription="@string/player_rewind_description"
+                    android:nextFocusLeft="@id/btnRestart"
+                    android:nextFocusRight="@id/btnPlayPause"
+                    android:nextFocusUp="@id/playbackTimeline"
+                    android:nextFocusDown="@id/btnTracks"
+                    android:src="@drawable/ic_player_rewind" />
+
+                <ImageButton
+                    android:id="@+id/btnPlayPause"
+                    style="@style/PlayerControl.Primary"
+                    android:layout_marginStart="12dp"
+                    android:layout_marginEnd="12dp"
+                    android:contentDescription="@string/player_play_description"
+                    android:nextFocusLeft="@id/btnRewind"
+                    android:nextFocusRight="@id/btnForward"
+                    android:nextFocusUp="@id/playbackTimeline"
+                    android:nextFocusDown="@id/btnTracks"
+                    android:src="@drawable/ic_player_play" />
+
+                <ImageButton
+                    android:id="@+id/btnForward"
+                    style="@style/PlayerControl.Icon"
+                    android:contentDescription="@string/player_forward_description"
+                    android:nextFocusLeft="@id/btnPlayPause"
+                    android:nextFocusRight="@id/btnRestart"
+                    android:nextFocusUp="@id/playbackTimeline"
+                    android:nextFocusDown="@id/btnSubtitles"
+                    android:src="@drawable/ic_player_forward" />
+            </LinearLayout>
+
+            <!-- A separate row keeps named actions reachable at phone and TV widths.
+                 Scrolling also accommodates enlarged system fonts without overlap. -->
+            <HorizontalScrollView
+                android:layout_width="match_parent"
+                android:layout_height="64dp"
+                android:fillViewport="true"
+                android:focusable="false"
+                android:scrollbars="none">
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="match_parent"
+                    android:gravity="center"
+                    android:orientation="horizontal">
+
+                    <Button
+                        android:id="@+id/btnTracks"
+                        style="@style/PlayerControl.Secondary"
+                        android:paddingStart="12dp"
+                        android:paddingEnd="12dp"
+                        android:text="@string/player_audio_action"
+                        android:nextFocusLeft="@id/btnGear"
+                        android:nextFocusRight="@id/btnSubtitles"
+                        android:nextFocusUp="@id/btnPlayPause"
+                        android:nextFocusDown="@id/btnPlayPause" />
+
+                    <Button
+                        android:id="@+id/btnSubtitles"
+                        style="@style/PlayerControl.Secondary"
+                        android:layout_marginStart="10dp"
+                        android:paddingStart="12dp"
+                        android:paddingEnd="12dp"
+                        android:text="@string/player_subtitles_action"
+                        android:nextFocusLeft="@id/btnTracks"
+                        android:nextFocusRight="@id/btnGear"
+                        android:nextFocusUp="@id/btnPlayPause"
+                        android:nextFocusDown="@id/btnPlayPause" />
+
+                    <ImageButton
+                        android:id="@+id/btnGear"
+                        style="@style/PlayerControl.Icon"
+                        android:layout_marginStart="10dp"
+                        android:contentDescription="@string/player_more"
+                        android:nextFocusLeft="@id/btnSubtitles"
+                        android:nextFocusRight="@id/btnTracks"
+                        android:nextFocusUp="@id/btnForward"
+                        android:nextFocusDown="@id/btnForward"
+                        android:src="@drawable/ic_more_horizontal" />
+                </LinearLayout>
+            </HorizontalScrollView>
+        </LinearLayout>
+    </FrameLayout>
+
+    <LinearLayout
+        android:id="@+id/playbackErrorPanel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:layout_marginStart="@dimen/media_viewer_screen_pad"
+        android:layout_marginEnd="@dimen/media_viewer_screen_pad"
+        android:background="@drawable/bg_player_control"
+        android:elevation="30dp"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:padding="24dp"
+        android:visibility="gone">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/player_error_title"
+            android:textColor="@color/text_primary"
+            android:textSize="22sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/playbackErrorMessage"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:gravity="center"
+            android:maxWidth="480dp"
+            android:textColor="@color/text_secondary"
+            android:textSize="17sp" />
+
+        <Button
+            android:id="@+id/btnRetryPlayback"
+            style="@style/PlayerControl.Secondary"
+            android:layout_width="match_parent"
+            android:layout_marginTop="20dp"
+            android:nextFocusLeft="@id/btnRetryPlayback"
+            android:nextFocusRight="@id/btnRetryPlayback"
+            android:nextFocusDown="@id/btnLeavePlayback"
+            android:nextFocusUp="@id/btnLeavePlayback"
+            android:text="@string/player_retry_action" />
+
+        <Button
+            android:id="@+id/btnLeavePlayback"
+            style="@style/PlayerControl.Secondary"
+            android:layout_width="match_parent"
+            android:layout_marginTop="10dp"
+            android:nextFocusLeft="@id/btnLeavePlayback"
+            android:nextFocusRight="@id/btnLeavePlayback"
+            android:nextFocusUp="@id/btnRetryPlayback"
+            android:nextFocusDown="@id/btnRetryPlayback"
+            android:text="@string/player_leave_action" />
+    </LinearLayout>
+</FrameLayout>

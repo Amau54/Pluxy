@@ -1,0 +1,83 @@
+name: Analyse CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '17 3 * * 1'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+  packages: read
+  security-events: write
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
+
+jobs:
+  indisponible:
+    name: CodeQL indisponible sur depot prive
+    if: ${{ github.event.repository.private && vars.CODEQL_ENABLED != 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Signaler la configuration requise
+        run: |
+          echo "::notice::CodeQL requiert GitHub Code Security sur un depot prive. Ruff, pip-audit et les tests restent actifs."
+
+  analyse:
+    name: CodeQL (${{ matrix.language }})
+    if: ${{ github.event.repository.private == false || vars.CODEQL_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: python
+            build_mode: none
+          - language: java-kotlin
+            build_mode: manual
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Initialiser CodeQL
+        uses: github/codeql-action/init@3b0bd1d116c0bde30213346b22d4f634d96a2fb0 # v3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build_mode }}
+
+      - name: JDK 17
+        if: matrix.language == 'java-kotlin'
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: SDK Android 36
+        if: matrix.language == 'java-kotlin'
+        run: >-
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          'platforms;android-36' 'build-tools;36.0.0'
+
+      - name: Compiler Kotlin pour CodeQL
+        if: matrix.language == 'java-kotlin'
+        working-directory: client
+        run: |
+          chmod +x gradlew
+          ./gradlew \
+            :app:compileDebugKotlin :serverapp:compileDebugKotlin \
+            --console=plain
+
+      - name: Analyser
+        uses: github/codeql-action/analyze@3b0bd1d116c0bde30213346b22d4f634d96a2fb0 # v3

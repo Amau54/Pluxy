@@ -1,0 +1,71 @@
+# ---------- Serveur Python ----------
+# Environnement virtuel
+server/.venv/
+# Caches Python
+**/__pycache__/
+*.pyc
+# Config runtime (specifique a la machine)
+server/config.json
+# Segments de transcodage temporaires
+server/.pluxy_cache/
+.pluxy_cache/
+# Cache de metadonnees (regenere a la demande)
+server/.pluxy_meta/
+.pluxy_meta/
+# Index de bibliotheque persistant (regenere au scan)
+server/.pluxy_library.json
+.pluxy_library.json
+# Etat de lecture (reprise)
+server/.pluxy_watch.json
+.pluxy_watch.json
+
+# ---------- Client Android ----------
+client/.gradle/
+client/.gradle-codex-verify/
+client/.android-codex-verify/
+artifacts/
+client/artifacts/
+client/build/
+# Tous les modules Android (y compris les futurs modules receiver) produisent
+# leur sortie dans un dossier build local.
+client/**/build/
+# Chemin SDK specifique a la machine (regenere par Build-APK.bat)
+client/local.properties
+client/.idea/
+client/captures/
+*.iml
+
+# ---------- Divers ----------
+.DS_Store
+Thumbs.db
+desktop.ini
+*.log
+# Rapports locaux : ils peuvent contenir IP LAN, modèle et diagnostics ADB.
+pluxy-soak*.json
+
+# Secrets de signature Play Store (ne jamais versionner).
+client/keystore/
+*.jks
+*.keystore
+*.p12
+# Identifiants locaux et fichiers d'environnement privés.
+.env
+.env.*
+!.env.example
+!.env.sample
+**/credentials.xml
+**/recovery.json
+
+# Artefacts Android locaux : publication exclusivement via CI/Google Play.
+dist/*.apk
+dist/*.aab
+dist/*.json
+dist/*.tmp
+dist/*SHA256SUMS.txt
+dist-ci/
+dist-release/
+dist-mapping/
+
+# On VERSIONNE volontairement :
+#   - client/gradlew*, client/gradle/wrapper/*   (build en un clic)
+#   - assets/*                         (logos et generateur d'icones)

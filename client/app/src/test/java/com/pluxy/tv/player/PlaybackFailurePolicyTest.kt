@@ -1,0 +1,44 @@
+package com.pluxy.tv.player
+
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class PlaybackFailurePolicyTest {
+    @Test fun missingSubtitleOrSegmentIsNotAMissingOriginal() {
+        for (status in listOf(404, 410)) {
+            assertTrue(PlaybackFailurePolicy.requiresUserActionForPath("/stream/direct/film", status))
+            assertFalse(PlaybackFailurePolicy.requiresUserActionForPath("/stream/subs/film/0", status))
+            assertFalse(PlaybackFailurePolicy.requiresUserActionForPath("/stream/hls/film/segment.ts", status))
+        }
+    }
+
+    @Test fun missingOriginalStopsAutomaticRecovery() {
+        assertTrue(PlaybackFailurePolicy.requiresUserAction("direct", 404))
+        assertTrue(PlaybackFailurePolicy.requiresUserAction("direct", 410))
+    }
+
+    @Test fun expiredHlsSegmentsKeepAutomaticRecovery() {
+        assertFalse(PlaybackFailurePolicy.requiresUserAction("hls", 404))
+        assertFalse(PlaybackFailurePolicy.requiresUserAction("hls", 410))
+    }
+
+    @Test fun accessDeniedNeedsUserActionForEveryDelivery() {
+        for (delivery in listOf("direct", "hls", null)) {
+            assertTrue(PlaybackFailurePolicy.requiresUserAction(delivery, 401))
+            assertTrue(PlaybackFailurePolicy.requiresUserAction(delivery, 403))
+        }
+    }
+
+    @Test fun transientHttpFailuresKeepRecovery() {
+        for (status in listOf(408, 429, 500, 502, 503, 504)) {
+            assertFalse(PlaybackFailurePolicy.requiresUserAction("direct", status))
+            assertFalse(PlaybackFailurePolicy.requiresUserAction("hls", status))
+        }
+    }
+
+    @Test fun decoderAndUnknownFailuresKeepCompatibilityFallbacks() {
+        assertFalse(PlaybackFailurePolicy.requiresUserAction("direct", null))
+        assertFalse(PlaybackFailurePolicy.requiresUserAction(null, 404))
+    }
+}

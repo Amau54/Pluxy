@@ -1,0 +1,32 @@
+name: Revue des dependances
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  dependency-review:
+    name: Dependances vulnerables
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Signaler la limite des depots prives
+        if: ${{ github.event.repository.private && vars.DEPENDENCY_REVIEW_ENABLED != 'true' }}
+        run: |
+          echo "::notice::Dependency Review requiert GitHub Code Security sur un depot prive. La verification Gradle et pip-audit restent actives."
+
+      - name: Checkout
+        if: ${{ github.event.repository.private == false || vars.DEPENDENCY_REVIEW_ENABLED == 'true' }}
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Examiner le changement de dependances
+        if: ${{ github.event.repository.private == false || vars.DEPENDENCY_REVIEW_ENABLED == 'true' }}
+        uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4.9.0
+        with:
+          fail-on-severity: moderate

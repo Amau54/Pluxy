@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="media_temporarily_unavailable">Indisponible</string>
+    <string name="media_unavailable_detail">Le dossier de ce média est momentanément indisponible. Vous pouvez réessayer la lecture après son retour.</string>
+    <string name="photo_show_controls">Afficher les commandes</string>
+    <string name="photo_load_error">Cette photo n’a pas pu être chargée. Réessayez ou passez à la suivante.</string>
+    <string name="photo_missing_fallback">Cette photo n’est plus disponible · première photo affichée</string>
+    <string name="photo_description_position">%1$s, photo %2$d sur %3$d</string>
+    <string name="audio_queue_count">File d’attente · %1$d titres</string>
+    <string name="audio_queue_title">File d’attente</string>
+    <string name="audio_disc_number">Disque %1$d</string>
+    <string name="audio_notification_channel">Lecture musicale</string>
+    <string name="audio_preparing">Préparation de la musique…</string>
+    <string name="audio_service_disconnected">La lecture a été interrompue. Vous pouvez réessayer.</string>
+    <string name="audio_previous">Précédent</string>
+    <string name="audio_next">Suivant</string>
+    <string name="audio_play">Lecture</string>
+    <string name="audio_pause">Pause</string>
+    <string name="audio_stop">Arrêter la musique</string>
+</resources>

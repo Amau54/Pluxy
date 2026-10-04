@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Verre fumé graphite, reflets froids discrets et lumière corail du logo.
+  Les accents restent réservés aux actions, à la progression et au focus.
+-->
+<resources>
+    <!-- Fonds / surfaces (du plus profond au plus clair) -->
+    <color name="bg">#090C12</color>
+    <color name="bg_elev">#121821</color>
+    <color name="surface">#D1121821</color>
+    <color name="surface_variant">#D11A212C</color>
+    <color name="surface_focus">#EB303744</color>
+
+    <!-- Reflets statiques : aucun flou ou filtre appliqué à la vidéo. -->
+    <color name="glass_top">#DE1C2430</color>
+    <color name="glass_bottom">#D010151E</color>
+    <color name="glass_focus_top">#EB303744</color>
+    <color name="glass_focus_bottom">#E21C232F</color>
+    <color name="glass_glint">#32EDF2FA</color>
+    <color name="glass_glint_trans">#00EDF2FA</color>
+    <color name="ambient_coral">#20F6AD84</color>
+    <color name="ambient_coral_trans">#00F6AD84</color>
+    <color name="ambient_rose">#14DE7893</color>
+    <color name="ambient_rose_trans">#00DE7893</color>
+    <color name="glow_edge">#36F6AD84</color>
+
+    <!-- Accent Pluxy : action principale + état de focus -->
+    <color name="accent">#F6AD84</color>
+    <color name="accent_bright">#FFD1B3</color>
+    <color name="accent_dim">#CC896B</color>
+
+    <!-- Accent secondaire (info / liens) -->
+    <color name="info">#91B0C4</color>
+    <color name="success">#8ACDAE</color>
+
+    <!-- Texte -->
+    <color name="text_primary">#F2F3F7</color>
+    <color name="text_secondary">#ADB4C3</color>
+    <color name="text_tertiary">#818B9E</color>
+    <color name="text_on_accent">#24170F</color>
+
+    <!-- Bordures / séparateurs -->
+    <color name="border">#2A9DAEC5</color>
+    <color name="border_subtle">#1C9DAEC5</color>
+    <color name="border_focus">#FFD1B3</color>
+
+    <!-- Voiles -->
+    <color name="scrim_strong">#D0090C12</color>
+
+    <!-- Tons transparents pour les dégradés (mêmes RVB que bg) -->
+    <color name="bg_trans">#00090C12</color>
+    <color name="bg_full">#FF090C12</color>
+
+    <!-- Lecteur TV : contraste suffisant sans transformer la timeline en bloc lumineux. -->
+    <color name="player_unplayed">#6677859B</color>
+    <color name="player_buffered">#B3AFBACD</color>
+    <color name="launcher_background">#121821</color>
+</resources>

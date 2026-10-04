@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Étiquette d'état (mode de lecture) : pilule sombre translucide. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="#B3000000" />
+    <corners android:radius="@dimen/radius_sm" />
+</shape>

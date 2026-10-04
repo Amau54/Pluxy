@@ -1,0 +1,485 @@
+package com.pluxy.tv.ui
+
+import android.content.Intent
+import android.graphics.Typeface
+import android.net.Uri
+import android.os.Bundle
+import android.view.Gravity
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
+import android.widget.Button
+import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.TextView
+import android.widget.Toast
+import androidx.annotation.OptIn
+import androidx.appcompat.app.AlertDialog
+import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
+import androidx.media3.common.util.UnstableApi
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
+import coil.dispose
+import coil.load
+import com.pluxy.tv.PluxyApplication
+import com.pluxy.tv.R
+import com.pluxy.tv.api.CastMember
+import com.pluxy.tv.api.LanUrlPolicy
+import com.pluxy.tv.api.LanMediaImages
+import com.pluxy.tv.api.MediaItem
+import com.pluxy.tv.api.MovieMetadata
+import com.pluxy.tv.api.PluxyApi
+import com.pluxy.tv.api.PlaybackDecision
+import com.pluxy.tv.player.DiagnosticLevel
+import com.pluxy.tv.player.PlaybackDiagnostic
+import com.pluxy.tv.player.PlayerActivity
+import com.pluxy.tv.player.ProgressOutbox
+import com.squareup.moshi.Moshi
+import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
+
+/** Fiche détaillée Pluxy : synopsis, casting, bande-annonce et actions de lecture. */
+@OptIn(UnstableApi::class)
+class DetailsActivity : AppCompatActivity() {
+
+    private val moshi = Moshi.Builder().add(KotlinJsonAdapterFactory()).build()
+    private lateinit var item: MediaItem
+    private val api = PluxyApi.create()
+    private var playbackDecision: PlaybackDecision? = null
+    private var resumePositionMs: Long = 0L
+    private var primaryStartsFromBeginning = false
+    private var primaryAutoResume = false
+    private var progressWatched = false
+    private var localBackdropUrl: String? = null
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_details)
+
+        val json = intent.getStringExtra(EXTRA_ITEM) ?: run { finish(); return }
+        item = moshi.adapter(MediaItem::class.java).fromJson(json) ?: run { finish(); return }
+
+        // Affichage immédiat (titre brut) puis enrichissement.
+        findViewById<TextView>(R.id.title).text = item.title
+        findViewById<TextView>(R.id.posterFallback).text = item.title
+        findViewById<ImageView>(R.id.poster).contentDescription =
+            getString(R.string.description_poster_title, item.title)
+        findViewById<RecyclerView>(R.id.cast).layoutManager =
+            LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
+
+        // Pastilles techniques disponibles d'emblée (sans réseau) : résolution, codec, HDR.
+        buildTechChips()
+        loadLocalThumbnail()
+
+        val playBtn = findViewById<Button>(R.id.play)
+        playBtn.setOnClickListener { play() }
+        findViewById<Button>(R.id.restart).setOnClickListener {
+            launchPlayer(forceDirect = false, startFromBeginning = true, autoResume = false)
+        }
+        resumePositionMs = (item.duration * 1_000 * item.progress).toLong().coerceAtLeast(0)
+        updatePlaybackActions(item.watched)
+        playBtn.requestFocus()
+        findViewById<Button>(R.id.trailer).visibility = View.GONE
+        findViewById<Button>(R.id.playSettings).setOnClickListener { showPlaybackSettings() }
+        findViewById<TextView>(R.id.playDiagnostic).setOnClickListener { showDiagnosticDetails() }
+
+        loadMetadata()
+        loadPlaybackDiagnostic()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (!::item.isInitialized) return
+        lifecycleScope.launch {
+            val progress = try {
+                ProgressOutbox.pendingResume(api.baseUrl, item.id) ?: api.getProgress(item.id)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                return@launch
+            }
+            resumePositionMs = progress.positionMs.coerceAtLeast(0)
+            updatePlaybackActions(progress.watched)
+        }
+    }
+
+    private fun loadLocalThumbnail() {
+        val relative = item.thumbnailUrl ?: return
+        localBackdropUrl = runCatching {
+            LanUrlPolicy.resolveSameServer(PluxyApplication.serverBaseUrl(this), relative)
+        }.getOrNull() ?: return
+        // Une capture vidéo est 16:9 : elle convient au fond, pas à l'affiche portrait.
+        loadLocalBackdrop()
+    }
+
+    private fun loadLocalBackdrop() {
+        val url = localBackdropUrl ?: return
+        findViewById<ImageView>(R.id.backdrop).load(url, LanMediaImages.loader(this))
+    }
+
+    private fun updatePlaybackActions(watched: Boolean) {
+        progressWatched = watched
+        renderPlaybackActions()
+    }
+
+    private fun renderPlaybackActions() {
+        val durationMs = (item.duration * 1_000).toLong().coerceAtLeast(0)
+        val resumable = resumePositionMs >= 10_000L &&
+            (durationMs <= 0L || resumePositionMs < durationMs * 0.95)
+        primaryStartsFromBeginning = progressWatched && !resumable
+        primaryAutoResume = resumable
+        findViewById<Button>(R.id.play).text = when {
+            playbackDecision?.playable == false ->
+                getString(R.string.label_direct_play_try)
+            resumable -> getString(
+                R.string.label_resume_at,
+                formatPlaybackTime(resumePositionMs),
+            )
+            progressWatched -> getString(R.string.action_replay)
+            else -> getString(R.string.action_play)
+        }
+        findViewById<Button>(R.id.restart).visibility =
+            if (resumable) View.VISIBLE else View.GONE
+    }
+
+    /** Notes multi-sites (TMDB / IMDb / Rotten Tomatoes / Metacritic). */
+    private fun buildRatings(m: com.pluxy.tv.api.MovieMetadata) {
+        val row = findViewById<LinearLayout>(R.id.ratings)
+        row.removeAllViews()
+        if (m.ratings.isEmpty()) { row.visibility = View.GONE; return }
+        row.visibility = View.VISIBLE
+        val d = resources.displayMetrics.density
+        for (r in m.ratings) {
+            val cell = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER
+                setBackgroundResource(R.drawable.bg_chip)
+                setPadding((14 * d).toInt(), (8 * d).toInt(), (14 * d).toInt(), (8 * d).toInt())
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { marginEnd = (10 * d).toInt() }
+            }
+            cell.addView(TextView(this).apply {
+                text = r.value
+                setTextColor(getColor(R.color.accent))
+                textSize = 16f
+                gravity = Gravity.CENTER
+                setTypeface(typeface, Typeface.BOLD)
+            })
+            cell.addView(TextView(this).apply {
+                text = r.source
+                setTextColor(getColor(R.color.text_tertiary))
+                textSize = 13f
+                gravity = Gravity.CENTER
+                letterSpacing = 0.02f
+            })
+            row.addView(cell)
+        }
+    }
+
+    /** Pastilles techniques (résolution / codec / HDR / durée) issues du fichier. */
+    private fun buildTechChips() {
+        val chips = findViewById<LinearLayout>(R.id.chips)
+        chips.removeAllViews()
+        item.height?.let { h ->
+            val label = when {
+                h >= 2000 -> "4K"
+                h >= 1060 -> "1080p"
+                h >= 700 -> "720p"
+                else -> "${h}p"
+            }
+            chips.addView(chip(label, accent = h >= 2000))
+        }
+        item.videoCodec?.let { chips.addView(chip(it.uppercase(), accent = false)) }
+        if (item.isHdr) chips.addView(chip("HDR", accent = true))
+        val mins = (item.duration / 60).toInt()
+        if (mins > 0) chips.addView(chip("${mins} min", accent = false))
+    }
+
+    private fun chip(text: String, accent: Boolean): TextView {
+        val d = resources.displayMetrics.density
+        return TextView(this).apply {
+            this.text = text
+            setBackgroundResource(if (accent) R.drawable.bg_chip_accent else R.drawable.bg_chip)
+            setTextColor(
+                getColor(if (accent) R.color.accent else R.color.text_secondary),
+            )
+            textSize = 14f
+            letterSpacing = 0.03f
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            setPadding((12 * d).toInt(), (5 * d).toInt(), (12 * d).toInt(), (5 * d).toInt())
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { marginEnd = (8 * d).toInt() }
+        }
+    }
+
+    /** Réglages de lecture EN AMONT : langue audio préférée + sous-titres. */
+    private fun showPlaybackSettings() {
+        val langs = listOf("fr" to "Français", "en" to "English", "es" to "Español",
+            "de" to "Deutsch", "it" to "Italiano", "" to "Original (auto)")
+        val current = PluxyApplication.audioLang(this)
+        var pickedLang = current
+        AlertDialog.Builder(this)
+            .setTitle("Langue audio préférée")
+            .setSingleChoiceItems(langs.map { it.second }.toTypedArray(),
+                langs.indexOfFirst { it.first == current }.coerceAtLeast(0)) { _, w ->
+                pickedLang = langs[w].first
+            }
+            .setPositiveButton("Suivant") { _, _ -> chooseSubsThen(pickedLang) }
+            .setNegativeButton("Annuler", null)
+            .show()
+    }
+
+    private fun chooseSubsThen(lang: String) {
+        val modes = listOf("auto" to "Sous-titres : automatiques", "off" to "Sous-titres : désactivés")
+        val current = PluxyApplication.subsMode(this)
+        AlertDialog.Builder(this)
+            .setTitle("Sous-titres")
+            .setSingleChoiceItems(modes.map { it.second }.toTypedArray(),
+                modes.indexOfFirst { it.first == current }.coerceAtLeast(0)) { d, w ->
+                PluxyApplication.setPlaybackPrefs(this, lang, modes[w].first)
+                Toast.makeText(this, "Réglages enregistrés", Toast.LENGTH_SHORT).show()
+                d.dismiss()
+            }
+            .show()
+    }
+
+    private fun loadMetadata() {
+        val status = findViewById<TextView>(R.id.status)
+        status.setText(R.string.label_metadata_loading)
+        lifecycleScope.launch {
+            val meta = try {
+                api.metadata(item.id)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                null
+            }
+            val message = when {
+                !item.available -> getString(R.string.media_unavailable_detail)
+                meta == null -> getString(R.string.label_metadata_unavailable)
+                !meta.matched -> getString(R.string.label_metadata_unmatched)
+                else -> ""
+            }
+            status.text = message
+            status.visibility = if (message.isBlank()) View.GONE else View.VISIBLE
+            if (meta != null) {
+                bind(meta)
+            } else {
+                findViewById<View>(R.id.overviewLabel).visibility = View.GONE
+                findViewById<View>(R.id.overview).visibility = View.GONE
+            }
+        }
+    }
+
+    private fun loadPlaybackDiagnostic() {
+        val view = findViewById<TextView>(R.id.playDiagnostic)
+        lifecycleScope.launch {
+            val decision = try {
+                api.diagnose(item.id)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                null
+            }
+            if (decision == null) {
+                view.setText(R.string.label_diagnostic_unavailable)
+                view.setTextColor(0xFFB4BCCC.toInt())
+                renderPlaybackActions()
+                return@launch
+            }
+            playbackDecision = decision
+            renderPlaybackActions()
+            val ui = PlaybackDiagnostic.from(decision)
+            view.text = when (ui.level) {
+                DiagnosticLevel.DIRECT -> getString(R.string.label_direct_play_status, ui.title)
+                DiagnosticLevel.ADAPTATION -> getString(R.string.label_adaptation_status, ui.title)
+                DiagnosticLevel.WARNING -> getString(R.string.label_warning_status, ui.title)
+                DiagnosticLevel.UNSUPPORTED ->
+                    getString(R.string.label_unsupported_status, ui.title)
+            }
+            view.setTextColor(
+                when (ui.level) {
+                    DiagnosticLevel.DIRECT -> 0xFF68D391.toInt()
+                    DiagnosticLevel.ADAPTATION -> getColor(R.color.accent)
+                    DiagnosticLevel.WARNING -> 0xFFF6C85F.toInt()
+                    DiagnosticLevel.UNSUPPORTED -> 0xFFFF7B7B.toInt()
+                },
+            )
+        }
+    }
+
+    private fun showDiagnosticDetails() {
+        val decision = playbackDecision
+        if (decision == null) {
+            Toast.makeText(this, "Le diagnostic sera relancé au démarrage de la lecture.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val ui = PlaybackDiagnostic.from(decision)
+        AlertDialog.Builder(this)
+            .setTitle(ui.title)
+            .setMessage(ui.detail + "\n\nProfil : " + (decision.profileName ?: "détection locale"))
+            .setPositiveButton("Fermer", null)
+            .show()
+    }
+
+    private fun bind(m: MovieMetadata) {
+        findViewById<TextView>(R.id.title).text = m.title
+        findViewById<ImageView>(R.id.poster).apply {
+            contentDescription = getString(R.string.description_poster_title, m.title)
+            LanUrlPolicy.safeTmdbImage(m.posterUrl)?.let { posterUrl ->
+                load(posterUrl) {
+                    crossfade(true)
+                    listener(
+                        onSuccess = { _, _ ->
+                            findViewById<TextView>(R.id.posterFallback).visibility = View.GONE
+                        },
+                    )
+                }
+            }
+        }
+        LanUrlPolicy.safeTmdbImage(m.backdropUrl)?.let {
+            findViewById<ImageView>(R.id.backdrop).load(it) {
+                listener(onError = { _, _ -> loadLocalBackdrop() })
+            }
+        }
+
+        val sub = listOfNotNull(
+            m.year?.toString(),
+            m.runtime?.let { "${it} min" },
+            m.genres.takeIf { it.isNotEmpty() }?.joinToString(", "),
+        ).joinToString("  ·  ")
+        findViewById<TextView>(R.id.sub).text = sub
+        buildRatings(m)
+
+        findViewById<TextView>(R.id.tagline).apply {
+            text = m.tagline ?: ""; visibility = if (m.tagline.isNullOrBlank()) View.GONE else View.VISIBLE
+        }
+        val hasOverview = !m.overview.isNullOrBlank()
+        findViewById<TextView>(R.id.overview).apply {
+            text = m.overview.orEmpty()
+            visibility = if (hasOverview) View.VISIBLE else View.GONE
+        }
+        findViewById<TextView>(R.id.overviewLabel).visibility = if (hasOverview) View.VISIBLE else View.GONE
+        findViewById<TextView>(R.id.director).apply {
+            text = m.director?.let { getString(R.string.label_director, it) }.orEmpty()
+            visibility = if (m.director.isNullOrBlank()) View.GONE else View.VISIBLE
+        }
+
+        val hasCast = m.cast.isNotEmpty()
+        findViewById<TextView>(R.id.castLabel).visibility =
+            if (hasCast) View.VISIBLE else View.GONE
+        findViewById<RecyclerView>(R.id.cast).apply {
+            visibility = if (hasCast) View.VISIBLE else View.GONE
+            adapter = if (hasCast) CastAdapter(m.cast) else null
+        }
+
+        // Bande-annonce
+        val trailerBtn = findViewById<Button>(R.id.trailer)
+        val trailerUrl = LanUrlPolicy.safeYoutubeTrailer(m.trailerUrl)
+        if (trailerUrl != null) {
+            trailerBtn.visibility = View.VISIBLE
+            trailerBtn.setOnClickListener { openTrailer(trailerUrl) }
+        } else {
+            trailerBtn.visibility = View.GONE
+        }
+    }
+
+    private fun play() {
+        val decision = playbackDecision
+        if (decision != null && !decision.playable) {
+            val ui = PlaybackDiagnostic.from(decision)
+            AlertDialog.Builder(this)
+                .setTitle("Lecture non garantie")
+                .setMessage(
+                    ui.detail + "\n\nLe serveur ne peut pas adapter ce fichier. " +
+                        "Vous pouvez tout de même laisser le lecteur tenter le fichier original.",
+                )
+            .setPositiveButton("Essayer en direct") { _, _ ->
+                launchPlayer(
+                    forceDirect = true,
+                    startFromBeginning = primaryStartsFromBeginning,
+                    autoResume = primaryAutoResume,
+                )
+            }
+                .setNegativeButton("Annuler", null)
+                .show()
+            return
+        }
+        launchPlayer(
+            forceDirect = false,
+            startFromBeginning = primaryStartsFromBeginning,
+            autoResume = primaryAutoResume,
+        )
+    }
+
+    private fun launchPlayer(
+        forceDirect: Boolean,
+        startFromBeginning: Boolean,
+        autoResume: Boolean,
+    ) {
+        val json = moshi.adapter(MediaItem::class.java).toJson(item)
+        startActivity(Intent(this, PlayerActivity::class.java)
+            .putExtra(PlayerActivity.EXTRA_ITEM, json)
+            .putExtra(PlayerActivity.EXTRA_FORCE_DIRECT, forceDirect)
+            .putExtra(PlayerActivity.EXTRA_START_FROM_BEGINNING, startFromBeginning)
+            .putExtra(PlayerActivity.EXTRA_AUTO_RESUME, autoResume))
+    }
+
+    private fun openTrailer(url: String) {
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+        } catch (e: Exception) {
+            Toast.makeText(this, "Aucune application pour ouvrir la bande-annonce", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    companion object {
+        const val EXTRA_ITEM = "extra_item_json"
+    }
+}
+
+internal fun formatPlaybackTime(positionMs: Long): String {
+    val totalSeconds = (positionMs.coerceAtLeast(0L) / 1_000L)
+    val hours = totalSeconds / 3_600L
+    val minutes = (totalSeconds % 3_600L) / 60L
+    val seconds = totalSeconds % 60L
+    return if (hours > 0L) "%d:%02d:%02d".format(hours, minutes, seconds)
+    else "%02d:%02d".format(minutes, seconds)
+}
+
+private class CastAdapter(private val cast: List<CastMember>) :
+    RecyclerView.Adapter<CastAdapter.VH>() {
+
+    class VH(v: View) : RecyclerView.ViewHolder(v) {
+        val profile: ImageView = v.findViewById(R.id.profile)
+        val actor: TextView = v.findViewById(R.id.actor)
+        val character: TextView = v.findViewById(R.id.character)
+    }
+
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
+        val v = LayoutInflater.from(parent.context).inflate(R.layout.item_cast, parent, false)
+        return VH(v)
+    }
+
+    override fun getItemCount() = cast.size
+
+    override fun onBindViewHolder(h: VH, position: Int) {
+        val c = cast[position]
+        h.actor.text = c.name
+        h.character.text = c.character ?: ""
+        h.character.visibility = if (c.character.isNullOrBlank()) View.GONE else View.VISIBLE
+        h.itemView.isFocusable = true
+        h.itemView.contentDescription = listOfNotNull(c.name, c.character).joinToString(", ")
+        h.profile.contentDescription = null
+        val profile = LanUrlPolicy.safeTmdbImage(c.profileUrl)
+        if (profile != null) h.profile.load(profile) { crossfade(true) }
+        else {
+            h.profile.dispose()
+            h.profile.setImageDrawable(null)
+        }
+    }
+}

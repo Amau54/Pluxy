@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="photo_previous_action">Précédente</string>
+    <string name="photo_next_action">Suivante</string>
+    <string name="photo_slideshow_start">Diaporama</string>
+    <string name="photo_slideshow_pause">Pause</string>
+    <string name="photo_single_image">Une seule photo dans ce dossier</string>
+    <string name="photo_remote_hint">← → : photos · OK / ↑ / ↓ : commandes · Retour : masquer puis quitter</string>
+</resources>

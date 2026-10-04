@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Pluxy Serveur</string>
+    <string name="notification_channel_name">Serveur multimédia</string>
+    <string name="notification_channel_description">Maintient le serveur Pluxy disponible pour la télévision.</string>
+</resources>

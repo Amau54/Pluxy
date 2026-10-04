@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="pluxy_bg">#090C12</color>
+    <color name="pluxy_card">#D9121821</color>
+    <color name="pluxy_card_alt">#CC1B2330</color>
+    <color name="pluxy_glass">#D9121821</color>
+    <color name="pluxy_glass_reflection">#D9232D3D</color>
+    <color name="pluxy_glass_base">#E3121821</color>
+    <color name="pluxy_glass_pressed">#253142</color>
+    <color name="pluxy_glass_stroke">#44C8D5EB</color>
+    <color name="pluxy_accent">#F6AD84</color>
+    <color name="pluxy_accent_bright">#FBC9AB</color>
+    <color name="pluxy_accent_dark">#D69072</color>
+    <color name="pluxy_on_accent">#211610</color>
+    <color name="pluxy_text">#F2F3F7</color>
+    <color name="pluxy_muted">#ADB4C3</color>
+    <color name="pluxy_ambient_top">#151D29</color>
+    <color name="pluxy_ambient_center">#0D1119</color>
+    <color name="pluxy_glow_coral">#28EC9B90</color>
+    <color name="pluxy_glow_coral_end">#00EC9B90</color>
+    <color name="pluxy_glow_blue">#1F7999C0</color>
+    <color name="pluxy_glow_blue_end">#007999C0</color>
+    <color name="pluxy_success">#38C793</color>
+    <color name="pluxy_error">#FF6B6B</color>
+</resources>

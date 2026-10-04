@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Fond/placeholder d'affiche : coins arrondis (sert aussi d'outline pour le clip). -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/bg_elev" />
+    <corners android:radius="@dimen/radius_md" />
+</shape>

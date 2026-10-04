@@ -1,0 +1,300 @@
+// Settings are staged locally until persistence succeeds. Scans use saved folders.
+let CFG = null;
+let baseline = '';
+let saving = false;
+let picking = false;
+let scanning = false;
+let statusPending = false;
+let statusTimer;
+let toastTimer;
+const $ = id => document.getElementById(id);
+
+function toast(message, error = false) {
+  const element = $('toast');
+  element.textContent = message;
+  element.className = 'toast show' + (error ? ' error' : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => element.className = 'toast', 5000);
+}
+
+async function request(url, options = {}, timeout = 15000) {
+  const controller = new AbortController();
+  const timer = timeout ? setTimeout(() => controller.abort(), timeout) : null;
+  try {
+    const response = await fetch(url, {...options, signal: controller.signal});
+    const data = await response.json().catch(() => null);
+    if (!response.ok) {
+      throw new Error(typeof data?.detail === 'string' ? data.detail : 'Requête refusée (' + response.status + ').');
+    }
+    if (!data) throw new Error('Réponse du serveur illisible.');
+    return data;
+  } catch (error) {
+    if (error.name === 'AbortError') throw new Error('Le serveur ne répond pas. Réessayez dans un instant.');
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function folders() {
+  return [...new Set((CFG?.server.media_dirs || []).map(path => path.trim()).filter(Boolean))];
+}
+
+function readPatch() {
+  return {
+    server: {name: $('serverName').value.trim() || 'Pluxy', port: Number($('port').value), media_dirs: folders(), autostart: $('autostart').checked},
+    discovery: {enabled: $('discovery').checked},
+    transcoding: {prefer_direct_play: $('preferDirect').checked, hardware_acceleration: $('hw').checked, force_transcode: $('force').checked, preset: $('preset').value, max_bitrate_mbps: Number($('bitrate').value), hdr_tone_mapping: $('tonemap').value},
+    audio: {force_audio_passthrough: $('passthrough').checked, target_codec: $('acodec').value},
+    client_buffer: {target_buffer_bytes_mb: Number($('bufmb').value)},
+    subtitles: {prefer_external: $('externalSubs').checked},
+    metadata: {enabled: $('metaEnabled').checked, tmdb_api_key: $('tmdbKey').value.trim(), language: $('metaLang').value},
+    network: {delivery: $('delivery').value}
+  };
+}
+
+function isDirty() {
+  return !!CFG && JSON.stringify(readPatch()) !== baseline;
+}
+
+function updateControls() {
+  document.querySelectorAll('button, input, select').forEach(element => {
+    if (element.id !== 'retryButton') element.disabled = !CFG || saving || picking;
+  });
+  $('scanButton').disabled = !CFG || saving || picking || scanning;
+  $('saveButton').disabled = !CFG || saving || picking || !isDirty();
+  $('saveButton').textContent = saving ? 'Enregistrement…' : 'Enregistrer les réglages';
+  $('saveState').textContent = saving ? 'Enregistrement en cours…' : !CFG ? 'Chargement des réglages…' : isDirty() ? 'Modifications à enregistrer' : 'Tous les réglages sont enregistrés';
+}
+
+function renderFolders() {
+  const list = $('folderList');
+  const items = folders();
+  $('setupGuide').hidden = items.length > 0;
+  list.replaceChildren();
+  if (!items.length) {
+    const empty = document.createElement('div');
+    empty.className = 'empty';
+    empty.textContent = 'Aucun dossier : ajoutez au moins un emplacement contenant vos médias.';
+    list.append(empty);
+  }
+  items.forEach(path => {
+    const chip = document.createElement('div');
+    chip.className = 'folder';
+    const label = document.createElement('span');
+    label.textContent = path;
+    label.title = path;
+    const remove = document.createElement('button');
+    remove.textContent = '×';
+    remove.setAttribute('aria-label', 'Retirer le dossier ' + path);
+    remove.onclick = () => {
+      CFG.server.media_dirs = items.filter(item => item !== path);
+      renderFolders();
+      updateControls();
+    };
+    chip.append(label, remove);
+    list.append(chip);
+  });
+}
+
+function setRange(id, value, label, unit) {
+  $(id).value = value;
+  $(label).textContent = $(id).value + ' ' + unit;
+}
+
+function setSelect(id, value) {
+  const select = $(id);
+  select.querySelectorAll('option[data-current]').forEach(option => option.remove());
+  if (![...select.options].some(option => option.value === value)) {
+    const option = new Option(value, value);
+    option.dataset.current = 'true';
+    select.add(option);
+  }
+  select.value = value;
+}
+
+function loadForm() {
+  const {server: s, transcoding: t, audio: a, client_buffer: b, network: n, metadata: m, subtitles: sub, discovery: d} = CFG;
+  $('serverName').value = s.name;
+  $('port').value = s.port;
+  $('autostart').checked = s.autostart;
+  $('discovery').checked = d.enabled;
+  $('preferDirect').checked = t.prefer_direct_play;
+  $('hw').checked = t.hardware_acceleration;
+  $('force').checked = t.force_transcode;
+  setSelect('preset', t.preset);
+  setRange('bitrate', t.max_bitrate_mbps, 'bitrateVal', 'Mbps');
+  $('tonemap').value = t.hdr_tone_mapping;
+  $('passthrough').checked = a.force_audio_passthrough;
+  $('acodec').value = a.target_codec;
+  setRange('bufmb', b.target_buffer_bytes_mb, 'bufmbVal', 'Mo');
+  $('externalSubs').checked = sub.prefer_external;
+  $('metaEnabled').checked = m.enabled;
+  $('tmdbKey').value = m.tmdb_api_key;
+  setSelect('metaLang', m.language);
+  $('delivery').value = n.delivery;
+  renderFolders();
+  baseline = JSON.stringify(readPatch());
+  updateControls();
+}
+
+async function load() {
+  $('retryButton').disabled = true;
+  try {
+    const config = await request('/api/settings');
+    if (!['server', 'transcoding', 'audio', 'client_buffer', 'network', 'metadata', 'subtitles', 'discovery'].every(key => config[key])) {
+      throw new Error('Réglages incomplets reçus du serveur.');
+    }
+    CFG = config;
+    loadForm();
+    $('loadError').hidden = true;
+    await updateStatus();
+  } catch (error) {
+    $('loadError').hidden = false;
+    $('loadErrorText').textContent = error.message;
+    $('statusText').textContent = 'Connexion impossible';
+  } finally {
+    $('retryButton').disabled = false;
+    updateControls();
+  }
+}
+
+async function updateStatus() {
+  if (statusPending) return;
+  statusPending = true;
+  clearTimeout(statusTimer);
+  try {
+    const info = await request('/api/server/info', {}, 6000);
+    scanning = !!info.scanning;
+    $('mediaCount').textContent = info.media_count ?? 0;
+    $('scanState').textContent = scanning ? 'Analyse…' : info.media_count ? 'Prête' : 'À remplir';
+    // The configured port applies after restart; keep the live address accurate.
+    const activePort = Number(location.port || 80);
+    $('serverAddress').textContent = (info.primary_ip || 'localhost') + ':' + activePort;
+    $('serverAddress').title = $('serverAddress').textContent;
+    $('ffmpegState').textContent = info.transcoding_available ? 'Disponible' : 'Non détecté';
+    $('statusText').textContent = scanning ? 'Analyse en cours' : 'Serveur actif';
+    $('statusDot').className = 'dot ok';
+  } catch (error) {
+    $('statusText').textContent = 'Serveur indisponible';
+    $('statusDot').className = 'dot';
+  } finally {
+    statusPending = false;
+    updateControls();
+    if (!document.hidden) statusTimer = setTimeout(updateStatus, 5000);
+  }
+}
+
+async function pickFolder() {
+  if (!CFG || saving || picking) return;
+  picking = true;
+  updateControls();
+  try {
+    // Windows owns the dialog; choosing a folder can take longer than an HTTP timeout.
+    const result = await request('/api/settings/pick-folder', {method: 'POST'}, 0);
+    if (!result.path) return;
+    CFG.server.media_dirs = [...new Set([...folders(), result.path])];
+    renderFolders();
+    updateControls();
+  } catch (error) {
+    toast(error.message + ' Saisissez le chemin manuellement.', true);
+  } finally {
+    picking = false;
+    updateControls();
+  }
+}
+
+function addManualFolder() {
+  if (!CFG || saving || picking) return;
+  const input = $('manualFolder');
+  const path = input.value.trim();
+  if (!path) return;
+  CFG.server.media_dirs = [...new Set([...folders(), path])];
+  input.value = '';
+  renderFolders();
+  updateControls();
+}
+
+async function save() {
+  if (!CFG || saving || picking) return false;
+  if (!isDirty()) return true;
+  if (!$('port').reportValidity()) return false;
+  const patch = readPatch();
+  const portChanged = patch.server.port !== Number(location.port || 80);
+  saving = true;
+  updateControls();
+  try {
+    CFG = await request('/api/settings', {method: 'PATCH', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(patch)});
+    loadForm();
+    $('restartNotice').hidden = !portChanged;
+    toast(portChanged ? 'Réglages enregistrés. Redémarrez Pluxy pour appliquer le nouveau port.' : 'Réglages enregistrés');
+    return true;
+  } catch (error) {
+    toast(error.message, true);
+    return false;
+  } finally {
+    saving = false;
+    updateControls();
+  }
+}
+
+async function rescan() {
+  if (!CFG || saving || picking || scanning) return;
+  if (isDirty() && !await save()) return;
+  if (!folders().length) {
+    toast('Ajoutez un dossier avant de lancer l’analyse.', true);
+    $('manualFolder').focus();
+    return;
+  }
+  scanning = true;
+  updateControls();
+  try {
+    const result = await request('/api/library/scan', {method: 'POST'});
+    toast(result.status === 'scanning' ? 'Analyse lancée' : 'Analyse déjà en cours');
+  } catch (error) {
+    scanning = false;
+    toast(error.message, true);
+  } finally {
+    await updateStatus();
+  }
+}
+
+async function refreshMetadata() {
+  if (!CFG || saving || picking) return;
+  if (isDirty() && !await save()) return;
+  try {
+    await request('/api/library/refresh-metadata', {method: 'POST'});
+    toast('Actualisation TMDB lancée');
+  } catch (error) {
+    toast(error.message, true);
+  }
+}
+
+async function copyAddress() {
+  try {
+    const info = await request('/api/server/info');
+    const address = new URL(info.base_url);
+    address.port = location.port;
+    await navigator.clipboard.writeText(address.href);
+    toast('Adresse copiée : ' + address.href);
+  } catch (error) {
+    toast('Copie impossible : utilisez l’adresse affichée.', true);
+  }
+}
+
+$('bitrate').oninput = event => $('bitrateVal').textContent = event.target.value + ' Mbps';
+$('bufmb').oninput = event => $('bufmbVal').textContent = event.target.value + ' Mo';
+$('manualFolder').onkeydown = event => { if (event.key === 'Enter') addManualFolder(); };
+document.querySelectorAll('input, select').forEach(element => {
+  element.addEventListener('input', updateControls);
+  element.addEventListener('change', updateControls);
+});
+document.addEventListener('visibilitychange', () => {
+  clearTimeout(statusTimer);
+  if (!document.hidden && CFG) updateStatus();
+});
+window.addEventListener('beforeunload', event => {
+  if (isDirty() || saving) { event.preventDefault(); event.returnValue = ''; }
+});
+updateControls();
+load();

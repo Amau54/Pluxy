@@ -1,0 +1,12 @@
+# Python 3.11–3.14. Versions directes épinglées pour rendre les installations et
+# l'audit reproductibles. Dependabot propose les mises à jour après passage de la CI.
+fastapi==0.139.2
+uvicorn[standard]==0.51.0
+pydantic==2.13.4
+aiofiles==25.1.0
+python-multipart==0.0.32
+httpx==0.28.1
+# Mini-app de la barre des tâches Windows (icône + menu). Optionnel : la tray
+# s'auto-installe ces paquets si absents.
+pystray==0.19.5
+Pillow==12.3.0

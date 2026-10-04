@@ -1,0 +1,26 @@
+version: 2
+updates:
+  - package-ecosystem: gradle
+    directory: /client
+    schedule:
+      interval: weekly
+    # Mises a jour de versions examinees manuellement, sans PR automatique.
+    open-pull-requests-limit: 0
+    groups:
+      android-dependencies:
+        patterns: ['*']
+
+  - package-ecosystem: pip
+    directory: /server
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+    groups:
+      python-dependencies:
+        patterns: ['*']
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0

@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="brand_pluxy">Pluxy</string>
+    <string name="action_search">Rechercher</string>
+    <string name="action_search_all">Rechercher dans tous les médias</string>
+    <string name="action_clear">Effacer</string>
+    <string name="action_sort_filter">Trier et filtrer</string>
+    <string name="action_choose_photo_folder">Choisir les photos à afficher</string>
+    <string name="photo_folder_all">Tous les dossiers</string>
+    <string name="photo_folder_control">Photos affichées : %1$s. OK pour choisir un dossier.</string>
+    <string name="photo_collapse_all">Tout replier</string>
+    <string name="photo_expand_all">Tout déplier</string>
+    <string name="action_refresh">Actualiser</string>
+    <string name="action_settings">Réglages</string>
+    <string name="action_tools">Outils</string>
+    <string name="action_change_server">Changer de serveur</string>
+    <string name="action_find_server">Rechercher un serveur</string>
+    <string name="action_retry">Réessayer</string>
+    <string name="action_rescan">Rechercher à nouveau</string>
+    <string name="action_connect">Se connecter</string>
+    <string name="action_play">Lire</string>
+    <string name="action_restart">Recommencer</string>
+    <string name="action_trailer">Bande-annonce</string>
+    <string name="action_audio_subtitles">Audio et sous-titres</string>
+    <string name="action_pause">Pause</string>
+
+    <string name="destination_home">Accueil</string>
+    <string name="destination_movies">Films</string>
+    <string name="destination_series">Séries</string>
+    <string name="destination_photos">Photos</string>
+    <string name="destination_music">Musique</string>
+    <string name="mobile_category_swipe_hint">Glissez ← ou → pour changer de rubrique</string>
+
+    <string name="label_direct_play_check">Vérification du Direct Play…</string>
+    <string name="label_metadata_loading">Chargement des informations…</string>
+    <string name="label_metadata_unavailable">Métadonnées indisponibles.</string>
+    <string name="label_metadata_unmatched">Film non identifié (titre déduit du fichier).</string>
+    <string name="label_diagnostic_unavailable">Diagnostic indisponible · la vérification sera refaite au lancement</string>
+    <string name="label_direct_play_try">Essayer en Direct Play</string>
+    <string name="label_direct_play_status">Direct Play · %1$s</string>
+    <string name="label_adaptation_status">Adaptation · %1$s</string>
+    <string name="label_warning_status">Attention · %1$s</string>
+    <string name="label_unsupported_status">Non compatible · %1$s</string>
+    <string name="label_director">Réalisé par %1$s</string>
+    <string name="label_resume_at">Reprendre à %1$s</string>
+    <string name="action_replay">Relire</string>
+    <string name="label_synopsis">SYNOPSIS</string>
+    <string name="label_cast">DISTRIBUTION</string>
+    <string name="label_episodes">ÉPISODES</string>
+    <string name="label_hdr">HDR</string>
+    <string name="label_watched">Vu</string>
+    <string name="label_watched_upper">VU</string>
+    <string name="description_episode_watched">Épisode vu</string>
+    <string name="description_audio_cover">Pochette audio</string>
+    <string name="description_poster">Affiche</string>
+    <string name="description_poster_title">Affiche de %1$s</string>
+    <string name="description_photo">Photo</string>
+
+    <string name="player_zero_time">00:00</string>
+    <string name="player_timeline_description">Position dans le média</string>
+    <string name="player_rewind_description">Reculer de 10 secondes</string>
+    <string name="player_forward_description">Avancer de 10 secondes</string>
+    <string name="player_play_description">Lecture</string>
+    <string name="player_more">Plus d’options</string>
+    <string name="player_seek_delta">%1$s · %2$s</string>
+    <string name="photo_slideshow_active">Diaporama actif</string>
+
+    <string name="server_setup_title">Connexion au serveur Pluxy</string>
+    <string name="server_setup_scanning">Recherche du serveur sur le réseau…</string>
+    <string name="server_setup_trust_warning">Pluxy est destiné à un réseau domestique de confiance. Tous les appareils du LAN peuvent accéder au catalogue et aux flux ; ne l’utilisez pas sur un Wi‑Fi public.</string>
+    <string name="server_setup_manual">…ou saisir l’adresse manuellement</string>
+    <string name="server_setup_hint">192.168.1.70 (ou 192.168.1.70:8420)</string>
+    <string name="server_none_found">Aucun serveur trouvé automatiquement. Vous pouvez relancer la recherche ou saisir son adresse.</string>
+    <string name="server_one_found">Serveur trouvé : %1$s</string>
+    <plurals name="server_found_count">
+        <item quantity="one">%1$d serveur trouvé — choisissez :</item>
+        <item quantity="other">%1$d serveurs trouvés — choisissez :</item>
+    </plurals>
+    <string name="server_choice">%1$s — %2$s:%3$d</string>
+    <string name="server_checking_address">Vérification de l’adresse locale…</string>
+    <string name="server_address_refused">Adresse refusée : utilisez une IP ou un nom du réseau local.</string>
+    <string name="server_connecting">Connexion à %1$s…</string>
+    <string name="server_connection_failed">Impossible de joindre %1$s. Vérifiez l’IP et le port.</string>
+    <string name="server_connected">Connecté à %1$s</string>
+    <string name="server_unreachable">Serveur injoignable.\n%1$s</string>
+
+    <string name="playback_error">Lecture impossible : %1$s</string>
+    <string name="photo_index">%1$d / %2$d</string>
+    <string name="setting_current_value">%1$s : %2$s</string>
+    <string name="season_number">Saison %1$d</string>
+    <string name="season_other">Autres</string>
+
+    <string name="settings_loading">Chargement…</string>
+    <string name="settings_server_unreachable">Serveur injoignable : %1$s</string>
+    <string name="settings_server">Serveur : %1$s</string>
+    <string name="settings_no_server">Aucun serveur configuré.</string>
+    <string name="settings_loading_advanced">Chargement des réglages avancés…</string>
+    <string name="settings_simple_help">L’onglet Accueil propose Reprendre, À suivre et les ajouts récents. Films, Séries, Photos et Musique restent accessibles séparément. Pluxy actualise le catalogue automatiquement.</string>
+    <string name="settings_android_server_help">Le téléphone envoie le fichier original sans le modifier. En Automatique, Pluxy augmente le tampon si le réseau peine. Les réglages NVENC, remux, audio et HLS restent disponibles uniquement avec le serveur PC Pluxy.</string>
+    <string name="settings_refresh_metadata">Rafraîchir les métadonnées (affiches et notes)</string>
+    <string name="settings_refresh_started">Rafraîchissement lancé en arrière-plan (affiches, synopsis et notes).</string>
+    <string name="settings_refresh_failed">Impossible de lancer le rafraîchissement. Vérifiez la connexion au serveur.</string>
+    <string name="settings_change_queued">Modification mise en attente…</string>
+    <string name="settings_lan_notice">Réseau domestique de confiance : le catalogue et les flux sont visibles par tous les appareils du LAN. This product uses the TMDB API but is not endorsed or certified by TMDB.</string>
+    <string name="settings_privacy">Confidentialité et crédits</string>
+    <string name="action_close">Fermer</string>
+    <string name="settings_row_value">%1$s\nValeur : %2$s%3$s</string>
+    <string name="settings_row_hint">\n%1$s</string>
+</resources>

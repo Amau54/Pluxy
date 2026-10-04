@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="player_audio_action">Audio</string>
+    <string name="player_subtitles_action">Sous-titres</string>
+    <string name="player_information_action">Informations de lecture</string>
+    <string name="player_retry_action">Réessayer</string>
+    <string name="player_leave_action">Quitter le lecteur</string>
+    <string name="player_language_unspecified">Langue non précisée</string>
+    <string name="player_audio_mono">Mono</string>
+    <string name="player_audio_stereo">Stéréo</string>
+    <string name="player_audio_channels">%1$d canaux</string>
+    <string name="player_error_title">Lecture interrompue</string>
+    <string name="player_retrying">Reprise de la lecture…</string>
+    <string name="player_connection_error">Le serveur ne répond pas. Vérifiez sa connexion, puis réessayez.</string>
+    <string name="player_file_missing_error">Ce fichier n’est plus disponible. Vérifiez son emplacement sur le serveur, puis réessayez.</string>
+    <string name="player_access_error">Le serveur refuse l’accès à ce fichier. Vérifiez ses permissions, puis réessayez.</string>
+    <string name="player_stream_error">La lecture s’est interrompue. Réessayez à partir de l’instant conservé.</string>
+    <string name="player_stalled_error">Le chargement n’avance plus. Réessayez à partir de l’instant conservé.</string>
+</resources>
