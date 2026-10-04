@@ -1,27 +1,23 @@
 # Pluxy 1.5.1
 
-Version Android commune aux deux applications : **1.5.1 · versionCode 46**.
+Lecteur et serveur Android : **version 1.5.1, versionCode 46**.
 
-- Interface TV modernisée avec surfaces glass, lueur discrète et focus télécommande lisible.
-- Bibliothèques personnalisables, recherche unifiée, reprise, épisode suivant, photos et musique.
-- Catalogue Android restauré en arrière-plan et conservé si une source devient inaccessible.
-- Cycle de démarrage et d'arrêt du serveur Android ordonné, connexions réseau libérées à leur fermeture.
-- Construction debug ciblée avec cache, installation ADB vérifiée et détection des APK déjà installées.
-- Publication validée par les contrôles Python et Android, avec certificats et sommes SHA-256 vérifiés.
+- Interface TV revue : panneaux translucides, lueur discrète et sélection plus visible.
+- Recherche commune aux films, séries, photos et musique.
+- Reprise de lecture, épisode suivant, galeries photo et albums musicaux.
+- Catalogue conservé quand un dossier Android devient temporairement inaccessible.
+- Démarrage et arrêt du serveur Android plus fiables.
+- Serveur PC : installation automatique de Python et réparation des composants au lancement.
+- Construction et installation des APK plus rapides, avec contrôle de leur version et signature.
 
-## Signature du canal de test
+## Mise à jour des APK de test
 
-Deux clés debug stables distinctes sont utilisées depuis le 4 octobre 2026 : une pour
-`com.pluxy.tv`, une pour `com.pluxy.server`. Les identifiants Android restent inchangés.
+Le canal GitHub utilise deux clés stables depuis le 4 octobre 2026, une par
+application. Si votre APK porte une autre signature, sauvegardez les réglages
+possibles, désinstallez-la puis installez la version actuelle.
+La désinstallation efface les données privées de l'application. Les médias
+stockés ailleurs restent sur leur support. Les mises à jour suivantes avec
+la même signature conservent normalement les données.
 
-Une ancienne APK portant un autre certificat nécessite une réinstallation unique.
-Sauvegardez les réglages disponibles avant de désinstaller : les données privées de
-l'application sont effacées. Les médias stockés hors de l'application restent sur leur
-support. Les mises à jour utilisant le même certificat conservent normalement les données.
-
-Les APK debug sont destinées aux tests hors Google Play. La publication Play utilise
-des clés séparées et exige la validation sur appareils réels.
-
-[Téléchargements](../../releases/tag/dev-latest) ·
-[Signature et sauvegarde](docs/DEBUG_SIGNING.md) ·
-[Validation des appareils](docs/DEVICE_VALIDATION.md).
+[Téléchargements](https://github.com/Amau54/Pluxy/releases/tag/dev-latest)
+· [Signature des APK](docs/DEBUG_SIGNING.md).

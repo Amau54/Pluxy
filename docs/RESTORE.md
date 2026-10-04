@@ -1,34 +1,42 @@
-# Restaurer Pluxy après un changement de PC
+# Sauvegarder et changer de PC
 
-## Réinstallation
+## Ce qu'il faut garder
 
-1. Installer Git sur le nouveau PC, ou télécharger et extraire le ZIP du dépôt.
-2. Cloner `https://github.com/Amau54/Pluxy.git` ; se connecter à GitHub si l'accès
-   au dépôt le demande.
-3. Pour le serveur PC sous Windows 10 ou 11, lancer `Pluxy-Server.bat`.
-   Python est installé automatiquement s'il manque, sans droits administrateur ni
-   modification du PATH. L'environnement et les composants Pluxy sont préparés
-   automatiquement ; une connexion Internet est nécessaire la première fois.
-4. Pour Android, réinstaller le JDK et le SDK indiqués par le workflow
-   `.github/workflows/build-apk.yml`, puis utiliser les scripts de construction.
-   Ne pas restaurer les caches Gradle ni les chemins SDK de l'ancien PC.
-5. Restaurer séparément les données privées du serveur dans
-   `%LOCALAPPDATA%\Pluxy`, serveur arrêté. Adapter les chemins des médias aux
-   nouveaux disques. Conserver aussi l'ancien `server/config.json` si utilisé.
-6. Restaurer les clés de signature et leurs identifiants depuis une sauvegarde
-   privée avant de produire un APK destiné à mettre à jour une installation.
-   Les APK ne permettent pas de reconstruire la clé privée. Les clés ne doivent
-   jamais être ajoutées au dépôt. Les variables de signature sont documentées
-   dans le [guide de signature debug](DEBUG_SIGNING.md) et les fichiers Gradle.
-   Restaurer les deux JKS et les identifiants portables de `recovery.json` depuis
-   le support privé chiffré. Recréer `credentials.xml` avec le nouveau compte
-   Windows : sa protection DPAPI n'est pas portable après formatage.
+- Vos médias, sur leur disque ou une sauvegarde séparée.
+- Le dossier `%LOCALAPPDATA%\Pluxy` : réglages, clés API, catalogue et progression du serveur PC.
+- L'ancien `server/config.json`, si vous l'utilisez encore.
+- Les clés de signature Android et leurs identifiants, si vous construisez les APK.
 
-GitHub sauvegarde les fichiers versionnés, pas les médias personnels, les
-réglages du serveur, les clés privées ou les modifications non commitées. Ils
-ont été volontairement exclus du dépôt. Conserver les deux clés debug stables
-créées le 4 octobre 2026 pour les prochaines mises à jour : une nouvelle clé
-imposerait encore une réinstallation et la perte des données privées Android.
+Si `PLUXY_DATA_DIR` est défini, sauvegardez son sous-dossier `Pluxy` à la place du chemin par défaut.
+Sous Linux/macOS, le dossier par défaut est `~/.local/share/Pluxy`.
+Arrêtez le serveur avant de copier ses données. Les clés et mots de passe doivent
+rester sur un support privé chiffré.
 
-La release `dev-latest` peut être plus ancienne que `main`. Vérifier sa version,
-son certificat et son `BUILD_INFO.json` avant installation.
+GitHub ne sauvegarde que les fichiers suivis par Git. Les réglages, médias et
+clés privées sont exclus du dépôt.
+
+## Sur le nouveau PC
+
+1. Téléchargez et extrayez le ZIP de Pluxy, ou clonez `https://github.com/Amau54/Pluxy.git`.
+   Connectez-vous à GitHub si l'accès au dépôt le demande.
+2. Restaurez les données du serveur dans leur dossier, serveur arrêté.
+3. Sous Windows 10 ou 11, lancez `Pluxy-Server.bat`. Python et les composants
+   nécessaires sont installés automatiquement. Internet est nécessaire la première fois.
+4. Vérifiez les chemins des dossiers médias : les lettres de lecteur peuvent avoir changé.
+
+Pour construire Android, réinstallez JDK 17, SDK 36, platform-tools et build-tools 36,
+puis utilisez `Build-APK.bat`. Les caches Gradle et les anciens chemins SDK
+n'ont pas besoin d'être restaurés.
+
+## Retrouver la signature des APK
+
+Restaurez les deux JKS et les mots de passe sauvegardés dans `recovery.json`.
+Recréez `credentials.xml` avec le nouveau compte Windows : sa protection DPAPI
+n'est pas portable après un formatage. La procédure et les variables sont dans
+[DEBUG_SIGNING.md](DEBUG_SIGNING.md).
+
+Une APK ne permet pas de retrouver sa clé privée. Changer de clé impose une
+réinstallation sur Android et efface les données privées de l'application.
+
+`dev-latest` contient le dernier build publié, qui peut être plus ancien que `main`.
+Sa version et ses certificats sont indiqués dans `BUILD_INFO.json`.

@@ -1,52 +1,35 @@
-# Sécurité de Pluxy
+# Sécurité
 
-## Modèle de confiance
+Pluxy est prévu pour un réseau domestique de confiance. Tous les appareils de ce
+réseau peuvent voir le serveur et lire les fichiers des dossiers partagés.
+Il n'y a ni authentification ni chiffrement des flux locaux.
 
-Pluxy est volontairement ouvert à tous les appareils d'un LAN domestique privé :
-aucun compte, mot de passe ou appairage n'est demandé pour découvrir le serveur,
-lister le catalogue ou lire un média.
+## Utilisation
 
-Les protections ne transforment pas un réseau non fiable en réseau sûr. Elles
-empêchent principalement une exposition accidentelle directe à Internet :
+- Choisissez uniquement les dossiers que vous voulez partager.
+- N'ouvrez pas les ports TCP 8420 et UDP 8421 sur la box.
+- N'exposez pas le serveur par un proxy ou un tunnel public.
+- Arrêtez-le avant de rejoindre un Wi-Fi public.
+- Gardez le système, Python, FFmpeg et les applications à jour.
 
-- seules les adresses loopback, RFC1918, link-local et IPv6 ULA sont acceptées ;
-- aucune redirection UPnP n'est créée ;
-- l'administration sensible du serveur PC est limitée à `localhost` ;
-- les clés API, chemins média et exécutables ne sont jamais renvoyés à la TV ;
-- les URL de flux, photos et miniatures locales restent sur le serveur sélectionné ;
-- les affiches externes sont limitées au CDN TMDB et les bandes-annonces à YouTube ;
-- les miniatures photo sont décodées avec une taille et une concurrence bornées pour
-  ne pas affamer un flux vidéo en cours ;
-- connexions, scans, éléments indexés, enrichissements et transcodages sont bornés.
+Les connexions sont limitées aux adresses locales. Pluxy ne crée pas de redirection
+UPnP. La configuration sensible du serveur PC reste accessible depuis `localhost`.
+Les clés API et les chemins privés ne sont pas renvoyés aux lecteurs.
 
-## Déploiement sûr
+## Clés et publications
 
-1. Utiliser uniquement un Wi-Fi/Ethernet domestique protégé.
-2. Ne jamais rediriger les ports TCP 8420 ou UDP 8421 sur la box.
-3. Ne pas placer le serveur derrière un proxy Internet ou un tunnel public.
-4. Garder Windows, Android, Python, FFmpeg et les dépendances à jour.
-5. Choisir uniquement les dossiers vidéo, photo et audio à partager. Pluxy ne demande
-   pas d'accès global au stockage.
-6. Arrêter le serveur avant de rejoindre un réseau public.
+Gardez les clés privées, mots de passe et réglages personnels hors de Git.
+Un certificat public peut être partagé. Une clé privée déjà exposée doit être
+remplacée, même après nettoyage de l'historique.
 
-## Signature et provenance
+Les APK de test utilisent les [clés debug stables](DEBUG_SIGNING.md).
+La [publication Google Play](PLAY_STORE_RELEASE.md) utilise d'autres clés et
+nécessite sa propre configuration. Les secrets manquants ou les tests sur appareils
+non réalisés doivent être réglés avant de publier.
 
-Les clés privées, mots de passe et réglages personnels doivent rester hors de Git.
-Un certificat public peut être partagé ; il ne permet pas de reconstruire sa clé privée.
-Toute clé anciennement exposée reste compromise, même après nettoyage du dépôt, et
-ne doit pas servir à une nouvelle publication. Une release officielle doit utiliser
-Play App Signing, deux clés d'envoi distinctes, l'environnement GitHub protégé
-`play-release`, puis les contrôles
-de signature, SBOM et sommes SHA-256 décrits dans
-[`PLAY_STORE_RELEASE.md`](PLAY_STORE_RELEASE.md).
+## Signaler un problème
 
-Les deux clés privées du nouveau canal debug, créées le 4 octobre 2026, sont
-conservées hors du dépôt et distinctes des clés d'envoi Google Play. Leur migration
-et leur sauvegarde sont décrites dans [DEBUG_SIGNING.md](DEBUG_SIGNING.md).
-
-## Signalement
-
-Ne publiez pas immédiatement une preuve de concept contenant des données privées.
-Ouvrez d'abord un ticket minimal sur
-[GitHub Issues](https://github.com/Amau54/Pluxy/issues) pour convenir d'un canal de
-transmission approprié.
+Utilisez un rapport privé dans l'onglet Security du dépôt si cette option est disponible.
+Sinon, ouvrez un [ticket](https://github.com/Amau54/Pluxy/issues) bref pour convenir
+d'un échange privé. N'y joignez pas de clé, journal personnel ou preuve de concept
+contenant des données privées. L'accès au suivi dépend de vos droits sur le dépôt.

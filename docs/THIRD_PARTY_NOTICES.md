@@ -1,35 +1,33 @@
-# Notices de composants tiers
+# Composants tiers et crédits
 
-## Google Cast et AndroidX Media3
+## AndroidX, Media3 et Google Cast
 
-Pluxy Serveur utilise AndroidX Media3 et le SDK Android Sender Google Cast pour la
-découverte et le contrôle facultatifs des récepteurs Cast. AndroidX est distribué sous
-licence Apache 2.0. Google Cast et Google Play services sont soumis aux conditions et
-politiques Google applicables :
+Les applications utilisent AndroidX et Media3, sous licence
+[Apache 2.0](https://github.com/androidx/media/blob/release/LICENSE).
+Pluxy Serveur utilise aussi le SDK Google Cast pour l'envoi vers un appareil Cast.
+Google Cast et Google Play services ont leurs propres
+[conditions d'utilisation](https://developers.google.com/cast/docs/terms) et leur
+[déclaration de données](https://developers.google.com/cast/docs/android_sender/data_disclosure).
 
-- <https://developer.android.com/media/media3>
-- <https://developers.google.com/cast/docs/terms>
-- <https://developers.google.com/cast/docs/android_sender/data_disclosure>
-
-Google Cast est une marque de Google LLC. Pluxy est un projet indépendant et ne doit pas
-être présenté comme approuvé ou certifié par Google.
+Google Cast est une marque de Google LLC. Pluxy est indépendant de Google.
 
 ## OkHttp
 
-Les applications et modules réseau utilisent OkHttp, distribué sous licence Apache 2.0 :
-<https://github.com/square/okhttp/blob/master/LICENSE.txt>.
+OkHttp assure une partie des échanges réseau des applications Android. Il est
+distribué sous [licence Apache 2.0](https://github.com/square/okhttp/blob/master/LICENSE.txt).
 
-## The Movie Database (TMDB)
+## The Movie Database
 
-Pluxy utilise facultativement l'API et les images de The Movie Database.
+L'API et les images TMDB sont utilisées lorsque les métadonnées TMDB sont activées.
 
 This product uses the TMDB API but is not endorsed or certified by TMDB.
 
-Le logo TMDB inclus dans les interfaces est le logo officiel « Asset 4 », créé par
-Travis Bell et publié par TMDB. Sa géométrie et son ratio ne sont pas modifiés ; la
-version blanche est autorisée par les règles de marque TMDB. Source officielle :
-<https://www.themoviedb.org/about/logos-attribution>.
+Le logo des écrans de crédits reprend le logo officiel « Asset 4 » de TMDB, créé par
+Travis Bell. Le tracé et les proportions sont conservés dans les fichiers Android
+`tmdb_logo.xml`. La version blanche suit les
+[règles de marque TMDB](https://developer.themoviedb.org/docs/faq).
 
-La copie SVG de référence est également distribuée sous licence Creative Commons
-Attribution-ShareAlike 4.0 :
-<https://commons.wikimedia.org/wiki/File:Tmdb.new.logo.svg>.
+Le [SVG de référence](https://commons.wikimedia.org/wiki/File:Tmdb.new.logo.svg) est
+distribué sous [licence Creative Commons Attribution-ShareAlike 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
+L'adaptation Android reprend ce tracé en blanc. Cette licence concerne le logo,
+pas les affiches ni les autres images renvoyées par l'API.

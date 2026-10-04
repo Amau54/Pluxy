@@ -1,46 +1,38 @@
-# Signature du canal APK debug
+# Clés des APK de test
 
-Le canal de test utilise deux clés privées stables depuis le **4 octobre 2026**, une
-pour le lecteur et une pour le serveur Android. Les identifiants Android restent
-inchangés. Ces clés permettent les mises à jour du même canal et sont conservées hors
-du dépôt, séparément des clés d'envoi Google Play.
+Depuis le 4 octobre 2026, chaque application a sa propre clé debug stable :
+`com.pluxy.tv` pour le lecteur et `com.pluxy.server` pour le serveur Android.
+Ces clés servent au canal GitHub `dev-latest`. Les clés Google Play sont séparées.
 
-## Installer ou changer de canal
+## Changer de signature
 
-Une APK portant un autre certificat ne peut pas mettre à jour directement
-l'application installée. Avant de rejoindre le canal actuel :
+Android refuse de mettre à jour une application avec une APK signée par une autre clé.
+Dans ce cas :
 
-1. Noter les réglages et sauvegarder les données exportables. Ne pas supposer qu'une
-   sauvegarde Android sera restaurable après un changement de certificat.
-2. Désinstaller l'ancienne application après avoir accepté la perte de ses données privées.
-3. Installer la nouvelle APK, puis reconfigurer connexion, permissions et dossiers.
+1. Notez vos réglages et sauvegardez ce qui peut être exporté.
+2. Désinstallez l'ancienne application.
+3. Installez la nouvelle APK et refaites les réglages et autorisations de dossiers.
 
-La désinstallation efface préférences et cache privés. Le serveur Android doit recevoir
-à nouveau les autorisations d'accès aux dossiers. Les médias stockés hors de
-l'application restent sur leur support ; le serveur PC et ses données ne sont pas
-réinstallés. Les scripts d'installation refusent une incompatibilité et ne désinstallent
-pas automatiquement l'application.
+La désinstallation efface les préférences et le cache privés. Les fichiers médias
+stockés hors de l'application restent sur leur support. Les scripts ADB refusent
+ce changement et ne désinstallent rien automatiquement.
 
-Cette réinstallation n'est requise que pour changer d'identité. Les mises à jour avec
-le même certificat conservent normalement les données.
+Avec la même clé, les mises à jour conservent normalement les données.
 
-## Certificats publics du canal actuel
+## Certificats du canal actuel
 
-Ces empreintes sont publiques ; elles ne permettent pas de reconstruire les clés privées.
+| Application | Certificat SHA-256 |
+|---|---|
+| `com.pluxy.tv` | `871e112ad4dff59554897fc54b105622614c08912972357bbcc0798ac9b936e3` |
+| `com.pluxy.server` | `961050702a4555191209e980c0a04f752981f02bc0d1cd2a8cafa96f43b3a626` |
 
-| Application | Package | Certificat SHA-256 |
-|---|---|---|
-| Lecteur debug | `com.pluxy.tv` | `871e112ad4dff59554897fc54b105622614c08912972357bbcc0798ac9b936e3` |
-| Serveur Android debug | `com.pluxy.server` | `961050702a4555191209e980c0a04f752981f02bc0d1cd2a8cafa96f43b3a626` |
+Ces empreintes sont publiques. Les clés privées et leurs mots de passe restent hors de Git.
+Les clés debug ne doivent pas servir à la [publication Google Play](PLAY_STORE_RELEASE.md).
+Une clé privée déjà exposée doit être remplacée, même si le dépôt a été nettoyé.
 
-Les clés debug ne doivent pas être réutilisées comme clés `UPLOAD` ni comme clés finales
-Play App Signing. Une clé anciennement exposée reste compromise, même après suppression
-du fichier ou de son historique. La procédure Play est décrite dans
-[PLAY_STORE_RELEASE.md](PLAY_STORE_RELEASE.md).
+## Construire avec les clés stables
 
-## Build Windows et dossier privé
-
-Sur un PC configuré, la signature debug est conservée hors du dépôt :
+Sur le PC de développement, les fichiers sont dans :
 
 ```text
 %LOCALAPPDATA%\Pluxy\Signing\debug-2026-10\
@@ -50,53 +42,46 @@ Sur un PC configuré, la signature debug est conservée hors du dépôt :
   recovery.json
 ```
 
-Les alias sont `pluxy-player-debug` et `pluxy-server-debug`. Les JKS contiennent les
-clés privées. Le dossier doit être réservé au compte Windows concerné.
+Les alias sont `pluxy-player-debug` et `pluxy-server-debug`.
+`Build-APK.bat` charge `credentials.xml` pour les applications demandées,
+puis retire les variables qu'il a créées. Les variables déjà définies restent prioritaires.
+Une configuration partielle est refusée.
 
-`credentials.xml` contient des mots de passe SecureString protégés par Windows DPAPI.
-`Build-APK.bat` charge temporairement les identifiants des modules demandés et retire
-les variables créées après le build. Les variables `PLUXY_PLAYER_DEBUG_*` et
-`PLUXY_SERVER_DEBUG_*` explicites sont prioritaires ; une configuration partielle est refusée.
+Pour une configuration manuelle, définissez les quatre variables de chaque application :
 
-Sans ces identifiants, le build utilise la clé debug Android locale. Gradle lancé
-directement doit recevoir les variables de signature pour utiliser les clés stables.
-Les APK de contrôle GitHub peuvent porter une signature temporaire : téléchargez
-`dev-latest` pour obtenir le certificat du canal publié.
+| Lecteur | Serveur Android |
+|---|---|
+| `PLUXY_PLAYER_DEBUG_STORE_FILE` | `PLUXY_SERVER_DEBUG_STORE_FILE` |
+| `PLUXY_PLAYER_DEBUG_STORE_PASSWORD` | `PLUXY_SERVER_DEBUG_STORE_PASSWORD` |
+| `PLUXY_PLAYER_DEBUG_KEY_ALIAS` | `PLUXY_SERVER_DEBUG_KEY_ALIAS` |
+| `PLUXY_PLAYER_DEBUG_KEY_PASSWORD` | `PLUXY_SERVER_DEBUG_KEY_PASSWORD` |
 
-## Sauvegarde et restauration
+Sans ces identifiants, un build local utilise la clé debug Android de ce PC.
+Gradle lancé directement a besoin des variables pour utiliser les clés stables.
+Les APK de contrôle de la CI peuvent aussi avoir une autre signature.
+Utilisez `dev-latest` pour installer celles du canal publié.
 
-**Sauvegarder ensemble les deux JKS et `recovery.json` sur un support privé chiffré.**
-Ce dernier contient les mots de passe portables en clair : les permissions Windows
-protègent l'accès local, mais ne chiffrent pas son contenu. Ne jamais copier ces fichiers
-dans Git, des pièces jointes publiques, des artefacts CI ou des journaux.
+## Sauvegarder les clés
 
-DPAPI lie `credentials.xml` au compte et à l'installation Windows d'origine. Copier
-ce fichier après formatage ne suffit pas à déchiffrer les mots de passe. Les JKS seuls
-ne permettent pas de reprendre la signature sans leurs identifiants.
+Conservez ensemble les deux JKS et `recovery.json` sur un support privé chiffré.
+`recovery.json` contient les mots de passe en clair. Les permissions Windows
+limitent l'accès au fichier, mais ne chiffrent pas son contenu.
 
-Après restauration, placer les JKS dans un dossier privé et recréer `credentials.xml`
-avec les chemins actuels et le nouveau compte Windows. Pour un build ponctuel, fournir
-au processus les quatre variables de chaque application :
+`credentials.xml` utilise Windows DPAPI : il est lié au compte et à l'installation
+Windows d'origine. Après un formatage ou un changement de PC, recréez-le à partir
+des identifiants sauvegardés et des nouveaux chemins. Copier le fichier seul ne suffit pas.
 
-- `PLUXY_PLAYER_DEBUG_STORE_FILE`, `PLUXY_PLAYER_DEBUG_STORE_PASSWORD`,
-  `PLUXY_PLAYER_DEBUG_KEY_ALIAS`, `PLUXY_PLAYER_DEBUG_KEY_PASSWORD` ;
-- `PLUXY_SERVER_DEBUG_STORE_FILE`, `PLUXY_SERVER_DEBUG_STORE_PASSWORD`,
-  `PLUXY_SERVER_DEBUG_KEY_ALIAS`, `PLUXY_SERVER_DEBUG_KEY_PASSWORD`.
-
-Vérifier le certificat réel de l'APK avant distribution. Garder les clés existantes :
-en générer d'autres imposerait une nouvelle réinstallation.
+Ne mettez aucun de ces fichiers dans Git, un journal ou un artefact public.
+Gardez les clés actuelles pour les prochaines mises à jour.
 
 ## Publication GitHub
 
-Le canal utilise huit secrets Actions : pour chacun des préfixes
-`PLUXY_PLAYER_DEBUG_` et `PLUXY_SERVER_DEBUG_`, les suffixes `JKS_BASE64`,
-`STORE_PASSWORD`, `KEY_ALIAS` et `KEY_PASSWORD`. Le Base64 d'un JKS est aussi secret
-que le fichier lui-même. Une copie du dépôt n'inclut pas les valeurs des secrets ;
-elles doivent être configurées dans le dépôt de publication.
+Pour chaque préfixe `PLUXY_PLAYER_DEBUG_` et `PLUXY_SERVER_DEBUG_`, les secrets
+Actions utilisent les suffixes `JKS_BASE64`, `STORE_PASSWORD`, `KEY_ALIAS` et
+`KEY_PASSWORD`, soit huit secrets. Le Base64 du JKS est lui aussi secret.
+Leurs valeurs doivent être configurées dans le dépôt qui publie les APK.
 
-La publication attend les contrôles Python, Android et APK du même run. Elle vérifie
-packages, versions, certificats et hashes avant d'actualiser `dev-latest`.
-`BUILD_INFO.json` et `SHA256SUMS.txt` décrivent les binaires publiés.
-Le certificat du canal précédent est contrôlé ; aucune rotation automatique n'est prévue.
-
-Référence : [signature et conservation des clés Android](https://developer.android.com/studio/publish/app-signing).
+La publication attend les contrôles Python, Android et APK du même run, vérifie
+les fichiers et les certificats, puis actualise `dev-latest`. Si les secrets
+manquent, le canal publié reste inchangé. Il n'y a pas de rotation automatique des clés.
+Les fichiers `BUILD_INFO.json` et `SHA256SUMS.txt` accompagnent les APK.

@@ -1,60 +1,58 @@
-# Validation réelle avant publication
+# Tests sur appareils
 
-La compilation et les tests unitaires ne valident ni les restrictions batterie OEM,
-ni le Wi-Fi écran éteint, ni les décodeurs réels d'un téléviseur. Cette matrice est un
-critère de sortie : une case non exécutée reste **à vérifier**, jamais « réussie ».
+Ces essais servent à vérifier les cas que les tests automatisés ne couvrent pas :
+lecture sur une vraie TV, navigation à la télécommande et téléphone écran éteint.
+Notez le résultat, le modèle et la version Android ou du firmware. Un essai
+non réalisé reste « non testé ».
 
-## Test serveur Android pendant deux heures
+## Lecteur TV
 
-1. Installer la build de contrôle sur le téléphone, sélectionner un dossier et démarrer
-   le serveur.
-2. Brancher ADB en Wi-Fi ou USB, relever son numéro avec `adb devices`.
-3. Démarrer un film sur la TV, verrouiller l'écran du téléphone puis exécuter :
+| À essayer | À vérifier |
+|---|---|
+| TV récente, Android TV 9–11, boîtier avec peu de mémoire | Navigation, lecture et stabilité |
+| 720p, 1080p, 4K, overscan activé | Texte lisible, boutons visibles, sélection toujours repérable |
+| H.264, HEVC, HDR, AV1 si pris en charge ; MP4, MKV, WebM, TS | Image, son et diagnostic en cas de format refusé |
+| AAC, AC3/EAC3, DTS, TrueHD, avec et sans ampli | Son présent ou limite expliquée |
+| Recherche, reprise, épisode suivant, audio et sous-titres | Tout accessible avec la télécommande |
+| Déplacement dans la vidéo, bref puis maintenu, début et fin du fichier | Position correcte, lecture/pause conservée |
+| Photos et musique, fichier absent ou corrompu, bibliothèque vide ou volumineuse | Navigation utilisable et erreur compréhensible |
+| Ethernet, Wi-Fi, coupure puis retour du réseau | Reprise à la bonne position, arrêt possible |
+| Plusieurs lecteurs et demandes simultanées de miniatures | Vidéo fluide, mémoire et connexions libérées après arrêt |
 
-```bash
-python tools/device_soak.py \
-  --server http://192.168.1.20:8420 \
-  --duration-minutes 120 --cycles 100 \
-  --adb-serial NUMERO_APPAREIL \
-  --output pluxy-soak-phone-tv.json
+Avec le serveur PC, essayer la lecture originale, le remux et le transcodage.
+Vérifier les modes Automatique, Direct Play et Compatibilité, y compris un changement
+pendant la lecture. Le débit adapté doit rester inférieur ou égal à celui du fichier.
+
+## Serveur Android
+
+Sur Pixel/AOSP, Samsung et Xiaomi/Redmi : lire pendant deux heures avec l'écran
+éteint, puis vérifier la batterie, la température et les interruptions éventuelles.
+Essayer aussi de retirer un dossier source et de couper puis rétablir le Wi-Fi.
+
+Pour surveiller le serveur depuis Windows, préparez d'abord Python en lançant
+`Pluxy-Server.bat`, puis branchez ADB et relevez le numéro avec `adb devices`.
+Lancez un film sur la TV, verrouillez le téléphone et exécutez depuis le dossier du projet :
+
+```powershell
+.\server\.venv\Scripts\python.exe tools\device_soak.py --server http://192.168.1.20:8420 --duration-minutes 120 --cycles 1000 --adb-serial NUMERO_APPAREIL --output pluxy-soak-phone-tv.json
 ```
 
-Le rapport ne contient ni nom de fichier ni extrait du média. Le script poursuit les
-cycles afin de mesurer les erreurs intermittentes, puis renvoie un code non nul si au
-moins un contrôle HTTP Range ou une mesure ADB obligatoire échoue. Il valide le serveur
-et le transport HTTP ; l'image, le son, le seek et les commandes réellement observés sur
-la télévision restent à consigner manuellement dans la matrice.
+Le script contrôle `/health`, les réponses HTTP Range et les mesures ADB sur une
+période de deux heures. Il renvoie un code d'erreur si un contrôle échoue.
+L'image, le son et les commandes de la TV doivent être vérifiés pendant l'essai.
+Gardez le rapport JSON localement ; il contient l'adresse du serveur et des diagnostics.
 
-La CI exécute trois cycles contre un faux serveur local afin de vérifier le script, les
-requêtes `/health` et la validation HTTP Range. Ce test rapide n'est pas un soak et ne
-peut jamais remplir une ligne de la matrice ci-dessous.
+## DLNA et Google Cast
 
-## Matrice minimale
+Essayer découverte, lecture, pause, déplacement et arrêt sur plusieurs modèles :
+Samsung, LG et Philips en DLNA, Chromecast et Google TV en Cast.
+Tester vidéo, photo et audio, coupure Wi-Fi et extinction du récepteur.
+Répéter cent fois la découverte, la connexion et l'arrêt pour repérer les
+connexions ou verrous qui restent ouverts.
 
-| Domaine | Variantes obligatoires | Critère |
-|---|---|---|
-| Téléphone serveur | Pixel/AOSP, Samsung, Xiaomi/Redmi | 2 h écran éteint, 0 rupture serveur |
-| Android TV | Google TV récent, Android TV 9–11, boîtier faible mémoire | aucun focus perdu, aucun débordement |
-| Affichage | 720p, 1080p, 4K, overscan activé | commandes et timeline entièrement visibles |
-| Vidéo | H.264, HEVC, HEVC Main10 HDR, AV1 si annoncé | diagnostic conforme au résultat réel |
-| Conteneur | MP4, MKV, WebM, TS | Direct Play ou adaptation annoncée avant lecture |
-| Audio | AAC, AC3/EAC3, DTS, TrueHD avec/sans ampli | son présent ou diagnostic explicite |
-| Réseau | Ethernet, Wi-Fi 5 GHz, perte/reprise Wi-Fi | reprise à la bonne position, aucun verrou bloqué |
-| Seek | 100 appuis courts, 20 maintiens, extrémités du média | cible précise, un seul seek par relâche |
-| Récepteurs | Samsung/LG/Philips DLNA, Chromecast/Google TV | play/pause/seek/stop et reconnexion |
+Vérifier aussi qu'une erreur de codec n'empêche pas les autres formats de fonctionner
+et que l'absence des services Google laisse le serveur et DLNA utilisables.
 
-Pour chaque ligne, consigner : date, modèle exact, version Android/firmware, protocole,
-codec/conteneur, résultat, position avant/après seek, perte réseau, batterie initiale et
-finale, température maximale et lien vers le rapport JSON. Une case vide ou « non testé »
-n'est jamais convertie en réussite dans la communication Play Store.
-
-## Mesures de sortie
-
-- 100 cycles découverte/connexion/arrêt sans socket ou verrou conservé ;
-- aucune température sévère signalée pendant la session de deux heures ;
-- aucun arrêt mémoire sur le boîtier low-RAM et budget de tampon conforme au profil
-  `PlaybackMemoryPolicy` ;
-- batterie mesurée au début et à la fin, modèle et version Android consignés ;
-- aucun accès depuis le réseau mobile ou une adresse hors LAN ;
-- échec d'un codec mémorisé uniquement s'il est déterministe ou reproduit deux fois ;
-- fiche Play mise à jour seulement après validation de plusieurs marques physiques.
+Pour chaque essai, garder la date, le commit, le modèle, le format lu et le résultat.
+Avant une publication Play, ajouter le rapport Pre-launch et les problèmes encore
+ouverts au [dossier de publication](PLAY_STORE_RELEASE.md).

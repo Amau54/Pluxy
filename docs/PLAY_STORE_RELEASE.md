@@ -1,163 +1,210 @@
-# Publication officielle Google Play
+# Publier sur Google Play
 
-Pluxy comporte deux applications indépendantes :
+Pluxy a deux applications, avec leur propre fiche et leur propre signature :
 
-| Application | Package | Artefact Play |
+| Application | Package | Bundle à envoyer |
 |---|---|---|
-| Pluxy lecteur TV/mobile | `com.pluxy.tv` | `Pluxy-<version>.aab` |
-| Pluxy Serveur Android | `com.pluxy.server` | `Pluxy-Server-Android-<version>.aab` |
+| Pluxy, lecteur TV et mobile | `com.pluxy.tv` | `Pluxy-<version>.aab` |
+| Pluxy Serveur | `com.pluxy.server` | `Pluxy-Server-Android-<version>.aab` |
 
-## 1. Signature de production
+Les APK de test sont disponibles sur GitHub. La publication Play reste à préparer :
+clés d'envoi, coordonnées du développeur, politique publique et essais sur appareils.
+Les clés du canal APK sont décrites dans [DEBUG_SIGNING.md](DEBUG_SIGNING.md).
 
-Activez **Play App Signing** pour chacun des deux packages et utilisez deux clés
-d'envoi distinctes, conservées hors du dépôt. Ne réutilisez pas les clés debug du
-canal de test. Une clé privée anciennement exposée reste compromise, même après
-nettoyage de Git ; elle ne doit jamais servir à une nouvelle publication Play.
-L'exposition du certificat public, à elle seule, ne compromet pas sa clé privée.
+## Signature et secrets
 
-Exemple à lancer dans un dossier privé sauvegardé, en laissant `keytool` demander les
-mots de passe plutôt que de les écrire dans la commande :
+Activer Play App Signing pour chaque application. Créer deux clés d'envoi distinctes,
+les conserver hors de Git et en faire une sauvegarde privée. Ne pas reprendre une clé
+debug ni une clé privée qui a déjà été exposée. Un certificat public peut être partagé.
+
+Depuis un dossier privé, lancer ces commandes. `keytool` demande les mots de passe :
 
 ```text
 keytool -genkeypair -v -storetype JKS -keystore pluxy-player-upload.jks -alias pluxy-player-upload -keyalg RSA -keysize 4096 -validity 10000
 keytool -genkeypair -v -storetype JKS -keystore pluxy-server-upload.jks -alias pluxy-server-upload -keyalg RSA -keysize 4096 -validity 10000
 ```
 
-Les anciennes installations APK signées avec une autre identité ne peuvent pas recevoir
-directement une mise à jour signée avec la nouvelle clé sur tous les appareils.
-Prévoir une désinstallation/réinstallation unique. Une désinstallation efface les
-données privées de l'application ; sauvegarder les réglages disponibles avant cette
-opération. Les médias conservés hors de l'application ne sont pas supprimés.
+Dans l'environnement GitHub `play-release`, renseigner les huit secrets :
 
-Le canal debug actuel utilise deux clés stables depuis le **4 octobre 2026**, une
-pour chaque package. Leurs certificats et leur sauvegarde sont décrits dans
-[DEBUG_SIGNING.md](DEBUG_SIGNING.md). Ces APK servent aux tests hors Play ; elles
-ne sont pas des releases officielles de production.
+| Lecteur | Serveur Android |
+|---|---|
+| `PLUXY_PLAYER_UPLOAD_JKS_BASE64` | `PLUXY_SERVER_UPLOAD_JKS_BASE64` |
+| `PLUXY_PLAYER_UPLOAD_STORE_PASSWORD` | `PLUXY_SERVER_UPLOAD_STORE_PASSWORD` |
+| `PLUXY_PLAYER_UPLOAD_KEY_ALIAS` | `PLUXY_SERVER_UPLOAD_KEY_ALIAS` |
+| `PLUXY_PLAYER_UPLOAD_KEY_PASSWORD` | `PLUXY_SERVER_UPLOAD_KEY_PASSWORD` |
 
-## 2. Secrets GitHub
+Encoder les JKS en Base64 sur la machine qui les conserve. Copier la valeur dans le
+secret, jamais dans un fichier suivi, un journal ou un artefact de compilation.
 
-Créer un environnement GitHub nommé `play-release`, le limiter à la branche `main`
-et aux tags protégés `v*`, puis exiger idéalement une approbation manuelle. Configurer
-les secrets suivants dans cet environnement protégé :
+Vérifier les réglages GitHub avant la première publication : accès aux secrets limité,
+environnement réservé à `main` et aux tags `v*`, protection des tags de version et
+interdiction des force-pushes et suppressions de `main`. Activer la protection contre
+les secrets si elle est disponible. Une approbation de `play-release` peut protéger
+le déclenchement de production. Ces réglages se font dans GitHub ; le workflow ne les
+active pas à lui seul.
 
-- `PLUXY_PLAYER_UPLOAD_JKS_BASE64`
-- `PLUXY_PLAYER_UPLOAD_STORE_PASSWORD`
-- `PLUXY_PLAYER_UPLOAD_KEY_ALIAS`
-- `PLUXY_PLAYER_UPLOAD_KEY_PASSWORD`
-- `PLUXY_SERVER_UPLOAD_JKS_BASE64`
-- `PLUXY_SERVER_UPLOAD_STORE_PASSWORD`
-- `PLUXY_SERVER_UPLOAD_KEY_ALIAS`
-- `PLUXY_SERVER_UPLOAD_KEY_PASSWORD`
+## Construire la version
 
-Encoder chaque fichier JKS en Base64 sur la machine de confiance et copier uniquement
-la valeur dans le secret. Ne jamais ajouter le JKS, son Base64 ou les mots de passe à
-Git, à un artefact CI ou à un journal.
+1. Mettre le même `versionName` et le même `versionCode` dans les deux applications.
+   Augmenter `versionCode` par rapport à la dernière version distribuée.
+2. Pousser le commit sur `main` et vérifier les contrôles concernés dans Actions.
+3. Créer le tag `v<version>` sur la tête de `main`, ou lancer le workflow Android sur
+   `main` avec `publish_release=true`.
+4. Télécharger les deux AAB, `BUILD_INFO.json`, `SHA256SUMS.txt` et la SBOM de la release.
+5. Télécharger aussi l'artefact `pluxy-r8-mapping-<version>` du run Actions. Ses deux
+   fichiers `Pluxy-<version>-mapping.txt` et
+   `Pluxy-Server-Android-<version>-mapping.txt` sont conservés 90 jours. Joindre chacun
+   à son application dans Play Console pour lire les rapports de crash désobfusqués.
 
-## 3. Contrôles automatiques
+Le workflow vérifie les tests Python, les dépendances, les tests Android et Android
+Lint. Les variantes release passent par R8 et la réduction des ressources. Gradle
+vérifie sa distribution et les sommes de dépendances enregistrées dans
+`client/gradle/verification-metadata.xml`. Relire ces sommes lorsqu'une dépendance change.
 
-Chaque pull request exécute :
+Le job signé refuse les secrets manquants, un commit différent de la tête de `main`,
+un tag qui ne correspond pas à `vMAJEUR.MINEUR.CORRECTIF`, une version différente du
+tag et une release déjà publiée. Il contrôle les signatures et les sommes SHA-256.
+Les tables R8 restent dans l'artefact Actions séparé.
 
-- tests Python et audit des dépendances ;
-- tests unitaires des deux applications Android ;
-- Android Lint sur les variantes release ;
-- compilation des APK debug et AAB release non signés, avec R8 et réduction des
-  ressources réellement exercés sur les variantes release ;
-- contrôle du checksum de la distribution Gradle et des artefacts de dépendances Gradle
-  via `client/gradle/verification-metadata.xml`.
+Les APK debug et les applications installées depuis Play peuvent porter des
+certificats différents. Pour changer de canal, sauvegarder les réglages disponibles
+avant une désinstallation : elle efface les données privées de l'application.
 
-Une release signée n'est produite que par un tag `v<version>` correspondant exactement
-au `versionName`, ou par le déclenchement manuel avec `publish_release=true`. Le job
-échoue si un secret manque, si la révision n'est pas la tête actuelle de `main`, si le
-tag n'est pas un SemVer strict ou si la release existe déjà. Les APK/AAB sont vérifiés,
-accompagnés d'une SBOM CycloneDX et de sommes SHA-256.
+La version 1.5.1 cible le SDK 36. Avant de cibler le SDK 37, prévoir l'autorisation
+runtime `ACCESS_LOCAL_NETWORK` ou les sélecteurs système adaptés, avec gestion du
+refus. Serveur, découverte et DLNA utilisent le réseau local. Voir la
+[documentation Android](https://developer.android.com/privacy-and-security/local-network-permission).
 
-Le job conserve séparément pendant 90 jours les deux fichiers `mapping.txt` R8. Les
-télécharger depuis le run protégé et les joindre à la version correspondante dans Play
-Console pour désobfusquer les rapports de crash. Ils ne sont pas ajoutés à la release
-GitHub publique.
+## Remplir les deux fiches
 
-Les contrôles d'administration GitHub obligatoires sont détaillés dans
-[`RELEASE_GATES.md`](RELEASE_GATES.md). Ils doivent être réellement activés : ce fichier
-ne remplace pas un ruleset, une approbation d'environnement ou un test physique.
+Créer les deux applications dans Play Console, activer Play App Signing puis
+renseigner la catégorie « Lecteurs et éditeurs vidéo », l'absence de publicité et
+l'accès sans compte. Choisir les pays, le prix, le public cible et répondre au
+questionnaire de classification selon le contenu réellement montré.
 
-La version 1.5.1 cible le SDK 36 : avec cette cible, Android accorde l'accès LAN via la
-permission `INTERNET`. **Avant tout passage à targetSdk 37 (Android 17)**, ajouter le
-parcours runtime `ACCESS_LOCAL_NETWORK` ou un sélecteur système adapté ; ne pas simplement
-augmenter la cible, car serveur, découverte Pluxy et DLNA seraient alors bloqués sans
-autorisation. Référence : <https://developer.android.com/privacy-and-security/local-network-permission>.
+Le dépôt est actuellement privé. Le lien de confidentialité utilisé par les apps est :
 
-## 4. Fiches Play Console
+```text
+https://github.com/Amau54/Pluxy/blob/main/docs/PRIVACY_POLICY.md
+```
 
-Pour chaque package :
+Avant publication, rendre cette politique accessible sans connexion et ajouter un
+contact public durable. Si elle est hébergée ailleurs, mettre aussi à jour le lien
+dans les applications. Le nom du responsable doit correspondre au compte développeur.
+Il reste également à choisir la licence de distribution du projet.
 
-1. créer l'application et activer Play App Signing ;
-2. utiliser la politique publique :
-   `https://github.com/Amau54/Pluxy/blob/main/docs/PRIVACY_POLICY.md` ;
-3. remplir le formulaire à partir de `docs/DATA_SAFETY.md` ;
-   déclarer la collecte liée aux transmissions LAN et répondre que toutes les
-   données ne sont pas chiffrées en transit tant que le flux local utilise HTTP ;
-4. déclarer l'absence de publicité et renseigner la classification du contenu ;
-5. préciser que Pluxy ne fournit aucun média et lit uniquement les fichiers choisis
-   par l'utilisateur ;
-6. pour le serveur Android, déclarer le service premier plan `connectedDevice` :
-   transfert continu d'un fichier choisi vers une télévision du LAN, avec notification
-   visible et bouton Arrêter ;
-7. joindre à cette déclaration une vidéo montrant les sources choisies, le serveur actif,
-   la notification et une lecture écran éteint ;
-8. ajouter l'attribution TMDB visible dans l'application et les captures de fiche.
-9. reprendre les textes et la liste d'éléments de `docs/PLAY_STORE_LISTING.md` ;
-10. choisir explicitement une licence de distribution pour le projet et ajouter le
-    contact officiel du titulaire du compte avant l'ouverture de la production.
+Pour Pluxy Serveur, déclarer le service premier plan `connectedDevice`. Joindre une
+vidéo montrant les dossiers choisis, le démarrage du serveur, la notification avec
+son bouton Arrêter et une lecture pendant que l'écran du téléphone est éteint.
 
-Le logo TMDB officiel et la mention exigée sont déjà présents dans les sections
-« À propos / crédits » des deux applications. Leur provenance est documentée dans
-`docs/THIRD_PARTY_NOTICES.md` ; ne pas déformer ni recolorer arbitrairement le logo.
+Préparer l'icône 512 × 512, le visuel 1 024 × 500 et les captures demandées pour les
+types d'appareils distribués. Montrer la navigation TV et, pour le serveur, le choix
+des dossiers, l'envoi vers une TV et la notification. Utiliser ses propres médias ou
+des médias autorisés ; masquer les clés, noms privés et adresses réseau. Les captures
+doivent montrer la version réellement distribuée.
 
-## 5. Validation sans régression
+Conserver le logo et l'attribution TMDB dans « À propos / crédits ». Les sources et
+conditions sont dans [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-Publier d'abord sur la piste interne, puis fermée. Tester au minimum :
+### Texte pour Pluxy
 
-- Android 6, 8, 11, 14, 15 et 16 ;
-- Android TV avec télécommande uniquement ;
-- téléphone serveur écran allumé puis éteint pendant au moins deux heures ;
-- changement Wi-Fi, perte/reprise réseau, redémarrage et mise à jour de l'application ;
-- Direct Play avec seek HTTP Range et sous-titres ;
-- seek : appui bref ±10 s, maintien gauche/droite jusqu'au palier ×8, cible monotone,
-  relâche précise et aucun changement involontaire de l'état lecture/pause ;
-- modes Automatique, Direct Play uniquement et Compatibilité, y compris changement à
-  chaud avec conservation de la position ;
-- simulation de cinq rebuffers sur deux minutes et de 30 secondes de stalls cumulés :
-  un seul palier descendu, sans faux positif après pause ou seek ;
-- remontée d'un seul palier après dix minutes stables et nouvelle descente sans boucle ;
-- source 10/20/100 Mbps : débits adaptatifs strictement inférieurs ou égaux à la source ;
-- navigation D-pad complète du lecteur sur écrans 720p/1080p/4K avec zone d'overscan,
-  aucun texte/bouton coupé et aucun focus invisible ;
-- onglets Films/Séries/Photos/Musique en modes simple et avancé ;
-- recherche transversale par titre/série/artiste/album/dossier, accents ignorés,
-  résultat vide et effacement depuis la télécommande ;
-- épisode suivant dans la même série, passage S01→S02, choix manuel, compte à rebours
-  automatique et interruption propre si l'application passe en arrière-plan ;
-- photos JPEG/PNG/WebP/HEIF selon version Android, rotation, diaporama et galerie
-  de plusieurs milliers d'éléments ;
-- albums photo issus de deux chemins homonymes, regroupement mensuel et date absente ;
-- audio MP3/AAC/FLAC/Ogg/WAV, pochette intégrée/absente/corrompue, artiste/album,
-  précédent/suivant dans le même album et formats refusés ;
-- serveur PC Direct Play, remux, HLS principal et HLS compatibilité ;
-- bibliothèque vide, 10 000 médias, une des trois sources SAF/USB retirée et clé TMDB invalide ;
-- films et épisodes sans affiche TMDB : miniature locale PC et Android, cache réutilisé,
-  concurrence bornée et placeholder propre si le codec ne peut pas être extrait ;
-- rafale de miniatures audio/photo : 503 temporaire, retries bornés côté client et
-  lecture vidéo simultanée non affamée ;
-- deux lecteurs simultanés et saturation contrôlée des limites ;
-- écran d'envoi mobile : onglets Vidéos/Photos/Audio, recherche, rotation et restauration
-  de la sélection, Cast indisponible sans services Google sans impact sur DLNA/Pluxy TV ;
-- DLNA Samsung/LG/Philips : découverte, profils annoncés, play/pause/seek/stop, récepteur
-  éteint, noms identiques, XML malveillant et endpoint hors LAN refusés ;
-- Chromecast et Google TV : sélection système, vidéo/photo/audio, métadonnées, contrôle
-  depuis la notification, erreur de codec ciblée et profil réinitialisable ;
-- 100 cycles de récepteur et rapport deux heures via `tools/device_soak.py`, sans présenter
-  les contrôles HTTP automatisés comme une preuve de rendu audio/vidéo physique ;
-- vérification Play Pre-launch Report, accessibilité et navigation D-pad.
+**Description courte :**
 
-La production ne doit être ouverte qu'après validation de cette matrice et traitement
-de toute alerte bloquante de la Play Console.
+> Films, séries, photos et musique de votre serveur local, sans compte.
+
+**Description complète :**
+
+> Pluxy lit les médias de votre serveur Pluxy sur Android TV ou sur un appareil
+> Android. Connectez les appareils au même réseau, choisissez le serveur et ouvrez
+> votre bibliothèque de films, séries, photos et musique.
+>
+> Vous pouvez rechercher un titre, reprendre une vidéo, choisir ses pistes audio et
+> sous-titres, enchaîner les épisodes, afficher un diaporama ou écouter un album.
+> Sur la télévision, les commandes sont accessibles à la télécommande.
+>
+> Le serveur peut être un PC Windows ou un appareil Android. Le serveur PC peut
+> adapter le flux ; le serveur Android partage le fichier original. La lecture
+> dépend des formats pris en charge par l'appareil et de la qualité du réseau.
+>
+> Pluxy ne fournit aucun contenu. Il fonctionne sans compte et sans publicité sur
+> un réseau domestique de confiance. Les échanges locaux utilisent HTTP sans
+> chiffrement et les médias partagés sont accessibles aux appareils du réseau.
+
+### Texte pour Pluxy Serveur
+
+**Description courte :**
+
+> Partagez films, photos et musique du téléphone sur votre réseau privé.
+
+**Description complète :**
+
+> Pluxy Serveur partage les dossiers vidéo, photo et musique choisis sur votre
+> téléphone ou tablette. Démarrez le serveur, puis ouvrez Pluxy sur la télévision.
+> Une notification permet de suivre le serveur et de l'arrêter.
+>
+> Vous pouvez aussi choisir un média et l'envoyer vers un appareil Google Cast ou
+> une télévision DLNA compatible. Le téléphone propose lecture, pause, déplacement
+> et arrêt. Le fichier est envoyé dans son format d'origine ; tous les formats ne
+> sont pas lisibles par tous les téléviseurs.
+>
+> Les dossiers, réglages et positions de reprise restent sur vos appareils.
+> Les affiches et informations TMDB sont facultatives. Pluxy n'utilise aucun compte,
+> aucune publicité et aucune télémétrie propre au projet. Le SDK Google Cast traite
+> des données techniques selon la politique de Google.
+>
+> Pluxy ne fournit aucun média. Utilisez-le sur votre réseau domestique de confiance :
+> les échanges locaux sont en HTTP sans chiffrement et les appareils du réseau
+> peuvent accéder aux dossiers partagés.
+
+Adapter les mentions Cast et DLNA aux appareils effectivement testés. Ne pas annoncer
+une compatibilité avec une marque ou un modèle sans avoir vérifié la lecture.
+
+## Formulaire « Sécurité des données »
+
+Google compte comme collecte les données envoyées hors de l'appareil, y compris sur
+le LAN. Pour les deux apps, préparer **Oui** à la collecte et **Non** au chiffrement
+de toutes les données en transit : les médias locaux passent en HTTP. L'absence de
+télémétrie Pluxy ne dispense pas de déclarer ces échanges. Voir la
+[définition Google Play](https://support.google.com/googleplay/android-developer/answer/10787469).
+
+| Flux | Données | Usage et conservation |
+|---|---|---|
+| Lecteur → serveur choisi | Identifiant du média, commandes, progression et état vu | Lecture et reprise ; progression conservée sur le serveur jusqu'à effacement |
+| Serveur → lecteur, TV DLNA ou Cast | Vidéos, photos, audio, titres, métadonnées et miniatures | Partage demandé ; fichiers transmis à la demande, index et caches sur les appareils |
+| Découverte et connexion LAN | Adresses IP, nom, modèle et capacités des appareils | Connexion ; profils de compatibilité conservés sous un identifiant haché, sans adresse de récepteur persistée |
+| SDK Cast → Google, dans Pluxy Serveur | Événements de découverte et de session, informations techniques sur l'appareil, le SDK et l'app | Mesure du fonctionnement de Cast ; collecte chiffrée propre au SDK |
+| Serveur → TMDB, si une clé est fournie | Titre, année disponible, clé API et informations de connexion | Recherche des métadonnées en HTTPS ; facultatif |
+| Lecteur → CDN TMDB | Requête d'image et informations de connexion | Affichage des affiches en HTTPS |
+
+Le lecteur reçoit les médias sans les renvoyer. Déclarer pour chaque package les
+données qu'il envoie : activité de lecture, informations de fichiers et, pour le
+serveur, photos, vidéos et audio. Vérifier dans le formulaire les catégories liées
+aux adresses IP et aux données techniques ; ne pas recopier une déclaration globale
+identique pour les deux apps.
+
+La finalité des échanges LAN est la fonctionnalité de l'application. Le transfert
+vers un appareil choisi peut relever de l'exception de partage demandé par
+l'utilisateur ; vérifier cette réponse dans le formulaire. Traiter séparément le
+flux facultatif vers TMDB et la question du partage avec ce service.
+
+Pour Cast, inclure au minimum les interactions de l'application à finalité d'analyse.
+Google décrit des journaux anonymes, gardés brièvement puis agrégés, sans partage à
+des tiers. Le SDK ne permet pas de désactiver cette collecte ni d'en demander la
+suppression. Relire sa [fiche officielle](https://developers.google.com/cast/docs/android_sender/data_disclosure)
+à chaque mise à jour et vérifier le comportement de la version intégrée.
+
+Les sauvegardes Android sont désactivées. L'index, les réglages, les profils et la
+progression restent jusqu'à effacement des données ou désinstallation. Pluxy ne vend
+pas ces données et ne les transmet pas au développeur. La
+[politique de confidentialité](PRIVACY_POLICY.md) décrit aussi TMDB, OMDb et YouTube.
+
+## Essayer avant d'ouvrir la production
+
+Envoyer d'abord les AAB sur la piste interne, puis sur une piste fermée. Compléter
+[DEVICE_VALIDATION.md](DEVICE_VALIDATION.md) avec les modèles, versions Android,
+résultats et problèmes rencontrés. Conserver le SHA du commit, le lien du run Actions,
+les rapports `device_soak.py`, le rapport Play Pre-launch et les anomalies restantes.
+
+Une simulation HTTP ne vérifie ni l'image et le son sur une télévision, ni le Wi-Fi
+écran éteint, ni la navigation à la télécommande. Terminer ces essais et traiter les
+alertes bloquantes de Play Console avant la production.

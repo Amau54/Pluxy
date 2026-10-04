@@ -1,121 +1,111 @@
-# Politique de confidentialité de Pluxy
+# Confidentialité
 
-Dernière mise à jour : 21 juillet 2026
+Mise à jour : 4 octobre 2026
 
-Cette politique couvre les applications Android **Pluxy** (`com.pluxy.tv`) et
-**Pluxy Serveur** (`com.pluxy.server`), ainsi que le serveur PC Pluxy distribué
-avec le projet.
+Cette politique concerne Pluxy (`com.pluxy.tv`), Pluxy Serveur (`com.pluxy.server`)
+et le serveur PC. Le projet est maintenu par **Amau54**.
 
-Le responsable de la publication et de la maintenance est **Amau54**, développeur
-du projet Pluxy. Le nom de développeur affiché sur Google Play doit rester cohérent
-avec cette politique ; si le compte de publication utilise une autre identité, ce
-paragraphe et les coordonnées de contact devront être mis à jour avant publication.
+## Fonctionnement
 
-## Principe général
+Pluxy lit et partage les fichiers que vous choisissez sur votre réseau domestique.
+Il fonctionne sans compte et sans publicité. Il n'intègre aucune télémétrie propre
+à Pluxy ni aucun suivi publicitaire. Le SDK Google Cast traite ses propres données
+techniques, décrites plus bas.
 
-Pluxy est un lecteur et serveur multimédia auto-hébergé destiné à un **réseau
-domestique privé de confiance**. Il ne crée aucun compte, n'affiche aucune
-publicité et n'intègre aucune télémétrie propre à Pluxy ni aucun suivi publicitaire.
-Le SDK Google Cast facultativement utilisé dans Pluxy Serveur traite toutefois les
-données techniques décrites dans la section « Services tiers facultatifs ».
+Pluxy ne fournit aucun film, photo ou morceau. Vous choisissez les dossiers partagés
+et devez disposer des droits nécessaires sur leur contenu.
 
-Pluxy ne fournit aucun film, photo ni morceau. L'utilisateur choisit lui-même les fichiers auxquels
-il souhaite donner accès et reste responsable de disposer des droits nécessaires.
+## Données sur vos appareils
 
-## Données traitées localement
+Selon les fonctions utilisées, Pluxy conserve :
 
-Selon les fonctions utilisées, Pluxy conserve localement :
+- l'adresse du serveur et vos réglages de lecture ;
+- les accès aux dossiers sélectionnés avec le sélecteur Android ;
+- le catalogue, les titres, métadonnées et informations de sous-titres ;
+- les positions de reprise et l'état « vu » ;
+- les affiches et miniatures mises en cache ;
+- les clés TMDB ou OMDb que vous renseignez ;
+- les profils de compatibilité des télévisions, sous un identifiant haché.
 
-- l'adresse et le nom du serveur choisi ;
-- les préférences de lecture et de présentation ;
-- les URI des dossiers explicitement sélectionnés avec le sélecteur Android ;
-- l'index du catalogue, les titres déduits des noms de fichiers, les métadonnées
-  audio artiste/album et les sous-titres ;
-- la progression et l'état « vu » ;
-- l'adresse IP locale des appareils pendant les échanges réseau ;
-- des profils de compatibilité par télévision ; l'identifiant du récepteur est haché
-  avant stockage et les erreurs de format restent uniquement sur le téléphone ;
-- les clés TMDB ou OMDb saisies volontairement ;
-- un cache d'affiches, de métadonnées et de miniatures photo bornées.
+Les adresses IP locales servent aux échanges réseau. L'adresse d'un récepteur n'est
+pas enregistrée dans son profil de compatibilité.
 
-Les sauvegardes Android de l'application sont désactivées. La désinstallation ou
-l'effacement des données Android supprime ces informations sur l'appareil. Pour le
-serveur PC, les données peuvent être supprimées dans `%LOCALAPPDATA%\Pluxy` sous
-Windows ou `~/.local/share/Pluxy` sous Linux/macOS après avoir arrêté le serveur.
+Les sauvegardes Android sont désactivées. « Effacer les données » ou désinstaller
+l'application supprime ses réglages et caches sur cet appareil. La progression
+enregistrée sur un autre serveur reste sur ce serveur. Vos fichiers dans les dossiers
+partagés restent sur leur support.
 
-## Partage sur le réseau local
+Sur PC, arrêtez le serveur avant de supprimer ses données dans `%LOCALAPPDATA%\Pluxy`
+sous Windows ou `~/.local/share/Pluxy` sous Linux/macOS. Si `PLUXY_DATA_DIR` est défini,
+les données se trouvent dans son sous-dossier `Pluxy`.
 
-Quand le serveur est actif, tous les appareils du LAN peuvent découvrir Pluxy,
-consulter le catalogue et lire les médias des dossiers vidéo, photo et audio sélectionnés. Ce fonctionnement
-sans compte ni authentification est volontaire. Le trafic multimédia local utilise
-HTTP afin de rester compatible avec les télévisions et n'est pas chiffré.
+## Réseau local
 
-N'utilisez pas Pluxy sur un Wi-Fi public et ne redirigez jamais le port 8420 depuis
-Internet. Pluxy refuse les adresses Internet directes, mais un appareil compromis
-déjà présent sur le réseau domestique peut accéder aux médias partagés.
+Lorsque le serveur est actif, les appareils de votre réseau local peuvent découvrir
+Pluxy, consulter son catalogue et lire les médias des dossiers choisis. Il n'y a pas
+de compte ni d'authentification pour ces accès. Les échanges locaux utilisent HTTP,
+sans chiffrement, pour rester compatibles avec les télévisions.
 
-## Envoi vers une télévision
+Utilisez un réseau domestique de confiance. Ne partagez pas sur un Wi-Fi public et
+ne redirigez pas le port du serveur vers Internet. Un appareil déjà présent sur
+votre réseau peut accéder aux médias partagés.
 
-Lorsque l'utilisateur choisit explicitement une télévision DLNA ou Google Cast, Pluxy
-Serveur lui transmet sur le réseau l'URL locale du fichier choisi, son type, son titre,
-sa durée et, si disponible, l'URL locale de sa miniature. La télévision demande ensuite
-les octets du film, de la photo ou du morceau au serveur HTTP local. Ces informations
-sont nécessaires à la lecture et ne sont pas envoyées au développeur Pluxy.
+Quand vous choisissez une télévision DLNA ou Google Cast, Pluxy lui envoie l'URL
+locale du média, son type, son titre, sa durée et sa miniature si elle est disponible.
+La télévision récupère ensuite le fichier auprès du serveur local. La découverte
+DLNA traite le nom, le modèle, l'adresse et les capacités annoncées par le récepteur.
+Le profil conservé peut être réinitialisé dans l'application.
 
-La découverte DLNA reste locale et n'utilise aucun serveur Pluxy. Elle peut révéler au
-téléphone le nom, le modèle, l'adresse locale et les capacités annoncées des récepteurs.
-Pluxy ne conserve pas leur adresse ; seul un profil indexé par identifiant haché reste
-stocké jusqu'à sa réinitialisation, l'effacement des données ou la désinstallation.
+## Services externes
 
-## Services tiers facultatifs
+**Google Cast.** Pluxy Serveur utilise le SDK Android Sender pour découvrir et piloter
+les appareils Cast. Selon sa [déclaration officielle](https://developers.google.com/cast/docs/android_sender/data_disclosure),
+Google reçoit des événements de découverte et de session ainsi que des informations
+techniques sur le téléphone, le SDK et l'application. Les journaux sont anonymes,
+chiffrés en transit, conservés brièvement puis agrégés pour améliorer Cast. Google
+indique ne pas les partager avec des tiers. Le SDK ne permet pas à Pluxy ni à
+l'utilisateur de désactiver cette collecte ou de supprimer ces données. L'utilisation
+de Cast reste facultative ; DLNA et le lecteur Pluxy n'en dépendent pas.
 
-Pluxy Serveur intègre le **SDK Android Sender Google Cast**, fourni avec Google Play
-services. Il est sollicité pour découvrir et piloter un appareil Cast. Selon la
-[déclaration officielle du SDK](https://developers.google.com/cast/docs/android_sender/data_disclosure),
-Google collecte de façon obligatoire et chiffrée des événements génériques de découverte
-et de session, des informations techniques sur l'appareil mobile, le SDK et l'application.
-Google indique que ces journaux sont anonymes, conservés brièvement, agrégés pour améliorer
-Cast, non utilisés pour modéliser un utilisateur et non partagés avec des tiers. Ni Pluxy
-ni l'utilisateur ne peuvent désactiver ou supprimer cette collecte au niveau du SDK.
-La fonction Cast reste facultative ; DLNA et l'application Pluxy TV n'en dépendent pas.
-
-Si l'utilisateur configure une clé TMDB, Pluxy envoie à l'API de **The Movie
-Database (TMDB)** le titre et, lorsqu'elle est disponible, l'année déduits du nom
-d'un film ou d'une série. Les photos et morceaux ne sont pas envoyés à TMDB. TMDB
-reçoit également les informations réseau normalement associées à
-une requête Internet. Pluxy récupère ensuite synopsis, affiches, casting et liens de
-bande-annonce. Consultez la [politique de confidentialité de TMDB](https://www.themoviedb.org/privacy-policy).
-
-Le serveur PC peut également interroger OMDb si une clé OMDb est fournie. Ouvrir
-une bande-annonce quitte Pluxy et ouvre YouTube ou une application compatible, qui
-applique alors sa propre politique de confidentialité.
+**TMDB.** Si vous fournissez une clé, le serveur envoie en HTTPS à The Movie Database
+le titre et l'année disponible d'un film ou d'une série pour récupérer ses informations
+et affiches. Les photos et morceaux ne sont pas envoyés à TMDB. Le téléchargement
+d'une affiche depuis son CDN transmet aussi les informations habituelles d'une
+connexion Internet, dont l'adresse IP. Voir la
+[politique de TMDB](https://www.themoviedb.org/privacy-policy).
 
 This product uses the TMDB API but is not endorsed or certified by TMDB.
 
-## Transmission au développeur et conservation
+**OMDb et YouTube.** Le serveur PC peut consulter OMDb si vous renseignez une clé.
+Ouvrir une bande-annonce lance YouTube ou une application compatible, avec sa propre
+politique de confidentialité.
 
-Pluxy ne transmet au développeur ni bibliothèque, ni fichier, ni historique de
-lecture, ni clé API. Les rapports de panne et journaux ne sont pas envoyés
-automatiquement par Pluxy. La collecte technique propre au SDK Cast est transmise à
-Google comme expliqué ci-dessus. Si l'utilisateur choisit de joindre manuellement un journal à un
-rapport GitHub, il doit vérifier son contenu avant l'envoi.
+**Installation PC.** Au premier lancement sous Windows, le lanceur peut télécharger
+Python depuis `python.org` et les dépendances depuis l'index Python configuré pour
+`pip` (PyPI par défaut). Ces services reçoivent les informations nécessaires au
+téléchargement ; le lanceur ne leur envoie pas votre bibliothèque.
 
-Les échanges LAN constituent néanmoins une transmission hors de l'appareil au sens
-du formulaire Google Play. Ils sont conservés uniquement sur les appareils Pluxy
-concernés : index, configuration et progression restent jusqu'à leur effacement ;
-les octets vidéo, photo ou audio sont envoyés à la demande et ne sont pas archivés
-par le lecteur.
+## Conservation et transmission
 
-## Enfants
+Pluxy n'envoie au développeur ni fichiers, ni bibliothèque, ni historique de lecture,
+ni clés API. Il ne transmet pas automatiquement les journaux ou rapports de panne.
+Si vous joignez un journal à un signalement, vérifiez son contenu avant de l'envoyer.
 
-Pluxy n'est pas spécifiquement destiné aux enfants et ne collecte pas sciemment de
-données personnelles d'enfants. Le contenu disponible dépend exclusivement des
-fichiers choisis par le responsable du serveur domestique.
+Le catalogue, les réglages et la progression restent sur les appareils concernés
+jusqu'à leur effacement. Les médias sont transmis à la demande. Des affiches,
+miniatures et photos peuvent être mises en cache sur le lecteur ; il ne crée pas de
+bibliothèque hors ligne des vidéos et morceaux. Les échanges locaux constituent
+néanmoins une transmission hors de l'appareil dans le formulaire de sécurité des
+données de Google Play.
+
+Pluxy n'est pas spécifiquement destiné aux enfants. Le contenu disponible dépend des
+fichiers choisis par la personne qui gère le serveur domestique.
 
 ## Contact
 
-Pour une question de confidentialité ou une demande concernant Pluxy, ouvrez une
-demande sur le [suivi public du projet](https://github.com/Amau54/Pluxy/issues).
+Pour une question, utilisez les [Issues du projet](https://github.com/Amau54/Pluxy/issues)
+si vous avez accès au dépôt. Celui-ci est actuellement privé. Un contact public et
+une copie de cette politique accessible sans connexion doivent être ajoutés avant
+une distribution publique sur Google Play.
 
-Toute modification importante de cette politique sera publiée dans ce fichier avec
-une nouvelle date de mise à jour.
+La date en haut de ce fichier sera mise à jour si cette politique change.
