@@ -68,7 +68,10 @@ class DetailsActivity : ThemedActivity() {
         item = moshi.adapter(MediaItem::class.java).fromJson(json) ?: run { finish(); return }
 
         // Affichage immédiat (titre brut) puis enrichissement.
-        findViewById<TextView>(R.id.title).text = item.title
+        findViewById<TextView>(R.id.title).apply {
+            text = item.title
+            contentDescription = item.title
+        }
         findViewById<TextView>(R.id.posterFallback).text = item.title
         findViewById<ImageView>(R.id.poster).contentDescription =
             getString(R.string.description_poster_title, item.title)
@@ -159,10 +162,10 @@ class DetailsActivity : ThemedActivity() {
         val d = resources.displayMetrics.density
         for (r in m.ratings) {
             val cell = LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-                gravity = Gravity.CENTER
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
                 setBackgroundResource(R.drawable.bg_chip)
-                setPadding((14 * d).toInt(), (8 * d).toInt(), (14 * d).toInt(), (8 * d).toInt())
+                setPadding((10 * d).toInt(), (4 * d).toInt(), (10 * d).toInt(), (4 * d).toInt())
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
                 ).apply { marginEnd = (10 * d).toInt() }
@@ -170,16 +173,16 @@ class DetailsActivity : ThemedActivity() {
             cell.addView(TextView(this).apply {
                 text = r.value
                 setTextColor(pluxyColor(R.color.accent))
-                textSize = 16f
+                textSize = resources.getDimension(R.dimen.auxiliary_meta_size) / resources.displayMetrics.scaledDensity
                 gravity = Gravity.CENTER
                 setTypeface(typeface, Typeface.BOLD)
             })
             cell.addView(TextView(this).apply {
-                text = r.source
+                text = " · " + r.source
                 setTextColor(pluxyColor(R.color.text_tertiary))
-                textSize = 13f
+                textSize = resources.getDimension(R.dimen.auxiliary_meta_size) / resources.displayMetrics.scaledDensity
                 gravity = Gravity.CENTER
-                letterSpacing = 0.02f
+                letterSpacing = 0f
             })
             row.addView(cell)
         }
@@ -212,10 +215,10 @@ class DetailsActivity : ThemedActivity() {
             setTextColor(
                 pluxyColor(if (accent) R.color.accent else R.color.text_secondary),
             )
-            textSize = 14f
-            letterSpacing = 0.03f
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
-            setPadding((12 * d).toInt(), (5 * d).toInt(), (12 * d).toInt(), (5 * d).toInt())
+            textSize = resources.getDimension(R.dimen.auxiliary_meta_size) / resources.displayMetrics.scaledDensity
+            letterSpacing = 0f
+            setTypeface(android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL))
+            setPadding((9 * d).toInt(), (3 * d).toInt(), (9 * d).toInt(), (3 * d).toInt())
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
             ).apply { marginEnd = (8 * d).toInt() }
@@ -333,7 +336,10 @@ class DetailsActivity : ThemedActivity() {
     }
 
     private fun bind(m: MovieMetadata) {
-        findViewById<TextView>(R.id.title).text = m.title
+        findViewById<TextView>(R.id.title).apply {
+            text = m.title
+            contentDescription = m.title
+        }
         findViewById<ImageView>(R.id.poster).apply {
             contentDescription = getString(R.string.description_poster_title, m.title)
             LanUrlPolicy.safeTmdbImage(m.posterUrl)?.let { posterUrl ->

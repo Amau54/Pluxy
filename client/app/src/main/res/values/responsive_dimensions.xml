@@ -2,12 +2,12 @@
 <resources>
     <integer name="details_header_orientation">1</integer>
     <integer name="details_actions_orientation">1</integer>
-    <dimen name="details_top_pad">24dp</dimen>
-    <dimen name="details_poster_width">144dp</dimen>
-    <dimen name="details_poster_height">216dp</dimen>
+    <dimen name="details_top_pad">16dp</dimen>
+    <dimen name="details_poster_width">112dp</dimen>
+    <dimen name="details_poster_height">168dp</dimen>
     <dimen name="details_info_margin_start">0dp</dimen>
-    <dimen name="details_info_margin_top">24dp</dimen>
+    <dimen name="details_info_margin_top">16dp</dimen>
     <dimen name="details_action_margin_start">0dp</dimen>
-    <dimen name="details_action_margin_top">10dp</dimen>
-    <dimen name="details_title_size">28sp</dimen>
+    <dimen name="details_action_margin_top">8dp</dimen>
+    <dimen name="details_title_size">22sp</dimen>
 </resources>

@@ -31,9 +31,10 @@
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
                 android:layout_weight="1"
-                android:background="@drawable/bg_button_secondary"
+                android:background="@drawable/bg_button_quiet"
                 android:minHeight="0dp"
                 android:text="‹  Précédente"
+                android:textSize="14sp"
                 android:textAllCaps="false"
                 android:textColor="@color/pluxy_text" />
             <TextView
@@ -51,6 +52,7 @@
                 android:background="@drawable/bg_button_primary"
                 android:minHeight="0dp"
                 android:text="Suivante  ›"
+                android:textSize="14sp"
                 android:textAllCaps="false"
                 android:textColor="@color/pluxy_on_accent" />
         </LinearLayout>
@@ -64,14 +66,14 @@
                 android:id="@+id/receiverBack"
                 android:layout_width="48dp"
                 android:layout_height="48dp"
-                android:background="@drawable/bg_button_secondary"
+                android:background="@drawable/bg_button_quiet"
                 android:contentDescription="Retour"
                 android:minWidth="0dp"
                 android:minHeight="0dp"
                 android:text="‹"
                 android:textAllCaps="false"
                 android:textColor="@color/pluxy_text"
-                android:textSize="28sp" />
+                android:textSize="22sp" />
             <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
@@ -83,8 +85,8 @@
                     android:layout_height="wrap_content"
                     android:text="Envoyer sur la TV"
                     android:textColor="@color/pluxy_text"
-                    android:textSize="23sp"
-                    android:textStyle="bold"
+                    android:textSize="20sp"
+                    android:fontFamily="sans-serif-medium"
                     android:id="@+id/receiverTitle" />
                 <TextView
                     android:layout_width="wrap_content"
@@ -140,8 +142,8 @@
                             android:layout_height="wrap_content"
                             android:text="Google Cast"
                             android:textColor="@color/pluxy_text"
-                            android:textSize="15sp"
-                            android:textStyle="bold" />
+                            android:textSize="14sp"
+                            android:fontFamily="sans-serif-medium" />
                         <TextView
                             android:id="@+id/castHint"
                             android:layout_width="wrap_content"
@@ -159,19 +161,20 @@
                         android:paddingStart="14dp"
                         android:paddingEnd="14dp"
                         android:text="Envoyer"
+                        android:textSize="14sp"
                         android:textAllCaps="false"
                         android:textColor="@color/pluxy_on_accent"
-                        android:textStyle="bold" />
+                        android:fontFamily="sans-serif-medium" />
                 </LinearLayout>
                 <TextView
                     android:id="@+id/dlnaHeader"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="13dp"
+                    android:layout_marginTop="10dp"
                     android:text="TÉLÉVISEURS DLNA"
                     android:textColor="@color/pluxy_accent"
                     android:textSize="11sp"
-                    android:textStyle="bold"
+                    android:fontFamily="sans-serif-medium"
                     android:visibility="gone" />
                 <FrameLayout
                     android:id="@+id/dlnaSection"
@@ -202,7 +205,7 @@
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="48dp"
-                    android:layout_marginTop="10dp"
+                    android:layout_marginTop="6dp"
                     android:orientation="horizontal"
                     android:weightSum="3"
                     android:id="@+id/receiverFilterRow">
@@ -214,6 +217,7 @@
                         android:background="@drawable/bg_button_primary"
                         android:minHeight="0dp"
                         android:text="Vidéos"
+                        android:textSize="14sp"
                         android:textAllCaps="false"
                         android:textColor="@color/pluxy_on_accent" />
                     <Button
@@ -225,6 +229,7 @@
                         android:background="@drawable/bg_button_secondary"
                         android:minHeight="0dp"
                         android:text="Photos"
+                        android:textSize="14sp"
                         android:textAllCaps="false"
                         android:textColor="@color/pluxy_text" />
                     <Button
@@ -236,6 +241,7 @@
                         android:background="@drawable/bg_button_secondary"
                         android:minHeight="0dp"
                         android:text="Musique"
+                        android:textSize="14sp"
                         android:textAllCaps="false"
                         android:textColor="@color/pluxy_text" />
                 </LinearLayout>
@@ -260,7 +266,7 @@
                 android:id="@+id/remoteBrowserSummary"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
+                android:layout_marginTop="6dp"
                 android:ellipsize="end"
                 android:maxLines="1"
                 android:text="Dossiers"
@@ -281,9 +287,9 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
-        android:background="@drawable/bg_glass_card"
+        android:background="@android:color/transparent"
         android:orientation="vertical"
-        android:padding="10dp"
+        android:padding="6dp"
         android:id="@+id/remotePlaybackCard">
         <TextView
             android:id="@+id/remoteStatus"
@@ -291,8 +297,7 @@
             android:layout_height="wrap_content"
             android:text="Choisissez un média puis une télévision"
             android:textColor="@color/pluxy_text"
-            android:textSize="14sp"
-            android:textStyle="bold"
+            android:textSize="13sp"
             android:maxLines="2"
             android:ellipsize="end" />
         <LinearLayout
@@ -332,9 +337,10 @@
                     android:background="@drawable/bg_button_primary"
                     android:minHeight="0dp"
                     android:text="Lecture / Pause"
+                    android:textSize="14sp"
                     android:textAllCaps="false"
                     android:textColor="@color/pluxy_on_accent"
-                    android:textStyle="bold" />
+                    android:fontFamily="sans-serif-medium" />
                 <Button
                     android:id="@+id/remoteStop"
                     android:layout_width="0dp"
@@ -344,6 +350,7 @@
                     android:background="@drawable/bg_button_secondary"
                     android:minHeight="0dp"
                     android:text="Arrêter"
+                    android:textSize="14sp"
                     android:textAllCaps="false"
                     android:textColor="@color/pluxy_text" />
             </LinearLayout>

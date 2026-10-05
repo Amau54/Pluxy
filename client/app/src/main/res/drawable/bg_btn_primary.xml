@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The primary action carries the coral accent; focus remains unmistakable. -->
-<selector xmlns:android="http://schemas.android.com/apk/res/android">
+<!-- Accent réservé à l’action principale. -->
+<inset xmlns:android="http://schemas.android.com/apk/res/android" android:insetTop="4dp" android:insetBottom="4dp">
+<selector>
     <item android:state_focused="true">
         <shape android:shape="rectangle">
-            <gradient android:angle="315" android:startColor="?attr/pluxyAccentBright" android:endColor="?attr/pluxyAccent" />
+            <solid android:color="?attr/pluxyAccentBright" />
             <stroke android:width="2dp" android:color="?attr/pluxyTextPrimary" />
             <corners android:radius="@dimen/radius_md" />
         </shape>
@@ -16,8 +17,9 @@
     </item>
     <item>
         <shape android:shape="rectangle">
-            <gradient android:angle="315" android:startColor="?attr/pluxyAccent" android:endColor="?attr/pluxyAccentDim" />
+            <solid android:color="?attr/pluxyAccent" />
             <corners android:radius="@dimen/radius_md" />
         </shape>
     </item>
 </selector>
+</inset>

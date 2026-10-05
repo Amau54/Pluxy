@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<selector xmlns:android="http://schemas.android.com/apk/res/android">
+<inset xmlns:android="http://schemas.android.com/apk/res/android" android:insetTop="4dp" android:insetBottom="4dp">
+<selector>
     <item android:state_focused="true">
         <shape android:shape="rectangle">
             <gradient android:angle="315" android:startColor="?attr/pluxyGlassFocusTop" android:endColor="?attr/pluxyGlassFocusBottom" />
@@ -15,9 +16,10 @@
     </item>
     <item>
         <shape android:shape="rectangle">
-            <solid android:color="?attr/pluxySurface" />
-            <stroke android:width="1dp" android:color="?attr/pluxyBorderSubtle" />
+            <solid android:color="@android:color/transparent" />
+
             <corners android:radius="@dimen/radius_md" />
         </shape>
     </item>
 </selector>
+</inset>

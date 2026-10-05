@@ -7,7 +7,7 @@
                 android:valueType="floatType" android:duration="130" />
             <objectAnimator android:propertyName="scaleY" android:valueTo="1.006"
                 android:valueType="floatType" android:duration="130" />
-            <objectAnimator android:propertyName="translationZ" android:valueTo="6dp"
+            <objectAnimator android:propertyName="translationZ" android:valueTo="0dp"
                 android:valueType="floatType" android:duration="130" />
         </set>
     </item>

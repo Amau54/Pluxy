@@ -86,7 +86,7 @@
         android:id="@+id/title"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="10dp"
+        android:layout_marginTop="6dp"
         android:layout_marginStart="2dp"
         android:layout_marginEnd="2dp"
         android:ellipsize="end"
@@ -107,5 +107,5 @@
         android:maxLines="1"
         android:textColor="?attr/pluxyTextTertiary"
         android:textSize="@dimen/card_meta_size"
-        android:letterSpacing="0.02" />
+        android:letterSpacing="0" />
 </LinearLayout>

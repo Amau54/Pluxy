@@ -8,10 +8,12 @@ import android.os.IBinder
 import android.view.View
 import android.widget.Button
 import android.widget.ImageView
+import android.widget.ImageButton
 import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.annotation.OptIn
 import androidx.appcompat.app.AlertDialog
+import androidx.appcompat.widget.TooltipCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.util.UnstableApi
@@ -39,7 +41,7 @@ class AudioPlayerActivity : ThemedActivity() {
     private lateinit var controls: PlayerControlView
     private lateinit var coverView: ImageView
     private lateinit var retryButton: Button
-    private lateinit var queueButton: Button
+    private lateinit var queueButton: ImageButton
     private var service: AudioPlaybackService? = null
     private var bound = false
     private var observeJob: Job? = null
@@ -87,6 +89,13 @@ class AudioPlayerActivity : ThemedActivity() {
         errorView = findViewById(R.id.audioError)
         loading = findViewById(R.id.audioLoading)
         controls = findViewById(R.id.audioControls)
+        val density = resources.displayMetrics.density
+        val sidePadding = resources.getDimensionPixelSize(R.dimen.auxiliary_viewer_pad)
+        val deckWidth = minOf(
+            (480 * density).toInt(),
+            (resources.configuration.screenWidthDp * density).toInt() - sidePadding * 2,
+        ).coerceAtLeast(1)
+        controls.layoutParams = controls.layoutParams.apply { width = deckWidth }
         coverView = findViewById(R.id.audioCover)
         retryButton = findViewById(R.id.audioRetry)
         queueButton = findViewById(R.id.audioQueue)
@@ -94,8 +103,12 @@ class AudioPlayerActivity : ThemedActivity() {
             service?.retry() ?: requestPlayback()
         }
         queueButton.setOnClickListener { showQueue() }
-        findViewById<Button>(R.id.audioStop).setOnClickListener { service?.stopPlayback(); finish() }
+        findViewById<ImageButton>(R.id.audioStop).apply {
+            TooltipCompat.setTooltipText(this, contentDescription)
+            setOnClickListener { service?.stopPlayback(); finish() }
+        }
         titleView.text = initial.title
+        titleView.contentDescription = initial.title
     }
 
     private fun requestPlayback() {
@@ -124,6 +137,7 @@ class AudioPlayerActivity : ThemedActivity() {
             initial = item
             ownerServerUrl = state.serverUrl
             titleView.text = item.title
+            titleView.contentDescription = item.title
             metaView.text = listOfNotNull(item.artist, item.album).joinToString(" · ")
             metaView.visibility = if (metaView.text.isBlank()) View.GONE else View.VISIBLE
             val key = state.serverUrl + "/" + item.id
@@ -147,7 +161,8 @@ class AudioPlayerActivity : ThemedActivity() {
         retryButton.visibility = if (state.error != null) View.VISIBLE else View.GONE
         if (state.error != null && !hadError) retryButton.requestFocus()
         queueButton.visibility = if (state.tracks.isNotEmpty()) View.VISIBLE else View.GONE
-        queueButton.text = getString(R.string.audio_queue_count, state.tracks.size)
+        queueButton.contentDescription = getString(R.string.audio_queue_count, state.tracks.size)
+        TooltipCompat.setTooltipText(queueButton, queueButton.contentDescription)
     }
 
     private fun showQueue() {

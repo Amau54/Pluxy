@@ -1,7 +1,7 @@
 package com.pluxy.tv.ui
 
 import android.content.Intent
-import android.graphics.Color
+import android.content.res.Configuration
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
@@ -31,8 +31,9 @@ class SettingsActivity : ThemedActivity() {
     private lateinit var statusView: TextView
     private var restoredFocusTag: String? = null
     private var restoredScrollY: Int? = null
-    private val accent by lazy { pluxyColor(R.color.accent) }
     private val sub by lazy { pluxyColor(R.color.text_secondary) }
+    private val television: Boolean
+        get() = resources.configuration.uiMode and Configuration.UI_MODE_TYPE_MASK == Configuration.UI_MODE_TYPE_TELEVISION
     private val serverLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         render()
     }
@@ -55,7 +56,7 @@ class SettingsActivity : ThemedActivity() {
             clipToPadding = false
             // Zone sûre TV : aucun contrôle ne doit toucher les bords, y compris au focus.
             val safeSide = resources.getDimensionPixelSize(R.dimen.screen_pad)
-            setPadding(safeSide, dp(32), safeSide, dp(32))
+            setPadding(safeSide, dp(24), safeSide, dp(24))
         }
         scroll.clipChildren = false
         scroll.addView(rows)
@@ -64,7 +65,7 @@ class SettingsActivity : ThemedActivity() {
         title("Réglages")
         statusView = TextView(this).apply {
             setTextColor(pluxyColor(R.color.text_tertiary)); textSize = 14f
-            setPadding(0, 0, 0, dp(14))
+            setPadding(0, 0, 0, dp(4))
             setText(R.string.settings_loading)
         }
         rows.addView(statusView)
@@ -100,7 +101,7 @@ class SettingsActivity : ThemedActivity() {
 
         section("Apparence")
         val appearance = AppearancePreferences.theme(this)
-        rowButton("Thème", appearance.label, appearance.description)
+        rowButton("Thème", appearance.label, appearance.description, showHint = true)
             .setOnClickListener { anchor -> pickAppearanceTheme(anchor, appearance) }
 
         section("Connexion")
@@ -120,6 +121,7 @@ class SettingsActivity : ThemedActivity() {
             "Mode de lecture",
             playbackStrategy.title,
             playbackStrategy.description,
+            showHint = true,
         ).setOnClickListener { anchor -> pickPlaybackStrategy(anchor, playbackStrategy) }
         val autoNext = PluxyApplication.autoPlayNextEpisode(this)
         localSwitchRow("Épisode suivant automatique", autoNext) {
@@ -149,13 +151,12 @@ class SettingsActivity : ThemedActivity() {
             text = "Actualiser la bibliothèque"
             isAllCaps = false
             gravity = Gravity.START or Gravity.CENTER_VERTICAL
-            setTextColor(Color.WHITE)
-            textSize = 16f
-            setBackgroundResource(R.drawable.focus_card)
-            stateListAnimator = android.animation.AnimatorInflater
-                .loadStateListAnimator(this@SettingsActivity, R.animator.focus_lift_btn)
-            setPadding(dp(18), dp(14), dp(18), dp(14))
-            minHeight = dp(64)
+            setTextColor(pluxyColor(R.color.text_primary))
+            textSize = if (television) 17f else 15f
+            setBackgroundResource(R.drawable.bg_setting_row)
+            stateListAnimator = null
+            setPadding(dp(10), dp(6), dp(10), dp(6))
+            minHeight = dp(48)
             setOnClickListener { button ->
                 button.isEnabled = false
                 lifecycleScope.launch {
@@ -179,7 +180,7 @@ class SettingsActivity : ThemedActivity() {
                     }
                 }
             }
-        }, lp().also { it.topMargin = dp(8) })
+        }, lp().also { it.topMargin = dp(2) })
 
         addClose()
     }
@@ -189,74 +190,85 @@ class SettingsActivity : ThemedActivity() {
             tag = "setting:close"
             setText(R.string.action_close)
             isAllCaps = false
-            setTextColor(Color.WHITE)
-            textSize = 16f
-            setBackgroundResource(R.drawable.bg_btn_secondary)
-            stateListAnimator = android.animation.AnimatorInflater
-                .loadStateListAnimator(this@SettingsActivity, R.animator.focus_lift_btn)
-            setPadding(dp(24), dp(12), dp(24), dp(12))
+            setTextColor(pluxyColor(R.color.text_primary))
+            textSize = if (television) 17f else 15f
+            setBackgroundResource(R.drawable.bg_setting_row)
+            stateListAnimator = null
+            minHeight = dp(48)
+            setPadding(dp(12), dp(6), dp(12), dp(6))
             setOnClickListener { finish() }
         }
-        rows.addView(close, lp().also { it.topMargin = dp(20) })
+        rows.addView(close, lp().also { it.topMargin = dp(16) })
     }
 
     // ---- Lignes ---------------------------------------------------------- //
     private fun title(text: String) {
         rows.addView(TextView(this).apply {
             this.text = text
-            setTextColor(pluxyColor(R.color.text_primary)); textSize = 28f
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
-            setPadding(0, dp(4), 0, dp(6))
+            setTextColor(pluxyColor(R.color.text_primary)); textSize = if (television) 26f else 24f
+            typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
+            setPadding(0, 0, 0, dp(4))
         })
     }
 
     private fun section(text: String) {
         rows.addView(TextView(this).apply {
             this.text = text.uppercase()
-            setTextColor(accent); textSize = 13f
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
-            letterSpacing = 0.08f
-            setPadding(0, dp(26), 0, dp(6))
+            setTextColor(pluxyColor(R.color.text_tertiary)); textSize = if (television) 13f else 12f
+            typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
+            letterSpacing = 0.05f
+            setPadding(dp(10), dp(20), dp(10), dp(4))
         })
     }
 
-    private fun rowButton(label: String, value: String, hint: String?): LinearLayout {
+    private fun rowButton(label: String, value: String, hint: String?, showHint: Boolean = false): LinearLayout {
         val row = LinearLayout(this).apply {
             tag = "setting:$label"
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_VERTICAL
             isFocusable = true
             isClickable = true
-            minimumHeight = dp(74)
+            minimumHeight = dp(48)
             contentDescription = listOfNotNull(label, value, hint).joinToString(". ")
-            setBackgroundResource(R.drawable.focus_card)
-            stateListAnimator = android.animation.AnimatorInflater
-            .loadStateListAnimator(this@SettingsActivity, R.animator.focus_lift_btn)
-            setPadding(dp(18), dp(10), dp(18), dp(10))
+            setBackgroundResource(R.drawable.bg_setting_row)
+            setPadding(dp(10), dp(7), dp(10), dp(7))
         }
-        row.addView(TextView(this).apply {
+        val labelView = TextView(this).apply {
             text = label
-            setTextColor(Color.WHITE)
-            textSize = 17f
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
-            maxLines = 3
-        })
-        row.addView(TextView(this).apply {
+            setTextColor(pluxyColor(R.color.text_primary))
+            textSize = if (television) 17f else 15f
+            includeFontPadding = false
+        }
+        val valueView = TextView(this).apply {
             text = value
             setTextColor(sub)
-            textSize = 16f
-            maxLines = 3
-            setPadding(0, dp(2), 0, 0)
-        })
-        hint?.takeIf { it.isNotBlank() }?.let { description ->
+            textSize = if (television) 16f else 14f
+            includeFontPadding = false
+        }
+        val usableWidth = dp(resources.configuration.screenWidthDp) -
+            resources.getDimensionPixelSize(R.dimen.screen_pad) * 2 - row.paddingLeft - row.paddingRight
+        val inline = labelView.paint.measureText(label) + valueView.paint.measureText(value) + dp(24) <= usableWidth
+        val header = LinearLayout(this).apply {
+            orientation = if (inline) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        header.addView(labelView, if (inline) LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            else lp())
+        header.addView(valueView, if (inline) LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+            marginStart = dp(16)
+        } else lp().apply { topMargin = dp(3) })
+        row.addView(header, lp())
+        // Ces deux choix bénéficient d'une précision ; les autres intitulés se suffisent à eux-mêmes.
+        hint?.takeIf { it.isNotBlank() && showHint }?.let { description ->
             row.addView(TextView(this).apply {
                 text = description
                 setTextColor(pluxyColor(R.color.text_tertiary))
-                textSize = if (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_TYPE_MASK == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION) 16f else 14f
-                setPadding(0, dp(2), 0, 0)
+                textSize = if (television) 16f else 14f
+                includeFontPadding = false
+                setPadding(0, dp(4), 0, 0)
             })
         }
-        rows.addView(row, lp().also { it.topMargin = dp(8) })
+        rows.addView(row, lp().also { it.topMargin = dp(2) })
         return row
     }
 
@@ -265,17 +277,17 @@ class SettingsActivity : ThemedActivity() {
             tag = "setting:$label"
             text = label
             isChecked = value
-            setTextColor(Color.WHITE)
-            textSize = 16f
+            setTextColor(pluxyColor(R.color.text_primary))
+            textSize = if (television) 17f else 15f
             isFocusable = true
-            setBackgroundResource(R.drawable.focus_card)
-            setPadding(dp(18), dp(10), dp(18), dp(10))
-            minHeight = dp(64)
+            setBackgroundResource(R.drawable.bg_setting_row)
+            setPadding(dp(10), dp(6), dp(10), dp(6))
+            minHeight = dp(48)
             setOnCheckedChangeListener { _, checked ->
                 if (checked != value) onToggle()
             }
         }
-        rows.addView(toggle, lp().also { it.topMargin = dp(12) })
+        rows.addView(toggle, lp().also { it.topMargin = dp(2) })
     }
 
     /** Choix local, disponible même dans l'interface épurée et sans serveur joignable. */

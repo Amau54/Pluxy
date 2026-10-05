@@ -1,6 +1,7 @@
 package com.pluxy.tv.player
 
 import com.pluxy.tv.ui.ThemedActivity
+import com.pluxy.tv.ui.CompactChoiceMenu
 import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
@@ -26,6 +27,7 @@ import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
 import android.widget.ImageButton
 import android.widget.LinearLayout
+import android.widget.PopupWindow
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
@@ -91,6 +93,9 @@ class PlayerActivity : ThemedActivity() {
     private lateinit var playbackErrorMessage: TextView
     private lateinit var retryPlaybackButton: Button
     private var compactPlayerControls: Boolean? = null
+    private var playerChoiceMenu: PopupWindow? = null
+    private var playerChoiceMenuShowing = false
+    private var playerChoiceMenuGeneration = 0
     private var terminalPlaybackError = false
     private var activityStarted = false
     private var timelineScrubbing = false
@@ -739,18 +744,24 @@ class PlayerActivity : ThemedActivity() {
         val density = resources.displayMetrics.density
         val television = resources.configuration.uiMode and Configuration.UI_MODE_TYPE_MASK ==
             Configuration.UI_MODE_TYPE_TELEVISION
-        val compact = !television && controlsOverlay.width / density >= 480f &&
-            controlsOverlay.width > controlsOverlay.height &&
-            controlsOverlay.height / density <= 480f
+        val edge = resources.getDimensionPixelSize(R.dimen.media_viewer_screen_pad)
+        val availableWidth = controlsOverlay.width - controlsOverlay.paddingLeft -
+            controlsOverlay.paddingRight - edge * 2
+        val compact = availableWidth / density >= 400f
+        val scroll = findViewById<ScrollView>(R.id.playerPanelScroll)
+        val deckWidth = minOf(availableWidth, resources.getDimensionPixelSize(R.dimen.player_deck_max_width))
+            .coerceAtLeast((48 * density).toInt())
+        if (scroll.layoutParams.width != deckWidth) {
+            scroll.layoutParams = scroll.layoutParams.apply { width = deckWidth }
+        }
         val title = findViewById<View>(R.id.playerTitleCapsule)
         val titleParams = title.layoutParams as FrameLayout.LayoutParams
-        val edge = resources.getDimensionPixelSize(R.dimen.media_viewer_screen_pad)
         val exitSpace = if (television) 0 else (60 * density).toInt()
         if (titleParams.marginEnd != edge + exitSpace) {
             title.layoutParams = titleParams.apply { marginEnd = edge + exitSpace }
         }
         val titleSpace = controlsOverlay.width - controlsOverlay.paddingLeft - controlsOverlay.paddingRight -
-            titleParams.marginStart - titleParams.marginEnd - title.paddingLeft - title.paddingRight - (15 * density).toInt()
+            titleParams.marginStart - titleParams.marginEnd - title.paddingLeft - title.paddingRight
         if (mediaTitleView.maxWidth != titleSpace.coerceAtLeast(0)) {
             mediaTitleView.maxWidth = titleSpace.coerceAtLeast(0)
         }
@@ -760,8 +771,8 @@ class PlayerActivity : ThemedActivity() {
             rows.orientation = if (compact) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
             val secondary = findViewById<HorizontalScrollView>(R.id.playerSecondaryScroll)
             secondary.layoutParams = (secondary.layoutParams as LinearLayout.LayoutParams).apply {
-                width = if (compact) 0 else ViewGroup.LayoutParams.MATCH_PARENT
-                weight = if (compact) 1f else 0f
+                width = if (compact) ViewGroup.LayoutParams.WRAP_CONTENT else ViewGroup.LayoutParams.MATCH_PARENT
+                weight = 0f
                 marginStart = if (compact) (16 * density).toInt() else 0
             }
             for ((id, label) in listOf(
@@ -770,12 +781,35 @@ class PlayerActivity : ThemedActivity() {
             )) {
                 findViewById<Button>(id).apply {
                     text = if (compact) "" else getString(label)
-                    compoundDrawablePadding = if (compact) 0 else (8 * density).toInt()
-                    val horizontalPadding = if (compact) 0 else (14 * density).toInt()
+                    compoundDrawablePadding = if (compact) 0 else (6 * density).toInt()
+                    val horizontalPadding = if (compact) 0 else (10 * density).toInt()
                     setPaddingRelative(horizontalPadding, paddingTop, horizontalPadding, paddingBottom)
                     layoutParams = layoutParams.apply {
                         width = if (compact) (48 * density).toInt() else ViewGroup.LayoutParams.WRAP_CONTENT
                     }
+                }
+            }
+            val restart = findViewById<View>(R.id.btnRestart)
+            val rewind = findViewById<View>(R.id.btnRewind)
+            val forward = findViewById<View>(R.id.btnForward)
+            val tracks = findViewById<View>(R.id.btnTracks)
+            val subtitles = findViewById<View>(R.id.btnSubtitles)
+            val more = findViewById<View>(R.id.btnGear)
+            restart.nextFocusLeftId = if (compact) R.id.btnGear else R.id.btnForward
+            forward.nextFocusRightId = if (compact) R.id.btnTracks else R.id.btnRestart
+            tracks.nextFocusLeftId = if (compact) R.id.btnForward else R.id.btnGear
+            more.nextFocusRightId = if (compact) R.id.btnRestart else R.id.btnTracks
+            for (control in listOf(restart, rewind, playPauseButton, forward, tracks, subtitles, more)) {
+                control.nextFocusUpId = if (compact) R.id.playbackTimeline else when (control.id) {
+                    R.id.btnTracks, R.id.btnSubtitles -> R.id.btnPlayPause
+                    R.id.btnGear -> R.id.btnForward
+                    else -> R.id.playbackTimeline
+                }
+                control.nextFocusDownId = if (compact) control.id else when (control.id) {
+                    R.id.btnForward -> R.id.btnSubtitles
+                    R.id.btnTracks, R.id.btnSubtitles -> R.id.btnPlayPause
+                    R.id.btnGear -> R.id.btnForward
+                    else -> R.id.btnTracks
                 }
             }
         }
@@ -785,11 +819,10 @@ class PlayerActivity : ThemedActivity() {
         if (statusParams.topMargin != statusTop) {
             statusView.layoutParams = statusParams.apply { topMargin = statusTop }
         }
-        val scroll = findViewById<ScrollView>(R.id.playerPanelScroll)
         val panel = findViewById<View>(R.id.playerBottomPanel)
         val margin = (scroll.layoutParams as FrameLayout.LayoutParams).bottomMargin
         val belowTitle = (controlsOverlay.height - controlsOverlay.paddingBottom - title.bottom - margin - 12 * density).toInt()
-        val cap = if (compact) belowTitle else minOf(belowTitle, (controlsOverlay.height * 0.6f).toInt())
+        val cap = belowTitle
         val height = minOf(panel.measuredHeight, cap.coerceAtLeast((48 * density).toInt()))
         if (height > 0 && scroll.layoutParams.height != height) {
             scroll.layoutParams = scroll.layoutParams.apply { this.height = height }
@@ -859,7 +892,8 @@ class PlayerActivity : ThemedActivity() {
         }
     }
 
-    private fun shouldAutoHideControls(): Boolean = !terminalPlaybackError && player?.isPlaying == true && hasWindowFocus()
+    private fun shouldAutoHideControls(): Boolean = !terminalPlaybackError &&
+        !playerChoiceMenuShowing && player?.isPlaying == true && hasWindowFocus()
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
@@ -1094,6 +1128,46 @@ class PlayerActivity : ThemedActivity() {
         statusView.visibility = if (message.isBlank()) View.GONE else View.VISIBLE
     }
 
+    private fun showPlayerChoices(
+        anchor: View,
+        title: String,
+        choices: List<CompactChoiceMenu.Choice>,
+        selectedValue: String = "",
+        onSelect: (String) -> Unit,
+    ) {
+        if (!activityStarted || isFinishing || isDestroyed || !anchor.isAttachedToWindow) return
+        val generation = ++playerChoiceMenuGeneration
+        playerChoiceMenu?.dismiss()
+        showControls()
+        controlsOverlay.animate().cancel()
+        controlsOverlay.alpha = 1f
+        playerChoiceMenuShowing = true
+        handler.removeCallbacks(hideControlsRunnable)
+        playerChoiceMenu = CompactChoiceMenu.show(
+            activity = this,
+            anchor = anchor,
+            title = title,
+            choices = choices,
+            selectedValue = selectedValue,
+            onSelect = { value ->
+                if (generation == playerChoiceMenuGeneration && activityStarted && !isFinishing && !isDestroyed) {
+                    onSelect(value)
+                }
+            },
+            onDismiss = {
+                if (generation == playerChoiceMenuGeneration) {
+                    playerChoiceMenu = null
+                    playerChoiceMenuShowing = false
+                    if (activityStarted && !isFinishing && !isDestroyed) scheduleControlsHide()
+                }
+            },
+        )
+        if (playerChoiceMenu == null) {
+            playerChoiceMenuShowing = false
+            scheduleControlsHide()
+        }
+    }
+
     /** Menu secondaire volontairement court : aucune option technique dans le film. */
     private fun openMenu() {
         val entries = listOf(
@@ -1102,9 +1176,13 @@ class PlayerActivity : ThemedActivity() {
             "Compatibilité de lecture" to { pickPlaybackStrategy() },
             getString(R.string.player_information_action) to { showDiagnostics() },
         )
-        AlertDialog.Builder(this).setTitle("Lecture")
-            .setItems(entries.map { it.first }.toTypedArray()) { _, w -> entries[w].second() }
-            .show()
+        showPlayerChoices(
+            findViewById(R.id.btnGear),
+            "Lecture",
+            entries.mapIndexed { index, entry -> CompactChoiceMenu.Choice(entry.first, index.toString()) },
+        ) { value ->
+            value.toIntOrNull()?.let { entries.getOrNull(it)?.second?.invoke() }
+        }
     }
 
     /**
@@ -1130,19 +1208,17 @@ class PlayerActivity : ThemedActivity() {
     /** Change de stratégie à chaud sans perdre l'instant en cours. */
     private fun pickPlaybackStrategy() {
         val choices = PlaybackStrategy.entries
-        val labels = choices.map {
-            (if (it == activeStrategy) "✓ " else "   ") + it.title + "\n" + it.description
+        showPlayerChoices(
+            findViewById(R.id.btnGear),
+            "Mode de lecture",
+            choices.map { CompactChoiceMenu.Choice(it.title, it.key, it.description) },
+            activeStrategy.key,
+        ) { value ->
+            val selected = choices.firstOrNull { it.key == value } ?: return@showPlayerChoices
+            if (selected == activeStrategy) return@showPlayerChoices
+            PluxyApplication.setPlaybackStrategy(this, selected.key)
+            reprepareForStrategy(selected)
         }
-        AlertDialog.Builder(this)
-            .setTitle("Mode de lecture")
-            .setItems(labels.toTypedArray()) { _, which ->
-                val selected = choices[which]
-                if (selected == activeStrategy) return@setItems
-                PluxyApplication.setPlaybackStrategy(this, selected.key)
-                reprepareForStrategy(selected)
-            }
-            .setNegativeButton("Annuler", null)
-            .show()
     }
 
     private fun reprepareForStrategy(strategy: PlaybackStrategy) {
@@ -1201,6 +1277,10 @@ class PlayerActivity : ThemedActivity() {
 
     override fun onStop() {
         activityStarted = false
+        playerChoiceMenuGeneration++
+        playerChoiceMenu?.dismiss()
+        playerChoiceMenu = null
+        playerChoiceMenuShowing = false
         updateScreenAwake()
         super.onStop()
         resumeDialog?.dismiss()
@@ -1235,6 +1315,10 @@ class PlayerActivity : ThemedActivity() {
     }
 
     override fun onDestroy() {
+        playerChoiceMenuGeneration++
+        playerChoiceMenu?.dismiss()
+        playerChoiceMenu = null
+        playerChoiceMenuShowing = false
         mediaSession?.release()
         mediaSession = null
         super.onDestroy()
@@ -1515,46 +1599,62 @@ class PlayerActivity : ThemedActivity() {
         val p = player ?: return
         val opts = tracksOf(type)
         if (opts.isEmpty()) { Toast.makeText(this, "Pistes en cours d'analyse…", Toast.LENGTH_SHORT).show(); return }
-        val labels = opts.map { (if (it.selected) "✓ " else "   ") + it.label }.toTypedArray()
-        AlertDialog.Builder(this).setTitle(title).setItems(labels) { _, which ->
-            val o = opts[which]
+        showPlayerChoices(
+            findViewById(R.id.btnTracks),
+            title,
+            opts.mapIndexed { index, option -> CompactChoiceMenu.Choice(option.label, index.toString()) },
+            opts.indexOfFirst { it.selected }.toString(),
+        ) { value ->
+            if (player !== p) return@showPlayerChoices
+            val o = value.toIntOrNull()?.let(opts::getOrNull) ?: return@showPlayerChoices
             val choice = trackChoice(o.group.getTrackFormat(o.index))
             if (type == C.TRACK_TYPE_AUDIO) audioChoice = choice else subtitleChoice = choice
             p.trackSelectionParameters = p.trackSelectionParameters.buildUpon()
                 .setOverrideForType(TrackSelectionOverride(o.group.mediaTrackGroup, listOf(o.index)))
                 .setTrackTypeDisabled(type, false).build()
-        }.show()
+        }
     }
 
     private fun pickSubtitles() {
         val p = player ?: return
         val opts = tracksOf(C.TRACK_TYPE_TEXT)
-        val labels = (listOf("Désactivés") + opts.map { (if (it.selected) "✓ " else "   ") + it.label }).toTypedArray()
-        AlertDialog.Builder(this).setTitle("Sous-titres").setItems(labels) { _, which ->
+        showPlayerChoices(
+            findViewById(R.id.btnSubtitles),
+            "Sous-titres",
+            listOf(CompactChoiceMenu.Choice("Désactivés", "off")) +
+                opts.mapIndexed { index, option -> CompactChoiceMenu.Choice(option.label, index.toString()) },
+            if (subtitlesDisabled) "off" else opts.indexOfFirst { it.selected }.toString(),
+        ) { value ->
+            if (player !== p) return@showPlayerChoices
+            val o = if (value == "off") null else {
+                value.toIntOrNull()?.let(opts::getOrNull) ?: return@showPlayerChoices
+            }
             val b = p.trackSelectionParameters.buildUpon()
-            subtitlesDisabled = which == 0
-            if (which == 0) b.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
-            else {
-                val o = opts[which - 1]
+            subtitlesDisabled = value == "off"
+            if (subtitlesDisabled) b.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+            else if (o != null) {
                 subtitleChoice = trackChoice(o.group.getTrackFormat(o.index))
                 b.setOverrideForType(TrackSelectionOverride(o.group.mediaTrackGroup, listOf(o.index)))
                     .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
             }
             p.trackSelectionParameters = b.build()
-        }.show()
+        }
     }
 
     private fun pickSpeed() {
         val p = player ?: return
-        AlertDialog.Builder(this).setTitle("Vitesse de lecture")
-            .setSingleChoiceItems(speeds.map { "${it}x" }.toTypedArray(),
-                speeds.indexOf(playbackSpeed).coerceAtLeast(0)) { dialog, which ->
-                if (player === p) {
-                    playbackSpeed = speeds[which]
-                    p.playbackParameters = PlaybackParameters(playbackSpeed)
-                }
-                dialog.dismiss()
-            }.show()
+        showPlayerChoices(
+            findViewById(R.id.btnGear),
+            "Vitesse de lecture",
+            speeds.map { CompactChoiceMenu.Choice("${it}x", it.toString()) },
+            speeds[speeds.indexOf(playbackSpeed).coerceAtLeast(0)].toString(),
+        ) { value ->
+            val selected = speeds.firstOrNull { it.toString() == value } ?: return@showPlayerChoices
+            if (player === p) {
+                playbackSpeed = selected
+                p.playbackParameters = PlaybackParameters(playbackSpeed)
+            }
+        }
     }
 
     private fun cycleAspect() {

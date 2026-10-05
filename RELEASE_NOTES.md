@@ -1,11 +1,11 @@
-# Pluxy 1.5.3
+# Pluxy 1.5.4
 
-Lecteur et serveur Android : **version 1.5.3, versionCode 48**.
+Lecteur et serveur Android : **version 1.5.4, versionCode 49**.
 
-- Photothèque plus compacte : les albums se replient sur une ligne discrète.
-- Navigation allégée : onglets plus fins et moins d’espace au-dessus du catalogue.
-- Menus Albums, tri et réglages en verre fumé, avec accès direct au choix actif.
-- Commandes tactiles et focus de la télécommande conservés.
+- Lecteur vidéo : barre de commandes basse et centrée, icônes discrètes, titre léger et menus de choix compacts.
+- Fiches, bibliothèque et réglages plus denses, avec des bordures et des reflets plus fins.
+- Commandes photo et audio compactes ; interface serveur assortie.
+- Zones tactiles de 48 dp et focus télécommande conservés, avec adaptation aux grandes polices.
 
 ## Mise à jour des APK de test
 

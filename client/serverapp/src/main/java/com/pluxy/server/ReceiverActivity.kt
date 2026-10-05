@@ -9,6 +9,8 @@ import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
 import android.widget.Button
 import android.widget.EditText
+import android.widget.FrameLayout
+import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.SeekBar
 import android.widget.TextView
@@ -198,6 +200,47 @@ class ReceiverActivity : AppCompatActivity() {
                 setPadding(dp(6), 0, dp(6), 0)
             }
         }
+        if (resources.configuration.fontScale > 1.2f && resources.configuration.screenWidthDp < 400) {
+            val card = findViewById<LinearLayout>(R.id.receiverCastCard)
+            val text = findViewById<View>(R.id.receiverCastText)
+            card.removeView(castRouteButton)
+            card.removeView(text)
+            card.removeView(castPlay)
+            card.orientation = LinearLayout.VERTICAL
+            val castHeader = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
+            }
+            castHeader.addView(castRouteButton, LinearLayout.LayoutParams(dp(48), dp(48)))
+            castHeader.addView(text, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                marginStart = dp(10)
+            })
+            card.addView(castHeader, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            card.addView(castPlay, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { topMargin = dp(6) })
+        }
+        if (resources.configuration.fontScale > 1.2f) {
+            val filters = findViewById<LinearLayout>(R.id.receiverFilterRow)
+            val tools = filters.parent as LinearLayout
+            val position = tools.indexOfChild(filters)
+            val railParams = filters.layoutParams
+            tools.removeView(filters)
+            filters.weightSum = 0f
+            val rail = HorizontalScrollView(this).apply {
+                isHorizontalScrollBarEnabled = false
+                overScrollMode = View.OVER_SCROLL_NEVER
+                addView(filters, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(48)))
+            }
+            tools.addView(rail, position, railParams)
+            listOf(R.id.filterVideos, R.id.filterPhotos, R.id.filterAudio).forEach { id ->
+                findViewById<Button>(id).apply {
+                    val margin = (layoutParams as LinearLayout.LayoutParams).marginStart
+                    layoutParams = LinearLayout.LayoutParams(
+                        (paint.measureText(this.text.toString()) + dp(24)).toInt().coerceAtLeast(dp(96)), dp(48),
+                    ).apply { marginStart = margin }
+                    setSingleLine(true)
+                }
+            }
+        }
         WindowCompat.setDecorFitsSystemWindows(window, false)
         val root = findViewById<View>(R.id.receiverRoot)
         val padding = intArrayOf(root.paddingLeft, root.paddingTop, root.paddingRight, root.paddingBottom)
@@ -220,7 +263,9 @@ class ReceiverActivity : AppCompatActivity() {
     private fun updateCompactControls() {
         header.visibility = if (keyboardVisible) View.GONE else View.VISIBLE
         destinations.visibility = if (keyboardVisible) View.GONE else View.VISIBLE
-        browserSummary.visibility = if (keyboardVisible) View.GONE else View.VISIBLE
+        val shortLandscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE &&
+            resources.configuration.fontScale > 1.2f
+        browserSummary.visibility = if (keyboardVisible || shortLandscape) View.GONE else View.VISIBLE
         playbackControls.visibility = if (remoteActive && !keyboardVisible) View.VISIBLE else View.GONE
     }
 
@@ -353,6 +398,14 @@ class ReceiverActivity : AppCompatActivity() {
         }
         if (filtered.isEmpty() && RemotePlaybackRuntime.state.value.media == null) {
             statusText.text = "Aucun média dans cet onglet"
+        } else if (filtered.isNotEmpty() && RemotePlaybackRuntime.state.value.media == null &&
+            statusText.text.toString() == "Aucun média dans cet onglet") {
+            val selected = filtered.firstOrNull { it.id == selectedId }
+            statusText.text = if (selected != null) {
+                "${selected.title} · choisissez Google Cast ou une TV DLNA"
+            } else {
+                "Choisissez un média puis une télévision"
+            }
         }
     }
 

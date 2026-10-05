@@ -5,8 +5,8 @@
     android:clipChildren="false"
     android:clipToPadding="false"
     android:orientation="vertical"
-    android:paddingTop="8dp"
-    android:paddingBottom="8dp">
+    android:paddingTop="4dp"
+    android:paddingBottom="6dp">
 
     <TextView
         android:id="@+id/shelfTitle"
@@ -14,9 +14,9 @@
         android:layout_height="wrap_content"
         android:paddingStart="6dp"
         android:paddingEnd="6dp"
-        android:paddingBottom="8dp"
+        android:paddingBottom="6dp"
         android:textColor="?attr/pluxyTextPrimary"
-        android:textSize="22sp"
+        android:textSize="@dimen/library_section_size"
         android:fontFamily="sans-serif-medium" />
 
     <androidx.recyclerview.widget.RecyclerView

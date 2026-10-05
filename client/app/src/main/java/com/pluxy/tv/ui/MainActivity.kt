@@ -128,10 +128,10 @@ class MainActivity : ThemedActivity() {
         val screenDp = resources.displayMetrics.widthPixels / resources.displayMetrics.density
         val screenPaddingDp = resources.getDimension(R.dimen.screen_pad) / resources.displayMetrics.density
         val reservedDp = if (isTelevision() || resources.getBoolean(R.bool.show_library_hero)) {
-            230f + screenPaddingDp
+            resources.getDimension(R.dimen.library_rail_content_start) / resources.displayMetrics.density + screenPaddingDp
         } else screenPaddingDp * 2f
         val contentDp = (screenDp - reservedDp).coerceAtLeast(160f)
-        val cardDp = resources.getDimension(R.dimen.library_card_width) / resources.displayMetrics.density
+        val cardDp = resources.getDimension(R.dimen.library_grid_card_width) / resources.displayMetrics.density
         gridSpan = (contentDp / (cardDp + 12f)).toInt().coerceIn(2, 6)
         grid.setItemViewCacheSize(18)
         createAdapters()
@@ -382,15 +382,15 @@ class MainActivity : ThemedActivity() {
         findViewById<LinearLayout>(R.id.categoryNavigation).apply {
             background = getDrawable(R.drawable.bg_glass_nav_rail)
             layoutParams = FrameLayout.LayoutParams(
-                (152 * density).toInt(),
+                resources.getDimensionPixelSize(R.dimen.library_rail_width),
                 FrameLayout.LayoutParams.WRAP_CONTENT,
                 Gravity.START or Gravity.TOP,
             ).apply {
-                topMargin = (116 * density).toInt()
+                topMargin = (104 * density).toInt()
                 leftMargin = (48 * density).toInt()
             }
-            elevation = (6 * density)
-            setPadding((10 * density).toInt(), (10 * density).toInt(), (10 * density).toInt(), (10 * density).toInt())
+            elevation = 0f
+            setPadding(0, 0, 0, 0)
         }
         findViewById<LinearLayout>(R.id.tabs).apply {
             orientation = LinearLayout.VERTICAL
@@ -412,7 +412,7 @@ class MainActivity : ThemedActivity() {
                 ).apply { setMargins(0, 0, 0, 0) }
             }
         }
-        val start = (230 * density).toInt()
+        val start = resources.getDimensionPixelSize(R.dimen.library_rail_content_start)
         listOf(findViewById<View>(R.id.swipe), libraryHero, findViewById<View>(R.id.libraryContext)).forEach { view ->
             (view.layoutParams as? ViewGroup.MarginLayoutParams)?.let { params ->
                 params.marginStart = start
@@ -885,8 +885,8 @@ class MainActivity : ThemedActivity() {
             val density = resources.displayMetrics.density
             findViewById<ImageView>(R.id.brandLogo).apply {
                 layoutParams = (layoutParams as ViewGroup.MarginLayoutParams).apply {
-                    width = (32 * density).toInt()
-                    height = (32 * density).toInt()
+                    width = (24 * density).toInt()
+                    height = (24 * density).toInt()
                     marginEnd = (8 * density).toInt()
                 }
             }

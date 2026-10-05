@@ -32,7 +32,7 @@
             android:paddingStart="@dimen/screen_pad"
             android:paddingEnd="@dimen/screen_pad"
             android:paddingTop="@dimen/details_top_pad"
-            android:paddingBottom="44dp">
+            android:paddingBottom="24dp">
 
             <!-- Affiche et actions : empilées sur téléphone, côte à côte sur grand écran. -->
             <LinearLayout
@@ -46,7 +46,7 @@
                     android:layout_gravity="center_horizontal"
                     android:background="@drawable/poster_rounded"
                     android:clipToOutline="true"
-                    android:elevation="12dp">
+                    android:elevation="3dp">
 
                     <TextView
                         android:id="@+id/posterFallback"
@@ -57,9 +57,9 @@
                         android:gravity="bottom|start"
                         android:importantForAccessibility="no"
                         android:maxLines="4"
-                        android:padding="18dp"
+                        android:padding="12dp"
                         android:textColor="?attr/pluxyTextPrimary"
-                        android:textSize="21sp"
+                        android:textSize="17sp"
                         android:textStyle="bold" />
 
                     <ImageView
@@ -82,6 +82,10 @@
                         android:id="@+id/title"
                         style="@style/Text.Display"
                         android:textSize="@dimen/details_title_size"
+                        android:fontFamily="sans-serif-medium"
+                        android:textStyle="normal"
+                        android:maxLines="2"
+                        android:ellipsize="end"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content" />
 
@@ -97,7 +101,7 @@
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="22dp"
+                        android:layout_marginTop="16dp"
                         android:orientation="vertical">
 
                         <LinearLayout
@@ -143,7 +147,7 @@
                     <HorizontalScrollView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="14dp"
+                        android:layout_marginTop="10dp"
                         android:scrollbars="none">
                         <LinearLayout
                             android:id="@+id/ratings"
@@ -170,14 +174,14 @@
                         android:id="@+id/playDiagnostic"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="13dp"
+                        android:layout_marginTop="8dp"
                         android:background="@drawable/focus_card"
                         android:clickable="true"
-                        android:elevation="2dp"
+                        android:elevation="0dp"
                         android:focusable="true"
                         android:gravity="center_vertical"
                         android:maxWidth="620dp"
-                        android:minHeight="52dp"
+                        android:minHeight="48dp"
                         android:paddingStart="14dp"
                         android:paddingTop="8dp"
                         android:paddingEnd="14dp"
@@ -191,7 +195,7 @@
                         android:id="@+id/tagline"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="14dp"
+                        android:layout_marginTop="10dp"
                         android:textColor="?attr/pluxyTextSecondary"
                         android:textStyle="italic"
                         android:textSize="@dimen/details_meta_size"
@@ -215,7 +219,7 @@
                 style="@style/Text.Heading"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="34dp"
+                android:layout_marginTop="20dp"
                 android:text="@string/label_synopsis"
                 android:visibility="gone" />
 
@@ -225,7 +229,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="10dp"
-                android:textColor="#E1E6EF"
+                android:textColor="?attr/pluxyTextSecondary"
                 android:visibility="gone" />
 
             <TextView
@@ -233,7 +237,7 @@
                 style="@style/Text.Heading"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="32dp"
+                android:layout_marginTop="20dp"
                 android:text="@string/label_cast"
                 android:visibility="gone" />
 
@@ -241,7 +245,7 @@
                 android:id="@+id/cast"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
+                android:layout_marginTop="10dp"
                 android:clipChildren="false"
                 android:clipToPadding="false"
                 android:paddingBottom="12dp"

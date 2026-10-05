@@ -1,6 +1,7 @@
 package com.pluxy.tv.ui
 
 import android.os.Bundle
+import android.content.res.Configuration
 import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
@@ -114,20 +115,19 @@ class ServerSetupActivity : ThemedActivity() {
         val d = resources.displayMetrics.density
         val b = Button(this).apply {
             text = getString(R.string.server_choice, info.name, info.ip, info.port)
-            setTextColor(0xFFF5F7FB.toInt())
-            textSize = 16f
+            setTextColor(pluxyColor(R.color.text_primary))
+            textSize = if (resources.configuration.uiMode and Configuration.UI_MODE_TYPE_MASK == Configuration.UI_MODE_TYPE_TELEVISION) 17f else 15f
             isAllCaps = false
-            setBackgroundResource(R.drawable.bg_btn_secondary)
-            stateListAnimator = android.animation.AnimatorInflater
-                .loadStateListAnimator(this@ServerSetupActivity, R.animator.focus_lift_btn)
+            setBackgroundResource(R.drawable.bg_setting_row)
+            stateListAnimator = null
             isFocusable = true
-            minHeight = (52 * d).toInt()
-            setPadding((24 * d).toInt(), (12 * d).toInt(), (24 * d).toInt(), (12 * d).toInt())
+            minHeight = (48 * d).toInt()
+            setPadding((12 * d).toInt(), (6 * d).toInt(), (12 * d).toInt(), (6 * d).toInt())
             setOnClickListener { select(info) }
         }
         b.layoutParams = LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
-        ).apply { topMargin = (10 * d).toInt() }
+        ).apply { topMargin = (4 * d).toInt() }
         list.addView(b)
     }
 

@@ -1,5 +1,6 @@
 package com.pluxy.tv.ui
 
+import android.content.res.Configuration
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -10,6 +11,7 @@ import android.view.View
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityManager
 import android.widget.Button
+import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.ProgressBar
 import android.widget.TextView
@@ -47,9 +49,10 @@ class PhotoActivity : ThemedActivity() {
     private lateinit var photoHintRight: View
     private lateinit var photoStatus: TextView
     private lateinit var photoControls: View
-    private lateinit var previousButton: Button
-    private lateinit var slideshowButton: Button
-    private lateinit var nextButton: Button
+    private lateinit var previousButton: ImageButton
+    private lateinit var slideshowButton: ImageButton
+    private lateinit var nextButton: ImageButton
+    private lateinit var closeButton: ImageButton
     private lateinit var retryButton: Button
     private lateinit var errorView: TextView
     private val accessibilityManager by lazy { getSystemService(ACCESSIBILITY_SERVICE) as AccessibilityManager }
@@ -68,7 +71,9 @@ class PhotoActivity : ThemedActivity() {
 
     private val hideChrome = Runnable {
         // A focused action must stay visible while the user chooses it.
-        if (!accessibilityManager.isEnabled && !photoInfo.hasFocus()) setChromeVisible(false)
+        if (!accessibilityManager.isEnabled && !photoInfo.hasFocus() && !closeButton.hasFocus()) {
+            setChromeVisible(false)
+        }
     }
 
     private val slideshowTick = object : Runnable {
@@ -99,6 +104,7 @@ class PhotoActivity : ThemedActivity() {
         previousButton = findViewById(R.id.btnPhotoPrevious)
         slideshowButton = findViewById(R.id.btnPhotoSlideshow)
         nextButton = findViewById(R.id.btnPhotoNext)
+        closeButton = findViewById(R.id.btnPhotoClose)
         retryButton = findViewById(R.id.btnPhotoRetry)
         errorView = findViewById(R.id.photoError)
         photos = listOf(initial)
@@ -109,6 +115,7 @@ class PhotoActivity : ThemedActivity() {
         previousButton.setOnClickListener { browseTo(index - 1) }
         slideshowButton.setOnClickListener { setSlideshowRunning(!slideshowRunning) }
         nextButton.setOnClickListener { browseTo(index + 1) }
+        closeButton.setOnClickListener { finish() }
         retryButton.setOnClickListener { showAt(index) }
         photoView.setOnClickListener {
             if (accessibilityManager.isEnabled) revealControls() else {
@@ -244,6 +251,7 @@ class PhotoActivity : ThemedActivity() {
     private fun updatePhotoLabel() {
         val item = photos.getOrNull(index) ?: return
         titleView.text = item.title
+        titleView.contentDescription = item.title
         indexView.text = getString(R.string.photo_index, index + 1, photos.size)
         photoView.contentDescription = getString(R.string.photo_description_position, item.title, index + 1, photos.size)
     }
@@ -272,10 +280,15 @@ class PhotoActivity : ThemedActivity() {
         val canBrowse = photos.size > 1
         previousButton.isEnabled = canBrowse
         nextButton.isEnabled = canBrowse
+        previousButton.alpha = if (canBrowse) 1f else 0.35f
+        nextButton.alpha = if (canBrowse) 1f else 0.35f
         // Keep the central action focusable even while the folder is loading or
         // contains a single image, so revealing controls always has a stable target.
-        slideshowButton.text = getString(
+        slideshowButton.contentDescription = getString(
             if (slideshowRunning) R.string.photo_slideshow_pause else R.string.photo_slideshow_start,
+        )
+        slideshowButton.setImageResource(
+            if (slideshowRunning) R.drawable.ic_player_pause else R.drawable.ic_player_play,
         )
         photoStatus.text = getString(
             if (canBrowse) R.string.photo_slideshow_active else R.string.photo_single_image,
@@ -304,8 +317,11 @@ class PhotoActivity : ThemedActivity() {
     private fun setChromeVisible(visible: Boolean) {
         val show = visible || accessibilityManager.isEnabled || errorView.visibility == View.VISIBLE
         chromeVisible = show
+        val television = resources.configuration.uiMode and Configuration.UI_MODE_TYPE_MASK ==
+            Configuration.UI_MODE_TYPE_TELEVISION
+        closeButton.visibility = if (show && !television) View.VISIBLE else View.GONE
         handler.removeCallbacks(hideChrome)
-        if (!show && photoInfo.hasFocus()) photoView.requestFocus()
+        if (!show && (photoInfo.hasFocus() || closeButton.hasFocus())) photoView.requestFocus()
         listOf(photoInfo, photoHintLeft, photoHintRight).forEach { chrome ->
             chrome.animate().cancel()
             if (show) {
@@ -324,13 +340,14 @@ class PhotoActivity : ThemedActivity() {
         if (!::photoView.isInitialized) return super.dispatchKeyEvent(event)
         if (event.action == KeyEvent.ACTION_UP && consumedKeys.remove(event.keyCode)) return true
         if (event.action == KeyEvent.ACTION_DOWN) {
+            val controlFocused = photoInfo.hasFocus() || closeButton.hasFocus()
             if (event.repeatCount == 0) consumedKeys.remove(event.keyCode)
             if (event.keyCode in consumedKeys && event.repeatCount > 0 &&
                 event.keyCode != KeyEvent.KEYCODE_DPAD_LEFT && event.keyCode != KeyEvent.KEYCODE_DPAD_RIGHT
             ) return true
             when (event.keyCode) {
                 KeyEvent.KEYCODE_DPAD_LEFT -> {
-                    if (chromeVisible && photoInfo.hasFocus()) return super.dispatchKeyEvent(event)
+                    if (chromeVisible && controlFocused) return super.dispatchKeyEvent(event)
                     consumedKeys.add(event.keyCode)
                     if (event.repeatCount == 0 || event.repeatCount % 3 == 0) {
                         browseTo(index - 1)
@@ -338,7 +355,7 @@ class PhotoActivity : ThemedActivity() {
                     return true
                 }
                 KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                    if (chromeVisible && photoInfo.hasFocus()) return super.dispatchKeyEvent(event)
+                    if (chromeVisible && controlFocused) return super.dispatchKeyEvent(event)
                     consumedKeys.add(event.keyCode)
                     if (event.repeatCount == 0 || event.repeatCount % 3 == 0) {
                         browseTo(index + 1)
@@ -347,7 +364,7 @@ class PhotoActivity : ThemedActivity() {
                 }
                 KeyEvent.KEYCODE_DPAD_UP,
                 KeyEvent.KEYCODE_DPAD_DOWN -> {
-                    if (!chromeVisible || !photoInfo.hasFocus()) {
+                    if (!chromeVisible || !controlFocused) {
                         consumedKeys.add(event.keyCode)
                         revealControls()
                         return true
@@ -357,7 +374,7 @@ class PhotoActivity : ThemedActivity() {
                 KeyEvent.KEYCODE_ENTER,
                 KeyEvent.KEYCODE_BUTTON_A -> {
                     if (event.repeatCount > 0) return true
-                    if (!chromeVisible || !photoInfo.hasFocus()) {
+                    if (!chromeVisible || !controlFocused) {
                         consumedKeys.add(event.keyCode)
                         revealControls()
                         return true

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <dimen name="section_header_title_size">17sp</dimen>
+    <dimen name="section_header_title_size">16sp</dimen>
     <dimen name="section_header_touch_height">48dp</dimen>
     <dimen name="section_header_plain_height">30dp</dimen>
     <string name="section_expanded">Déplié</string>

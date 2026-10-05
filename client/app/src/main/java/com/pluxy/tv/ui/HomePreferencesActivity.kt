@@ -1,6 +1,6 @@
 package com.pluxy.tv.ui
 
-import android.animation.AnimatorInflater
+import android.content.res.Configuration
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
@@ -41,19 +41,19 @@ class HomePreferencesActivity : ThemedActivity() {
             orientation = LinearLayout.VERTICAL
             setBackgroundResource(R.drawable.bg_tv_ambient)
             val safe = resources.getDimensionPixelSize(R.dimen.screen_pad)
-            setPadding(safe, dp(28), safe, dp(24))
+            setPadding(safe, dp(24), safe, dp(20))
         }
         root.addView(TextView(this).apply {
             text = "Personnaliser l’accueil"
-            textSize = 28f
+            textSize = if (isTelevision(this@HomePreferencesActivity)) 26f else 24f
             setTextColor(pluxyColor(R.color.text_primary))
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
         })
         root.addView(TextView(this).apply {
-            text = "Affichez ou masquez chaque rubrique. Utilisez Monter et Descendre pour choisir son ordre. Les changements sont enregistrés sur cet appareil."
-            textSize = 15f
+            text = "Choisissez les rubriques à afficher. Les flèches changent leur ordre."
+            textSize = if (isTelevision(this@HomePreferencesActivity)) 16f else 14f
             setTextColor(pluxyColor(R.color.text_secondary))
-            setPadding(0, dp(8), 0, dp(18))
+            setPadding(0, dp(6), 0, dp(14))
         })
         list = RecyclerView(this).apply {
             layoutManager = LinearLayoutManager(this@HomePreferencesActivity)
@@ -139,66 +139,61 @@ class HomePreferencesActivity : ThemedActivity() {
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder {
             val context = parent.context
-            val wide = context.resources.configuration.screenWidthDp >= 600
+            val television = isTelevision(context)
+            val wide = context.resources.configuration.screenWidthDp >= 600 ||
+                context.resources.configuration.fontScale <= 1.2f
             val row = LinearLayout(context).apply {
                 orientation = if (wide) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
                 gravity = Gravity.CENTER_VERTICAL
-                setBackgroundResource(R.drawable.bg_glass_panel)
-                val p = dp(context, 14)
-                setPadding(p, dp(context, 10), p, dp(context, 10))
+                val p = dp(context, 8)
+                setPadding(p, dp(context, 3), p, dp(context, 3))
                 layoutParams = RecyclerView.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
-                ).apply { bottomMargin = dp(context, 10) }
+                ).apply { bottomMargin = dp(context, 4) }
             }
             val label = TextView(context).apply {
-                textSize = 18f
+                textSize = if (television) 17f else 15f
                 setTextColor(context.pluxyColor(R.color.text_primary))
                 gravity = Gravity.CENTER_VERTICAL
-                maxLines = 2
+                includeFontPadding = false
             }
             row.addView(label, if (wide) {
-                LinearLayout.LayoutParams(0, dp(context, 54), 1f)
+                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
             } else LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
             val controls = LinearLayout(context).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
             }
-            row.addView(controls)
+            row.addView(controls, if (wide) LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                else LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
             val toggle = SwitchCompat(context).apply {
-                textSize = 16f
                 isFocusable = true
                 showText = false
-                setTextColor(context.pluxyColor(R.color.text_primary))
-                setBackgroundResource(R.drawable.focus_card)
-                setPadding(dp(context, 12), dp(context, 8), dp(context, 12), dp(context, 8))
-                minHeight = dp(context, 54)
+                setBackgroundResource(R.drawable.bg_setting_row)
+                setPadding(dp(context, 4), 0, dp(context, 4), 0)
+                minHeight = dp(context, 48)
             }
-            // Sur petit écran les boutons passent sous le switch, sans compression des libellés.
-            if (wide) controls.addView(toggle) else {
-                controls.orientation = LinearLayout.VERTICAL
-                controls.addView(toggle, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(context, 54)))
-            }
+            controls.addView(toggle, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(context, 48)).apply {
+                if (!wide) weight = 1f
+            })
             val moves = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
             controls.addView(moves)
             fun moveButton(text: String) = Button(context).apply {
                 this.text = text
-                textSize = 16f
+                textSize = if (television) 18f else 16f
                 isAllCaps = false
                 setTextColor(context.getColorStateList(R.color.tab_text))
-                setBackgroundResource(R.drawable.bg_btn_secondary)
-                stateListAnimator = AnimatorInflater.loadStateListAnimator(context, R.animator.focus_lift_btn)
-                minHeight = dp(context, 54)
+                setBackgroundResource(R.drawable.bg_setting_row)
+                stateListAnimator = null
+                minHeight = dp(context, 48)
+                minWidth = 0
                 minimumWidth = 0
-                setPadding(dp(context, 14), 0, dp(context, 14), 0)
+                setPadding(0, 0, 0, 0)
             }
-            val up = moveButton("Monter")
-            val down = moveButton("Descendre")
-            moves.addView(up, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(context, 54)).apply {
-                if (wide) marginStart = dp(context, 8)
-            })
-            moves.addView(down, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(context, 54)).apply {
-                marginStart = dp(context, 8)
-            })
+            val up = moveButton("↑")
+            val down = moveButton("↓")
+            moves.addView(up, LinearLayout.LayoutParams(dp(context, 48), dp(context, 48)))
+            moves.addView(down, LinearLayout.LayoutParams(dp(context, 48), dp(context, 48)))
             return Holder(row, label, toggle, up, down)
         }
 
@@ -208,7 +203,7 @@ class HomePreferencesActivity : ThemedActivity() {
             holder.label.text = "${item.ordinal}. ${item.label}"
             holder.toggle.setOnCheckedChangeListener(null)
             holder.toggle.isChecked = item.visible
-            holder.toggle.text = if (item.visible) "Visible" else "Masquée"
+            holder.toggle.text = ""
             holder.toggle.contentDescription = "${item.label}, ${if (item.visible) "affichée" else "masquée"}. OK pour changer."
             holder.toggle.setOnCheckedChangeListener { _, checked ->
                 if (holder.bindingAdapterPosition != RecyclerView.NO_POSITION && holder.shelfId == item.id) {
@@ -250,5 +245,7 @@ class HomePreferencesActivity : ThemedActivity() {
     companion object {
         private const val STATE_FOCUS = "home_preferences_focus"
         private fun controlTag(id: String, action: String) = "shelf:$id:$action"
+        private fun isTelevision(context: android.content.Context): Boolean =
+            context.resources.configuration.uiMode and Configuration.UI_MODE_TYPE_MASK == Configuration.UI_MODE_TYPE_TELEVISION
     }
 }

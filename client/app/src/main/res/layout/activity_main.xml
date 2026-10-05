@@ -34,9 +34,9 @@
 
             <ImageView
                 android:id="@+id/brandLogo"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:layout_marginEnd="12dp"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:layout_marginEnd="8dp"
                 android:src="@drawable/pluxy_logo"
                 android:contentDescription="@string/brand_pluxy" />
 
@@ -46,7 +46,7 @@
                 android:layout_height="wrap_content"
                 android:text="@string/brand_pluxy"
                 android:textColor="?attr/pluxyTextPrimary"
-                android:textSize="30sp"
+                android:textSize="20sp"
                 android:fontFamily="sans-serif-medium"
                 android:textStyle="normal"
                 android:letterSpacing="0.01" />
@@ -238,7 +238,7 @@
     <FrameLayout
         android:id="@+id/libraryHero"
         android:layout_width="match_parent"
-        android:layout_height="164dp"
+        android:layout_height="140dp"
         android:layout_gravity="top"
         android:layout_marginStart="@dimen/screen_pad"
         android:layout_marginEnd="@dimen/screen_pad"
@@ -265,9 +265,9 @@
             android:layout_height="match_parent"
             android:gravity="bottom"
             android:orientation="vertical"
-            android:paddingStart="24dp"
+            android:paddingStart="16dp"
             android:paddingTop="18dp"
-            android:paddingEnd="24dp"
+            android:paddingEnd="16dp"
             android:paddingBottom="18dp">
 
             <TextView
@@ -285,7 +285,7 @@
                 android:ellipsize="end"
                 android:maxLines="1"
                 android:textColor="?attr/pluxyTextPrimary"
-                android:textSize="28sp"
+                android:textSize="22sp"
                 android:fontFamily="sans-serif-medium" />
 
             <TextView
@@ -346,8 +346,8 @@
 
     <ProgressBar
         android:id="@+id/mainLoading"
-        android:layout_width="52dp"
-        android:layout_height="52dp"
+        android:layout_width="32dp"
+        android:layout_height="32dp"
         android:layout_gravity="center"
         android:indeterminateTint="?attr/pluxyAccent"
         android:visibility="gone" />

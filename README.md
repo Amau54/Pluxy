@@ -6,7 +6,7 @@
 
 Vos films, séries, photos et musique sur la TV.
 
-**1.5.3 · Android TV et Android 6.0+**
+**1.5.4 · Android TV et Android 6.0+**
 
 [Lecteur Android](https://github.com/Amau54/Pluxy/releases/download/dev-latest/Pluxy-debug.apk)
 · [Serveur Android](https://github.com/Amau54/Pluxy/releases/download/dev-latest/Pluxy-Server-Android-debug.apk)

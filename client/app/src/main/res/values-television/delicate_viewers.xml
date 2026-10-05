@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="auxiliary_audio_cover_size">144dp</dimen>
+    <dimen name="auxiliary_audio_title_size">24sp</dimen>
+    <dimen name="auxiliary_viewer_pad">24dp</dimen>
+    <dimen name="auxiliary_meta_size">16sp</dimen>
+</resources>

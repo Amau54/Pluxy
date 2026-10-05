@@ -42,17 +42,17 @@ object CompactChoiceMenu {
         actions: List<Action> = emptyList(),
         onSelect: (String) -> Unit,
         onDismiss: (() -> Unit)? = null,
-    ) {
-        if (activity.isFinishing || activity.isDestroyed || !anchor.isAttachedToWindow) return
-        if (choices.isEmpty() && actions.isEmpty()) return
+    ): PopupWindow? {
+        if (activity.isFinishing || activity.isDestroyed || !anchor.isAttachedToWindow) return null
+        if (choices.isEmpty() && actions.isEmpty()) return null
 
         val television = activity.resources.configuration.uiMode and
             Configuration.UI_MODE_TYPE_MASK == Configuration.UI_MODE_TYPE_TELEVISION
         val restoreAnchorFocus = television || !anchor.isInTouchMode
         val density = activity.resources.displayMetrics.density
         fun dp(value: Int) = (value * density).roundToInt()
-        val rowHeight = dp(if (television) 52 else 48)
-        val gap = dp(8)
+        val rowHeight = dp(48)
+        val gap = dp(6)
         val primary = activity.pluxyColor(R.color.text_primary)
         val secondary = activity.pluxyColor(R.color.text_secondary)
         val accent = activity.pluxyColor(R.color.accent)
@@ -91,10 +91,10 @@ object CompactChoiceMenu {
             orientation = LinearLayout.VERTICAL
             setPadding(gap, gap, gap, gap)
             background = shape(
-                ColorUtils.setAlphaComponent(activity.pluxyColor(R.color.glass_top), 245),
-                ColorUtils.setAlphaComponent(activity.pluxyColor(R.color.glass_bottom), 248),
+                ColorUtils.setAlphaComponent(activity.pluxyColor(R.color.glass_top), 255),
+                ColorUtils.setAlphaComponent(activity.pluxyColor(R.color.glass_bottom), 255),
                 activity.pluxyColor(R.color.border),
-            ).apply { cornerRadius = dp(19).toFloat() }
+            ).apply { cornerRadius = dp(14).toFloat() }
             clipToOutline = true
         }
         ViewCompat.setAccessibilityPaneTitle(root, title)
@@ -128,7 +128,7 @@ object CompactChoiceMenu {
             setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
             isOutsideTouchable = true
             isClippingEnabled = true
-            elevation = dp(14).toFloat()
+            elevation = dp(10).toFloat()
             inputMethodMode = PopupWindow.INPUT_METHOD_NEEDED
             softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
         }
@@ -140,7 +140,7 @@ object CompactChoiceMenu {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
                 minimumHeight = rowHeight
-                setPadding(dp(12), dp(10), dp(12), dp(10))
+                setPadding(dp(10), dp(6), dp(10), dp(6))
                 background = rowBackground()
                 isSelected = selected
                 isFocusable = true
@@ -165,7 +165,7 @@ object CompactChoiceMenu {
             }
             text.addView(TextView(activity).apply {
                 this.text = choice.label
-                textSize = if (television) 16f else 15f
+                textSize = if (television) 16f else 14f
                 setTextColor(primary)
                 typeface = Typeface.create(if (selected) "sans-serif-medium" else "sans-serif", Typeface.NORMAL)
                 includeFontPadding = false
@@ -196,7 +196,7 @@ object CompactChoiceMenu {
                 imageTintList = ColorStateList.valueOf(accent)
                 visibility = if (selected) View.VISIBLE else View.INVISIBLE
                 importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-            }, LinearLayout.LayoutParams(dp(20), dp(20)).apply { marginStart = dp(12) })
+            }, LinearLayout.LayoutParams(dp(16), dp(16)).apply { marginStart = dp(10) })
             list.addView(row, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
             if (selected && selectedRow == null) selectedRow = row
         }
@@ -261,7 +261,7 @@ object CompactChoiceMenu {
 
         fun position(): Position {
             val frame = visibleFrame()
-            val menuWidth = minOf(dp(if (television) 340 else 300), (frame.width() - gap * 2).coerceAtLeast(1))
+            val menuWidth = minOf(dp(if (television) 320 else 280), (frame.width() - gap * 2).coerceAtLeast(1))
             val maximumHeight = minOf(dp(if (television) 420 else 380), (frame.height() - gap * 2).coerceAtLeast(1))
             val contentWidth = (menuWidth - root.paddingLeft - root.paddingRight).coerceAtLeast(1)
             val widthSpec = View.MeasureSpec.makeMeasureSpec(contentWidth, View.MeasureSpec.EXACTLY)
@@ -330,5 +330,6 @@ object CompactChoiceMenu {
             first?.requestFocus()
             if (first?.parent === list) scroll.smoothScrollTo(0, (first.top - (scroll.height - first.height) / 2).coerceAtLeast(0))
         }
+        return popup
     }
 }

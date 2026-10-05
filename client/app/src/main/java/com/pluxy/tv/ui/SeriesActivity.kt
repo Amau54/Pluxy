@@ -97,7 +97,10 @@ class SeriesActivity : ThemedActivity() {
         )
         list.layoutManager = LinearLayoutManager(this)
         list.adapter = adapter
-        findViewById<TextView>(R.id.seriesTitle).text = displayName(name)
+        findViewById<TextView>(R.id.seriesTitle).apply {
+            text = displayName(name)
+            contentDescription = text
+        }
         findViewById<Button>(R.id.seriesRetry).setOnClickListener { load() }
         applyCompactHeightLayout()
         configurePhoneHeader()
@@ -249,7 +252,10 @@ class SeriesActivity : ThemedActivity() {
         overview.text = metadata.overview.orEmpty()
         overview.visibility =
             if (compactHeight || metadata.overview.isNullOrBlank()) View.GONE else View.VISIBLE
-        if (metadata.matched) findViewById<TextView>(R.id.seriesTitle).text = metadata.title
+        if (metadata.matched) findViewById<TextView>(R.id.seriesTitle).apply {
+            text = metadata.title
+            contentDescription = metadata.title
+        }
         if (compactHeight) {
             findViewById<LinearLayout>(R.id.seriesRatings).visibility = View.GONE
         } else {
@@ -291,7 +297,9 @@ class SeriesActivity : ThemedActivity() {
             )
             minimumWidth = 0
             minHeight = dp(48)
-            setPadding(dp(20), dp(8), dp(20), dp(8))
+            textSize = resources.getDimension(R.dimen.auxiliary_meta_size) / resources.displayMetrics.scaledDensity
+            setTypeface(android.graphics.Typeface.create("sans-serif-medium", Typeface.NORMAL))
+            setPadding(dp(14), dp(4), dp(14), dp(4))
             setOnFocusChangeListener { _, focused ->
                 if (focused) focusedControlTag = tag as String
             }
@@ -408,10 +416,10 @@ class SeriesActivity : ThemedActivity() {
         row.visibility = View.VISIBLE
         for (rating in ratings) {
             val cell = LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-                gravity = Gravity.CENTER
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
                 setBackgroundResource(R.drawable.bg_chip)
-                setPadding(dp(14), dp(8), dp(14), dp(8))
+                setPadding(dp(10), dp(4), dp(10), dp(4))
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.WRAP_CONTENT,
                     LinearLayout.LayoutParams.WRAP_CONTENT,
@@ -420,14 +428,14 @@ class SeriesActivity : ThemedActivity() {
             cell.addView(TextView(this).apply {
                 text = rating.value
                 setTextColor(pluxyColor(R.color.accent_bright))
-                textSize = 17f
+                textSize = resources.getDimension(R.dimen.auxiliary_meta_size) / resources.displayMetrics.scaledDensity
                 gravity = Gravity.CENTER
                 setTypeface(typeface, Typeface.BOLD)
             })
             cell.addView(TextView(this).apply {
-                text = rating.source
+                text = " · " + rating.source
                 setTextColor(pluxyColor(R.color.text_secondary))
-                textSize = 13f
+                textSize = resources.getDimension(R.dimen.auxiliary_meta_size) / resources.displayMetrics.scaledDensity
                 gravity = Gravity.CENTER
             })
             row.addView(cell)
@@ -461,8 +469,9 @@ class SeriesActivity : ThemedActivity() {
             Configuration.UI_MODE_TYPE_TELEVISION
         if (television || resources.configuration.smallestScreenWidthDp >= 600) return
         findViewById<TextView>(R.id.seriesTitle).apply {
-            maxLines = Int.MAX_VALUE
-            ellipsize = null
+            maxLines = 2
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            contentDescription = text
         }
         continueButton.layoutParams = continueButton.layoutParams.apply {
             width = ViewGroup.LayoutParams.MATCH_PARENT
@@ -474,7 +483,7 @@ class SeriesActivity : ThemedActivity() {
         // disparaître les saisons et la liste d'épisodes sous l'écran.
         val resizeHeader = {
             if (content.height > 0 && header.height > 0) {
-                val limit = (content.height * 0.48f).toInt().coerceAtLeast(dp(80))
+                val limit = (content.height * 0.40f).toInt().coerceAtLeast(dp(80))
                 val height = minOf(header.height, limit)
                 if (scroll.layoutParams.height != height) {
                     scroll.layoutParams = scroll.layoutParams.apply { this.height = height }

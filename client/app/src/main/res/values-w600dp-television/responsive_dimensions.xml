@@ -2,6 +2,6 @@
 <resources>
     <dimen name="screen_pad">48dp</dimen>
     <integer name="details_actions_orientation">0</integer>
-    <dimen name="details_action_margin_start">14dp</dimen>
+    <dimen name="details_action_margin_start">8dp</dimen>
     <dimen name="details_action_margin_top">0dp</dimen>
 </resources>
