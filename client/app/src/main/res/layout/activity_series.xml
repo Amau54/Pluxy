@@ -30,46 +30,69 @@
         android:paddingTop="40dp"
         android:paddingBottom="24dp">
 
-        <TextView
-            android:id="@+id/seriesTitle"
-            style="@style/Text.Display"
+        <ScrollView
+            android:id="@+id/seriesHeaderScroll"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:ellipsize="end"
-            android:maxLines="2" />
+            android:clipToPadding="false"
+            android:scrollbars="none">
 
-        <TextView
-            android:id="@+id/seriesSub"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:textColor="@color/text_secondary"
-            android:textSize="15sp" />
+            <LinearLayout
+                android:id="@+id/seriesHeaderContent"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+                <TextView
+                    android:id="@+id/seriesTitle"
+                    style="@style/Text.Display"
+                    android:textSize="@dimen/details_title_size"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:maxLines="2" />
 
-        <!-- Notes multi-sites (TMDB / IMDb / Rotten Tomatoes / Metacritic) -->
-        <LinearLayout
-            android:id="@+id/seriesRatings"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:orientation="horizontal"
-            android:visibility="gone" />
+                <TextView
+                    android:id="@+id/seriesSub"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:textColor="?attr/pluxyTextSecondary"
+                    android:textSize="15sp" />
 
-        <TextView
-            android:id="@+id/seriesOverview"
-            style="@style/Text.Body"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:maxLines="3"
-            android:ellipsize="end"
-            android:visibility="gone" />
+                <Button
+                    android:id="@+id/continueEpisode"
+                    style="@style/Btn.Primary"
+                    android:layout_marginTop="18dp"
+                    android:visibility="gone" />
 
-        <Button
-            android:id="@+id/continueEpisode"
-            style="@style/Btn.Primary"
-            android:layout_marginTop="18dp"
-            android:visibility="gone" />
+                <!-- Notes multi-sites (TMDB / IMDb / Rotten Tomatoes / Metacritic) -->
+                <HorizontalScrollView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:scrollbars="none">
+                    <LinearLayout
+                        android:id="@+id/seriesRatings"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:visibility="gone" />
+                </HorizontalScrollView>
+
+                <TextView
+                    android:id="@+id/seriesOverview"
+                    style="@style/Text.Body"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:maxLines="3"
+                    android:ellipsize="end"
+                    android:visibility="gone" />
+
+
+
+            </LinearLayout>
+        </ScrollView>
 
         <HorizontalScrollView
             android:id="@+id/seasonScroller"
@@ -119,7 +142,7 @@
                     android:id="@+id/seriesLoading"
                     android:layout_width="48dp"
                     android:layout_height="48dp"
-                    android:indeterminateTint="@color/accent"
+                    android:indeterminateTint="?attr/pluxyAccent"
                     android:visibility="gone" />
 
                 <TextView
@@ -129,7 +152,7 @@
                     android:layout_height="wrap_content"
                     android:gravity="center"
                     android:maxWidth="560dp"
-                    android:textColor="@color/text_secondary"
+                    android:textColor="?attr/pluxyTextSecondary"
                     android:textSize="18sp"
                     android:visibility="gone" />
 

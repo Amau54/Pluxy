@@ -6,7 +6,7 @@
 
 Vos films, séries, photos et musique sur la TV.
 
-**1.5.1 · Android TV et Android 6.0+**
+**1.5.2 · Android TV et Android 6.0+**
 
 [Lecteur Android](https://github.com/Amau54/Pluxy/releases/download/dev-latest/Pluxy-debug.apk)
 · [Serveur Android](https://github.com/Amau54/Pluxy/releases/download/dev-latest/Pluxy-Server-Android-debug.apk)
@@ -19,6 +19,9 @@ local. Installez le lecteur sur la TV et le serveur sur l'appareil qui contient
 vos médias. Les deux appareils doivent être sur le même réseau.
 
 Aucun compte ni abonnement n'est nécessaire. Pluxy ne fournit pas de contenu.
+
+Dans le lecteur, **Réglages → Thème** propose Corail, Océan et Minuit. Le choix
+est conservé sur cet appareil et s'applique aussi aux commandes vidéo.
 
 ## Démarrer sur PC
 

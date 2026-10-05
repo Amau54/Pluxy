@@ -8,17 +8,20 @@ import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
+import android.widget.PopupMenu
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.documentfile.provider.DocumentFile
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import java.util.Collections
 
 /** Gestion locale des sources : ordre par glisser-déposer, titre et visibilité sans toucher aux fichiers. */
 class FolderManagerActivity : AppCompatActivity() {
@@ -57,7 +60,7 @@ class FolderManagerActivity : AppCompatActivity() {
             setTypeface(typeface, android.graphics.Typeface.BOLD)
         })
         root.addView(TextView(this).apply {
-            text = "Maintenez puis glissez un dossier pour changer son ordre. Masquer ignore ce dossier manuel sans supprimer les fichiers."
+            text = "Maintenez la poignée pour changer l’ordre, ou touchez-la pour déplacer un dossier. Masquer conserve les fichiers."
             textSize = 14f
             setTextColor(getColor(R.color.pluxy_muted))
             setPadding(0, dp(6), 0, dp(12))
@@ -66,11 +69,24 @@ class FolderManagerActivity : AppCompatActivity() {
             layoutManager = LinearLayoutManager(this@FolderManagerActivity)
             clipToPadding = false
         }
+        val dragHelper = ItemTouchHelper(object : ItemTouchHelper.SimpleCallback(
+            ItemTouchHelper.UP or ItemTouchHelper.DOWN, 0,
+        ) {
+            override fun onMove(
+                recyclerView: RecyclerView,
+                viewHolder: RecyclerView.ViewHolder,
+                target: RecyclerView.ViewHolder,
+            ): Boolean = moveFolder(viewHolder.bindingAdapterPosition, target.bindingAdapterPosition)
+
+            override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) = Unit
+        })
         adapter = FolderAdapter(
             folderName = ::displayName,
             onVisibility = { index, visible -> folders[index] = folders[index].copy(visible = visible); save() },
             onRename = ::rename,
             onDelete = ::delete,
+            onStartDrag = dragHelper::startDrag,
+            onMove = ::moveFolder,
         )
         adapter.submit(folders)
         list.adapter = adapter
@@ -87,23 +103,23 @@ class FolderManagerActivity : AppCompatActivity() {
             LinearLayout.LayoutParams.MATCH_PARENT, dp(52),
         ).apply { topMargin = dp(14) })
         setContentView(root)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+            root.setPadding(dp(20) + bars.left, dp(24) + bars.top, dp(20) + bars.right, dp(20) + bars.bottom)
+            insets
+        }
+        ViewCompat.requestApplyInsets(root)
 
-        ItemTouchHelper(object : ItemTouchHelper.SimpleCallback(
-            ItemTouchHelper.UP or ItemTouchHelper.DOWN, 0,
-        ) {
-            override fun onMove(
-                recyclerView: RecyclerView,
-                viewHolder: RecyclerView.ViewHolder,
-                target: RecyclerView.ViewHolder,
-            ): Boolean {
-                Collections.swap(folders, viewHolder.bindingAdapterPosition, target.bindingAdapterPosition)
-                adapter.notifyItemMoved(viewHolder.bindingAdapterPosition, target.bindingAdapterPosition)
-                save()
-                return true
-            }
+        dragHelper.attachToRecyclerView(list)
+    }
 
-            override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) = Unit
-        }).attachToRecyclerView(list)
+    private fun moveFolder(from: Int, to: Int): Boolean {
+        if (from !in folders.indices || to !in folders.indices || from == to) return false
+        folders.add(to, folders.removeAt(from))
+        adapter.move(from, to)
+        save(refresh = false)
+        return true
     }
 
     private fun rename(index: Int) {
@@ -141,9 +157,9 @@ class FolderManagerActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun save() {
+    private fun save(refresh: Boolean = true) {
         preferences.saveFolders(theme, folders)
-        adapter.submit(folders)
+        if (refresh) adapter.submit(folders)
         setResult(RESULT_OK)
     }
 
@@ -161,6 +177,8 @@ class FolderManagerActivity : AppCompatActivity() {
         private val onVisibility: (Int, Boolean) -> Unit,
         private val onRename: (Int) -> Unit,
         private val onDelete: (Int) -> Unit,
+        private val onStartDrag: (RecyclerView.ViewHolder) -> Unit,
+        private val onMove: (Int, Int) -> Boolean,
     ) : RecyclerView.Adapter<FolderAdapter.Holder>() {
         private var values: List<MediaFolder> = emptyList()
 
@@ -169,52 +187,108 @@ class FolderManagerActivity : AppCompatActivity() {
             notifyDataSetChanged()
         }
 
+        fun move(from: Int, to: Int) {
+            values = values.toMutableList().apply { add(to, removeAt(from)) }
+            notifyItemMoved(from, to)
+        }
+
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder {
             val context = parent.context
             val row = LinearLayout(context).apply {
-                gravity = Gravity.CENTER_VERTICAL
-                orientation = LinearLayout.HORIZONTAL
+                orientation = LinearLayout.VERTICAL
                 setBackgroundResource(R.drawable.bg_option)
-                setPadding(dp(context, 12), dp(context, 8), dp(context, 10), dp(context, 8))
+                setPadding(dp(context, 12), dp(context, 8), dp(context, 12), dp(context, 12))
                 layoutParams = RecyclerView.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.WRAP_CONTENT,
                 ).apply { bottomMargin = dp(context, 10) }
+            }
+            val heading = LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
             }
             val handle = TextView(context).apply {
                 text = "☰"
                 textSize = 22f
                 setTextColor(context.getColor(R.color.pluxy_accent_bright))
                 gravity = Gravity.CENTER
+                isFocusable = true
+                isClickable = true
+                setBackgroundResource(R.drawable.bg_button_secondary)
             }
-            row.addView(handle, LinearLayout.LayoutParams(dp(context, 36), dp(context, 54)))
+            heading.addView(handle, LinearLayout.LayoutParams(dp(context, 48), dp(context, 48)))
             val title = TextView(context).apply {
                 textSize = 16f
                 setTextColor(context.getColor(R.color.pluxy_text))
-                maxLines = 2
+                maxLines = 3
+                ellipsize = android.text.TextUtils.TruncateAt.END
             }
-            row.addView(title, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-            val visible = SwitchCompat(context).apply { text = ""; contentDescription = "Afficher le dossier" }
-            row.addView(visible)
-            val rename = smallButton(context, "Nom")
-            row.addView(rename, LinearLayout.LayoutParams(dp(context, 76), dp(context, 58)).apply {
+            heading.addView(title, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                marginStart = dp(context, 12)
+            })
+            row.addView(heading, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT,
+            ))
+            val visible = SwitchCompat(context).apply {
+                text = "Visible dans la bibliothèque"
+                textSize = 14f
+                minHeight = dp(context, 48)
+                setTextColor(context.getColor(R.color.pluxy_muted))
+            }
+            row.addView(visible, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply { topMargin = dp(context, 4) })
+            val actions = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
+            val rename = smallButton(context, "Renommer")
+            actions.addView(rename, LinearLayout.LayoutParams(0, dp(context, 48), 1f))
+            val delete = smallButton(context, "Retirer")
+            actions.addView(delete, LinearLayout.LayoutParams(0, dp(context, 48), 1f).apply {
                 marginStart = dp(context, 8)
             })
-            val delete = smallButton(context, "Suppr.")
-            row.addView(delete, LinearLayout.LayoutParams(dp(context, 96), dp(context, 58)).apply {
-                marginStart = dp(context, 8)
-            })
-            return Holder(row, title, visible, rename, delete)
+            row.addView(actions, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply { topMargin = dp(context, 4) })
+            return Holder(row, title, visible, rename, delete, handle).also { holder ->
+                handle.setOnLongClickListener {
+                    onStartDrag(holder)
+                    true
+                }
+            }
         }
 
         override fun onBindViewHolder(holder: Holder, position: Int) {
             val folder = values[position]
-            holder.title.text = folderName(folder)
+            val name = folderName(folder)
+            holder.title.text = name
+            holder.handle.contentDescription = "Déplacer $name"
+            holder.visible.contentDescription = "Afficher $name dans la bibliothèque"
+            holder.rename.contentDescription = "Renommer $name"
+            holder.delete.contentDescription = "Retirer $name de la bibliothèque"
             holder.visible.setOnCheckedChangeListener(null)
             holder.visible.isChecked = folder.visible
-            holder.visible.setOnCheckedChangeListener { _, checked -> onVisibility(holder.bindingAdapterPosition, checked) }
-            holder.rename.setOnClickListener { onRename(holder.bindingAdapterPosition) }
-            holder.delete.setOnClickListener { onDelete(holder.bindingAdapterPosition) }
+            holder.visible.setOnCheckedChangeListener { _, checked ->
+                holder.bindingAdapterPosition.takeIf { it in values.indices }?.let { onVisibility(it, checked) }
+            }
+            holder.rename.setOnClickListener {
+                holder.bindingAdapterPosition.takeIf { it in values.indices }?.let(onRename)
+            }
+            holder.delete.setOnClickListener {
+                holder.bindingAdapterPosition.takeIf { it in values.indices }?.let(onDelete)
+            }
+            holder.handle.setOnClickListener {
+                val index = holder.bindingAdapterPosition
+                if (index !in values.indices) return@setOnClickListener
+                PopupMenu(holder.handle.context, holder.handle).apply {
+                    menu.add(0, MOVE_UP, 0, "Déplacer vers le haut").isEnabled = index > 0
+                    menu.add(0, MOVE_DOWN, 1, "Déplacer vers le bas").isEnabled = index < values.lastIndex
+                    setOnMenuItemClickListener { item ->
+                        val current = holder.bindingAdapterPosition
+                        val target = current + if (item.itemId == MOVE_UP) -1 else 1
+                        onMove(current, target)
+                    }
+                    show()
+                }
+            }
         }
 
         override fun getItemCount(): Int = values.size
@@ -225,13 +299,16 @@ class FolderManagerActivity : AppCompatActivity() {
             val visible: SwitchCompat,
             val rename: Button,
             val delete: Button,
+            val handle: TextView,
         ) : RecyclerView.ViewHolder(view)
 
         companion object {
+            private const val MOVE_UP = 1
+            private const val MOVE_DOWN = 2
             private fun smallButton(context: android.content.Context, label: String) = Button(context).apply {
                 text = label
                 isAllCaps = false
-                textSize = 12f
+                textSize = 14f
                 minWidth = 0
                 minimumWidth = 0
                 setTextColor(context.getColor(R.color.pluxy_text))

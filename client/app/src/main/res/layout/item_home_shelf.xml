@@ -15,7 +15,7 @@
         android:paddingStart="6dp"
         android:paddingEnd="6dp"
         android:paddingBottom="8dp"
-        android:textColor="@color/text_primary"
+        android:textColor="?attr/pluxyTextPrimary"
         android:textSize="22sp"
         android:fontFamily="sans-serif-medium" />
 

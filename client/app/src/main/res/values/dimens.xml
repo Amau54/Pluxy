@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Jetons d'espacement / rayons / tailles. Échelle 4 dp cohérente. -->
 <resources>
-    <!-- Marge sûre TV (overscan ~5 %) pour les bords d'écran -->
-    <dimen name="screen_pad">48dp</dimen>
+    <!-- Marges du téléphone ; adaptées dans les variantes grand écran. -->
+    <dimen name="screen_pad">20dp</dimen>
 
     <!-- Rayons -->
     <dimen name="radius_sm">8dp</dimen>

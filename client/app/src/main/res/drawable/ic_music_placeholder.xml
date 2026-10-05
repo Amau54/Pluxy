@@ -5,9 +5,9 @@
     android:viewportWidth="96"
     android:viewportHeight="96">
     <path
-        android:fillColor="@color/bg_elev"
+        android:fillColor="?attr/pluxyBgElev"
         android:pathData="M0,0h96v96h-96z" />
     <path
-        android:fillColor="@color/accent"
+        android:fillColor="?attr/pluxyAccent"
         android:pathData="M39,25v37.5a11,11 0,1 1,-6,-9.8v-22.7l38,-8v32.5a11,11 0,1 1,-6,-9.8v-14.7z" />
 </vector>

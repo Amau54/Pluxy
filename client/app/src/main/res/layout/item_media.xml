@@ -43,7 +43,7 @@
             android:paddingTop="3dp"
             android:paddingBottom="3dp"
             android:text="@string/label_hdr"
-            android:textColor="@color/accent"
+            android:textColor="?attr/pluxyAccent"
             android:textSize="12sp"
             android:textStyle="bold"
             android:letterSpacing="0.06"
@@ -62,7 +62,7 @@
             android:paddingTop="3dp"
             android:paddingBottom="3dp"
             android:text="@string/label_watched"
-            android:textColor="@color/success"
+            android:textColor="?attr/pluxySuccess"
             android:textSize="12sp"
             android:textStyle="bold"
             android:visibility="gone" />
@@ -92,7 +92,7 @@
         android:ellipsize="end"
         android:minLines="2"
         android:maxLines="2"
-        android:textColor="@color/text_primary"
+        android:textColor="?attr/pluxyTextPrimary"
         android:textSize="@dimen/card_title_size"
         android:fontFamily="sans-serif-medium" />
 
@@ -105,7 +105,7 @@
         android:layout_marginEnd="2dp"
         android:ellipsize="end"
         android:maxLines="1"
-        android:textColor="@color/text_tertiary"
+        android:textColor="?attr/pluxyTextTertiary"
         android:textSize="@dimen/card_meta_size"
         android:letterSpacing="0.02" />
 </LinearLayout>

@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Pluxy.Ocean" parent="Theme.Pluxy">
+        <item name="pluxyPlayerGlassTop">#B5203747</item>
+        <item name="pluxyPlayerGlassBottom">#DE08131D</item>
+        <item name="pluxyBg">#080F16</item>
+        <item name="pluxyBgElev">#10202D</item>
+        <item name="pluxySurface">#D110202D</item>
+        <item name="pluxySurfaceVariant">#D1172C3A</item>
+        <item name="pluxySurfaceFocus">#EB264658</item>
+        <item name="pluxyGlassTop">#D9233949</item>
+        <item name="pluxyGlassBottom">#BA0D1C28</item>
+        <item name="pluxyGlassFocusTop">#EB315268</item>
+        <item name="pluxyGlassFocusBottom">#E21B3547</item>
+        <item name="pluxyAmbientCoral">#2279D5E5</item>
+        <item name="pluxyAmbientCoralTrans">#0079D5E5</item>
+        <item name="pluxyAmbientRose">#18678FDB</item>
+        <item name="pluxyAmbientRoseTrans">#00678FDB</item>
+        <item name="pluxyGlowEdge">#3679D5E5</item>
+        <item name="pluxyAccent">#83D9E5</item>
+        <item name="pluxyAccentBright">#B5EFF6</item>
+        <item name="pluxyAccentDim">#65AFBA</item>
+        <item name="pluxyTextOnAccent">#102B32</item>
+        <item name="pluxyBorderFocus">#B5EFF6</item>
+        <item name="pluxyBgTrans">#00080F16</item>
+        <item name="pluxyBgFull">#FF080F16</item>
+        <item name="pluxyScrimStrong">#D0080F16</item>
+    </style>
+    <style name="Theme.Pluxy.Midnight" parent="Theme.Pluxy">
+        <item name="pluxyPlayerGlassTop">#B81E2129</item>
+        <item name="pluxyPlayerGlassBottom">#DE07090E</item>
+        <item name="pluxyBg">#050608</item>
+        <item name="pluxyBgElev">#15171C</item>
+        <item name="pluxySurface">#DA15171C</item>
+        <item name="pluxySurfaceVariant">#DA1D2027</item>
+        <item name="pluxySurfaceFocus">#EE353A45</item>
+        <item name="pluxyGlassTop">#DB242831</item>
+        <item name="pluxyGlassBottom">#C00B0D12</item>
+        <item name="pluxyGlassFocusTop">#EE3B414E</item>
+        <item name="pluxyGlassFocusBottom">#E2232730</item>
+        <item name="pluxyAmbientCoral">#0AC4CFEB</item>
+        <item name="pluxyAmbientCoralTrans">#00C4CFEB</item>
+        <item name="pluxyAmbientRose">#06A2AAC0</item>
+        <item name="pluxyAmbientRoseTrans">#00A2AAC0</item>
+        <item name="pluxyGlowEdge">#24C4CFEB</item>
+        <item name="pluxyAccent">#C4CFEB</item>
+        <item name="pluxyAccentBright">#E4EAFA</item>
+        <item name="pluxyAccentDim">#9FAACA</item>
+        <item name="pluxyTextOnAccent">#181D2C</item>
+        <item name="pluxyBorderFocus">#E4EAFA</item>
+        <item name="pluxyBgTrans">#00050608</item>
+        <item name="pluxyBgFull">#FF050608</item>
+        <item name="pluxyScrimStrong">#D0050608</item>
+    </style>
+</resources>

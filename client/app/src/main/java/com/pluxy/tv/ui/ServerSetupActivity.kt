@@ -9,7 +9,6 @@ import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.pluxy.tv.PluxyApplication
 import com.pluxy.tv.R
@@ -30,7 +29,7 @@ import kotlinx.coroutines.withContext
  *  - plusieurs  -> l'utilisateur choisit
  *  - aucun      -> saisie manuelle de l'IP
  */
-class ServerSetupActivity : AppCompatActivity() {
+class ServerSetupActivity : ThemedActivity() {
 
     private lateinit var status: TextView
     private lateinit var progress: ProgressBar

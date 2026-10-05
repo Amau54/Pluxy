@@ -11,7 +11,6 @@ import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
-import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.lifecycleScope
@@ -26,19 +25,23 @@ import kotlinx.coroutines.launch
  * Réglages TV volontairement courts : connexion, préférences de lecture et bibliothèque.
  * Les paramètres de transcodage et de serveur restent du ressort du serveur Pluxy.
  */
-class SettingsActivity : AppCompatActivity() {
+class SettingsActivity : ThemedActivity() {
 
     private lateinit var scroll: ScrollView
     private lateinit var rows: LinearLayout
     private lateinit var statusView: TextView
-    private val accent by lazy { getColor(R.color.accent) }
-    private val sub by lazy { getColor(R.color.text_secondary) }
+    private var restoredFocusTag: String? = null
+    private var restoredScrollY: Int? = null
+    private val accent by lazy { pluxyColor(R.color.accent) }
+    private val sub by lazy { pluxyColor(R.color.text_secondary) }
     private val serverLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         render()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        restoredFocusTag = savedInstanceState?.getString("settings_focus")
+        restoredScrollY = savedInstanceState?.getInt("settings_scroll")
 
         scroll = ScrollView(this).apply {
             setBackgroundResource(R.drawable.bg_tv_ambient)
@@ -52,7 +55,7 @@ class SettingsActivity : AppCompatActivity() {
             clipChildren = false
             clipToPadding = false
             // Zone sûre TV : aucun contrôle ne doit toucher les bords, y compris au focus.
-            val safeSide = maxOf(dp(48), (resources.displayMetrics.widthPixels * 0.05f).toInt())
+            val safeSide = resources.getDimensionPixelSize(R.dimen.screen_pad)
             setPadding(safeSide, dp(32), safeSide, dp(32))
         }
         scroll.clipChildren = false
@@ -61,7 +64,7 @@ class SettingsActivity : AppCompatActivity() {
 
         title("Réglages")
         statusView = TextView(this).apply {
-            setTextColor(getColor(R.color.text_tertiary)); textSize = 14f
+            setTextColor(pluxyColor(R.color.text_tertiary)); textSize = 14f
             setPadding(0, 0, 0, dp(14))
             setText(R.string.settings_loading)
         }
@@ -75,8 +78,10 @@ class SettingsActivity : AppCompatActivity() {
      * Les réglages restent ainsi prévisibles après un PATCH ou un changement local.
      */
     private fun render() {
-        val focusedTag = currentFocus?.tag as? String
-        val previousScrollY = scroll.scrollY
+        val focusedTag = restoredFocusTag ?: currentFocus?.tag as? String
+        val previousScrollY = restoredScrollY ?: scroll.scrollY
+        restoredFocusTag = null
+        restoredScrollY = null
         renderContent()
         rows.post {
             scroll.scrollTo(0, previousScrollY.coerceAtLeast(0))
@@ -93,6 +98,11 @@ class SettingsActivity : AppCompatActivity() {
         while (rows.childCount > 2) rows.removeViewAt(2)
         val configured = PluxyApplication.isConfigured(this)
         statusView.text = if (configured) "Serveur configuré" else "Aucun serveur configuré"
+
+        section("Apparence")
+        val appearance = AppearancePreferences.theme(this)
+        rowButton("Thème", appearance.label, appearance.description)
+            .setOnClickListener { pickAppearanceTheme(appearance) }
 
         section("Connexion")
         rowButton(
@@ -133,7 +143,7 @@ class SettingsActivity : AppCompatActivity() {
         rowButton(
             "Personnaliser l’accueil",
             "Rubriques et ordre",
-            "Choisissez les rangées affichées et leur ordre sur cette TV.",
+            "Choisissez les rangées affichées et leur ordre sur cet appareil.",
         ).setOnClickListener { startActivity(Intent(this, HomePreferencesActivity::class.java)) }
         if (configured) rows.addView(Button(this).apply {
             tag = "setting:rescan"
@@ -195,7 +205,7 @@ class SettingsActivity : AppCompatActivity() {
     private fun title(text: String) {
         rows.addView(TextView(this).apply {
             this.text = text
-            setTextColor(getColor(R.color.text_primary)); textSize = 28f
+            setTextColor(pluxyColor(R.color.text_primary)); textSize = 28f
             setTypeface(typeface, android.graphics.Typeface.BOLD)
             setPadding(0, dp(4), 0, dp(6))
         })
@@ -230,24 +240,20 @@ class SettingsActivity : AppCompatActivity() {
             setTextColor(Color.WHITE)
             textSize = 17f
             setTypeface(typeface, android.graphics.Typeface.BOLD)
-            maxLines = 1
-            ellipsize = android.text.TextUtils.TruncateAt.END
+            maxLines = 3
         })
         row.addView(TextView(this).apply {
             text = value
             setTextColor(sub)
-            textSize = 14f
-            maxLines = 1
-            ellipsize = android.text.TextUtils.TruncateAt.END
+            textSize = 16f
+            maxLines = 3
             setPadding(0, dp(2), 0, 0)
         })
         hint?.takeIf { it.isNotBlank() }?.let { description ->
             row.addView(TextView(this).apply {
                 text = description
-                setTextColor(getColor(R.color.text_tertiary))
-                textSize = 13f
-                maxLines = 1
-                ellipsize = android.text.TextUtils.TruncateAt.END
+                setTextColor(pluxyColor(R.color.text_tertiary))
+                textSize = if (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_TYPE_MASK == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION) 16f else 14f
                 setPadding(0, dp(2), 0, 0)
             })
         }
@@ -292,6 +298,31 @@ class SettingsActivity : AppCompatActivity() {
             }
             .setNegativeButton("Annuler", null)
             .show()
+    }
+
+    private fun pickAppearanceTheme(current: AppearanceTheme) {
+        val choices = AppearanceTheme.entries
+        AlertDialog.Builder(this)
+            .setTitle("Thème")
+            .setSingleChoiceItems(
+                choices.map { "${it.label} · ${it.description}" }.toTypedArray(),
+                choices.indexOf(current),
+            ) { dialog, which ->
+                val selected = choices[which]
+                dialog.dismiss()
+                if (selected != current) {
+                    AppearancePreferences.setTheme(this, selected)
+                    recreate()
+                }
+            }
+            .setNegativeButton("Annuler", null)
+            .show()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putString("settings_focus", currentFocus?.tag as? String)
+        outState.putInt("settings_scroll", scroll.scrollY)
+        super.onSaveInstanceState(outState)
     }
 
     private fun pickAudioLanguage() {

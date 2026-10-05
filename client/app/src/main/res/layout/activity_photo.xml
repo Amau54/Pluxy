@@ -19,7 +19,7 @@
         android:layout_width="48dp"
         android:layout_height="48dp"
         android:layout_gravity="center"
-        android:indeterminateTint="@color/accent" />
+        android:indeterminateTint="?attr/pluxyAccent" />
 
     <!-- Visible on entry, then reachable with OK or up/down on every TV remote. -->
     <LinearLayout
@@ -44,7 +44,7 @@
             android:ellipsize="end"
             android:maxLines="1"
             android:maxWidth="640dp"
-            android:textColor="@color/text_primary"
+            android:textColor="?attr/pluxyTextPrimary"
             android:textSize="17sp"
             android:textStyle="bold" />
 
@@ -53,7 +53,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="2dp"
-            android:textColor="@color/text_secondary"
+            android:textColor="?attr/pluxyTextSecondary"
             android:textSize="13sp" />
 
         <TextView
@@ -62,7 +62,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="3dp"
             android:text="@string/photo_slideshow_active"
-            android:textColor="@color/accent_bright"
+            android:textColor="?attr/pluxyAccentBright"
             android:textSize="12sp"
             android:visibility="gone" />
 
@@ -72,7 +72,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
             android:accessibilityLiveRegion="polite"
-            android:textColor="@color/text_primary"
+            android:textColor="?attr/pluxyTextPrimary"
             android:textSize="16sp"
             android:visibility="gone" />
 
@@ -142,7 +142,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
             android:text="@string/photo_remote_hint"
-            android:textColor="@color/text_secondary"
+            android:textColor="?attr/pluxyTextSecondary"
             android:textSize="13sp" />
     </LinearLayout>
 

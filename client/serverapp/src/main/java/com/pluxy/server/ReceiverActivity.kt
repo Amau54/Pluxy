@@ -1,12 +1,15 @@
 package com.pluxy.server
 
+import android.content.res.Configuration
 import android.graphics.Color
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.inputmethod.EditorInfo
 import android.widget.Button
 import android.widget.EditText
+import android.widget.LinearLayout
 import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
@@ -14,6 +17,9 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.annotation.OptIn
 import androidx.core.widget.doAfterTextChanged
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -62,6 +68,11 @@ class ReceiverActivity : AppCompatActivity() {
     private lateinit var stop: Button
     private lateinit var castPlay: Button
     private lateinit var castRouteButton: MediaRouteButton
+    private lateinit var header: View
+    private lateinit var destinations: View
+    private lateinit var playbackControls: View
+    private var keyboardVisible = false
+    private var remoteActive = false
     private var catalog: List<MediaEntry> = emptyList()
     private var rawDlnaDevices: List<ReceiverDevice> = emptyList()
     private var dlnaDevices: List<ReceiverDevice> = emptyList()
@@ -83,6 +94,7 @@ class ReceiverActivity : AppCompatActivity() {
             ?.let { runCatching { MediaFilter.valueOf(it) }.getOrNull() }
             ?: MediaFilter.VIDEO
         bindViews()
+        configureLayout()
         bindLists()
         bindActions()
         setFilter(filter, clearSelection = false)
@@ -127,6 +139,9 @@ class ReceiverActivity : AppCompatActivity() {
         stop = findViewById(R.id.remoteStop)
         castPlay = findViewById(R.id.castPlay)
         castRouteButton = findViewById(R.id.castRouteButton)
+        header = findViewById(R.id.receiverHeader)
+        destinations = findViewById(R.id.receiverDestinations)
+        playbackControls = findViewById(R.id.remotePlaybackControls)
         runCatching {
             GoogleCastSupport.setUpRouteButton(
                 this,
@@ -139,6 +154,77 @@ class ReceiverActivity : AppCompatActivity() {
             castHint.text = "Google Cast indisponible sur cet appareil"
         }
     }
+
+    private fun configureLayout() {
+        val landscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+        if (landscape) {
+            findViewById<LinearLayout>(R.id.receiverBody).orientation = LinearLayout.HORIZONTAL
+            val destinationsWidth = (resources.configuration.screenWidthDp / 3).coerceIn(184, 248)
+            destinations.layoutParams = LinearLayout.LayoutParams(dp(destinationsWidth), ViewGroup.LayoutParams.MATCH_PARENT)
+                .apply { marginEnd = dp(12) }
+            findViewById<View>(R.id.receiverBrowser).layoutParams = LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.MATCH_PARENT, 1f,
+            )
+            findViewById<View>(R.id.receiverHeaderSubtitle).visibility = View.GONE
+            findViewById<TextView>(R.id.receiverTitle).textSize = 20f
+
+            findViewById<LinearLayout>(R.id.receiverCastCard).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = android.view.Gravity.CENTER_HORIZONTAL
+            }
+            findViewById<View>(R.id.receiverCastText).layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { topMargin = dp(8) }
+            castPlay.layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48))
+                .apply { topMargin = dp(8) }
+
+            if (resources.configuration.screenWidthDp >= 720) {
+                findViewById<LinearLayout>(R.id.receiverBrowserTools).orientation = LinearLayout.HORIZONTAL
+                findViewById<View>(R.id.receiverFilterRow).layoutParams = LinearLayout.LayoutParams(0, dp(48), 1.4f)
+                search.layoutParams = LinearLayout.LayoutParams(0, dp(48), 1f).apply { marginStart = dp(8) }
+            }
+
+            (playbackControls as LinearLayout).orientation = LinearLayout.HORIZONTAL
+            timeText.layoutParams = LinearLayout.LayoutParams(dp(108), dp(48))
+            timeText.gravity = android.view.Gravity.CENTER_VERTICAL
+            seek.layoutParams = LinearLayout.LayoutParams(0, dp(48), 1f).apply { marginStart = dp(8) }
+            findViewById<View>(R.id.remoteActionRow).layoutParams = LinearLayout.LayoutParams(dp(188), dp(48))
+                .apply { marginStart = dp(8) }
+        }
+        listOf(R.id.filterVideos, R.id.filterPhotos, R.id.filterAudio).forEach { id ->
+            findViewById<Button>(id).apply {
+                minWidth = 0
+                minimumWidth = 0
+                setPadding(dp(6), 0, dp(6), 0)
+            }
+        }
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        val root = findViewById<View>(R.id.receiverRoot)
+        val padding = intArrayOf(root.paddingLeft, root.paddingTop, root.paddingRight, root.paddingBottom)
+        ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+            val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
+            root.setPadding(
+                padding[0] + bars.left,
+                padding[1] + bars.top,
+                padding[2] + bars.right,
+                padding[3] + maxOf(bars.bottom, ime.bottom),
+            )
+            keyboardVisible = insets.isVisible(WindowInsetsCompat.Type.ime())
+            updateCompactControls()
+            insets
+        }
+        ViewCompat.requestApplyInsets(root)
+    }
+
+    private fun updateCompactControls() {
+        header.visibility = if (keyboardVisible) View.GONE else View.VISIBLE
+        destinations.visibility = if (keyboardVisible) View.GONE else View.VISIBLE
+        browserSummary.visibility = if (keyboardVisible) View.GONE else View.VISIBLE
+        playbackControls.visibility = if (remoteActive && !keyboardVisible) View.VISIBLE else View.GONE
+    }
+
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
     private fun bindLists() {
         receiverAdapter = ReceiverAdapter(
@@ -173,6 +259,12 @@ class ReceiverActivity : AppCompatActivity() {
         findViewById<Button>(R.id.filterPhotos).setOnClickListener { setFilter(MediaFilter.PHOTO) }
         findViewById<Button>(R.id.filterAudio).setOnClickListener { setFilter(MediaFilter.AUDIO) }
         search.doAfterTextChanged { renderCatalog() }
+        search.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId != EditorInfo.IME_ACTION_DONE) return@setOnEditorActionListener false
+            WindowCompat.getInsetsController(window, search).hide(WindowInsetsCompat.Type.ime())
+            search.clearFocus()
+            true
+        }
         castPlay.setOnClickListener { prepareCast() }
         findViewById<Button>(R.id.photoPrevious).setOnClickListener { movePhoto(-1) }
         findViewById<Button>(R.id.photoNext).setOnClickListener { movePhoto(1) }
@@ -395,6 +487,8 @@ class ReceiverActivity : AppCompatActivity() {
     }
 
     private fun renderRemote(value: RemotePlaybackStatus) {
+        remoteActive = value.active
+        updateCompactControls()
         val isPhoto = value.active && value.media?.kind == "photo"
         photoControls.visibility = if (isPhoto) View.VISIBLE else View.GONE
         standardControls.visibility = if (isPhoto) View.GONE else View.VISIBLE

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <integer name="details_actions_orientation">0</integer>
+    <dimen name="details_action_margin_start">14dp</dimen>
+    <dimen name="details_action_margin_top">0dp</dimen>
+</resources>

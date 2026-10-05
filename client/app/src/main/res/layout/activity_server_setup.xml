@@ -29,7 +29,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="18dp"
             android:text="@string/server_setup_title"
-            android:textColor="@color/text_primary"
+            android:textColor="?attr/pluxyTextPrimary"
             android:textSize="24sp"
             android:textStyle="bold" />
 
@@ -41,7 +41,7 @@
             android:gravity="center"
             android:lineSpacingMultiplier="1.3"
             android:text="@string/server_setup_scanning"
-            android:textColor="@color/text_secondary"
+            android:textColor="?attr/pluxyTextSecondary"
             android:textSize="@dimen/details_meta_size" />
 
         <TextView
@@ -50,7 +50,7 @@
             android:layout_marginTop="14dp"
             android:gravity="center"
             android:text="@string/server_setup_trust_warning"
-            android:textColor="@color/text_secondary"
+            android:textColor="?attr/pluxyTextSecondary"
             android:textSize="@dimen/details_caption_size" />
 
         <ProgressBar
@@ -58,7 +58,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="20dp"
-            android:indeterminateTint="@color/accent" />
+            android:indeterminateTint="?attr/pluxyAccent" />
 
         <!-- Liste des serveurs découverts -->
         <LinearLayout
@@ -81,7 +81,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="28dp"
             android:text="@string/server_setup_manual"
-            android:textColor="@color/text_tertiary"
+            android:textColor="?attr/pluxyTextTertiary"
             android:textSize="14sp"
             android:letterSpacing="0.02" />
 
@@ -93,13 +93,13 @@
             android:background="@drawable/bg_input"
             android:hint="@string/server_setup_hint"
             android:importantForAutofill="no"
-            android:textColorHint="@color/text_tertiary"
+            android:textColorHint="?attr/pluxyTextTertiary"
             android:inputType="text"
             android:imeOptions="actionGo"
             android:minHeight="@dimen/btn_min_h"
             android:paddingStart="16dp"
             android:paddingEnd="16dp"
-            android:textColor="@color/text_primary" />
+            android:textColor="?attr/pluxyTextPrimary" />
 
         <Button
             android:id="@+id/connectManual"

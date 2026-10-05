@@ -14,7 +14,6 @@ import android.widget.ImageView
 import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.activity.OnBackPressedCallback
-import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.accessibility.AccessibilityNodeInfoCompat
 import androidx.lifecycle.lifecycleScope
@@ -34,7 +33,7 @@ import kotlinx.coroutines.withContext
 import kotlin.math.abs
 
 /** Visionneuse locale : gauche/droite, puis diaporama optionnel. */
-class PhotoActivity : AppCompatActivity() {
+class PhotoActivity : ThemedActivity() {
     private val api = PluxyApi.create()
     private val moshi = Moshi.Builder().add(KotlinJsonAdapterFactory()).build()
     private val handler = Handler(Looper.getMainLooper())

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Capsule de prévisualisation attachée à la timeline. -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
-    <gradient android:angle="315" android:startColor="@color/glass_focus_top" android:endColor="@color/glass_focus_bottom" />
-    <stroke android:width="1dp" android:color="@color/accent_dim" />
+    <gradient android:angle="315" android:startColor="?attr/pluxyGlassFocusTop" android:endColor="?attr/pluxyGlassFocusBottom" />
+    <stroke android:width="1dp" android:color="?attr/pluxyAccentDim" />
     <corners android:radius="@dimen/radius_md" />
 </shape>

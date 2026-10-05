@@ -16,6 +16,7 @@ import android.view.inputmethod.EditorInfo
 import android.widget.Button
 import android.widget.EditText
 import android.widget.FrameLayout
+import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.ImageButton
 import android.widget.LinearLayout
@@ -28,7 +29,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.OnBackPressedCallback
 import androidx.annotation.OptIn
 import androidx.appcompat.app.AlertDialog
-import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.util.UnstableApi
 import androidx.recyclerview.widget.GridLayoutManager
@@ -62,7 +62,7 @@ import kotlin.math.abs
  * destinations visibles et restauration du focus par identifiant stable.
  */
 @OptIn(UnstableApi::class)
-class MainActivity : AppCompatActivity() {
+class MainActivity : ThemedActivity() {
     private val moshi = Moshi.Builder().add(KotlinJsonAdapterFactory()).build()
     private lateinit var grid: RecyclerView
     private lateinit var empty: TextView
@@ -126,7 +126,10 @@ class MainActivity : AppCompatActivity() {
         lanImages = LanMediaImages.loader(this)
 
         val screenDp = resources.displayMetrics.widthPixels / resources.displayMetrics.density
-        val reservedDp = if (isTelevision() || resources.getBoolean(R.bool.show_library_hero)) 278f else 96f
+        val screenPaddingDp = resources.getDimension(R.dimen.screen_pad) / resources.displayMetrics.density
+        val reservedDp = if (isTelevision() || resources.getBoolean(R.bool.show_library_hero)) {
+            230f + screenPaddingDp
+        } else screenPaddingDp * 2f
         val contentDp = (screenDp - reservedDp).coerceAtLeast(160f)
         val cardDp = resources.getDimension(R.dimen.library_card_width) / resources.displayMetrics.density
         gridSpan = (contentDp / (cardDp + 12f)).toInt().coerceIn(2, 6)
@@ -155,10 +158,11 @@ class MainActivity : AppCompatActivity() {
         findViewById<Button>(R.id.emptyAction).setOnClickListener { openSetup() }
         bindTabs()
         configureTvNavigationRail()
+        configureMobileNavigationInsets()
         selectedTabView().requestFocus()
         updateSearchButton()
         swipe.setOnRefreshListener { refresh() }
-        swipe.setColorSchemeColors(getColor(R.color.accent))
+        swipe.setColorSchemeColors(pluxyColor(R.color.accent))
         bindMobileCategorySwipe()
 
         if (!PluxyApplication.isConfigured(this)) openSetup()
@@ -367,6 +371,14 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.topBar).background = null
         findViewById<View>(R.id.swipeHint).visibility = View.GONE
 
+        // Le défilement horizontal est réservé au téléphone. Le rail TV garde des
+        // enfants directs pour préserver les déplacements haut/bas à la télécommande.
+        val navigation = findViewById<LinearLayout>(R.id.categoryNavigation)
+        val scroller = findViewById<HorizontalScrollView>(R.id.categoryScroller)
+        val tabs = findViewById<LinearLayout>(R.id.tabs)
+        scroller.removeView(tabs)
+        navigation.removeView(scroller)
+        navigation.addView(tabs)
         findViewById<LinearLayout>(R.id.categoryNavigation).apply {
             background = getDrawable(R.drawable.bg_glass_nav_rail)
             layoutParams = FrameLayout.LayoutParams(
@@ -390,10 +402,15 @@ class MainActivity : AppCompatActivity() {
         // Toutes les destinations doivent recevoir le format vertical, même si leur
         // contenu arrive après le premier chargement réseau et qu'elles étaient cachées.
         allDestinations().forEach { (id, _) ->
-            findViewById<Button>(id).layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                (50 * density).toInt(),
-            ).apply { setMargins(0, (3 * density).toInt(), 0, (3 * density).toInt()) }
+            findViewById<Button>(id).apply {
+                minHeight = (50 * density).toInt()
+                setPadding((12 * density).toInt(), (10 * density).toInt(), (12 * density).toInt(), (10 * density).toInt())
+                maxLines = 2
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                ).apply { setMargins(0, (3 * density).toInt(), 0, (3 * density).toInt()) }
+            }
         }
         val start = (230 * density).toInt()
         listOf(findViewById<View>(R.id.swipe), libraryHero, findViewById<View>(R.id.libraryContext)).forEach { view ->
@@ -405,6 +422,34 @@ class MainActivity : AppCompatActivity() {
         (findViewById<View>(R.id.libraryContext).layoutParams as? ViewGroup.MarginLayoutParams)?.let {
             it.topMargin = (94 * density).toInt()
         }
+    }
+
+    private fun configureMobileNavigationInsets() {
+        if (isTelevision() || resources.getBoolean(R.bool.show_library_hero)) return
+        val navigation = findViewById<View>(R.id.categoryNavigation)
+        navigation.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            val density = resources.displayMetrics.density
+            val bottom = (navigation.layoutParams as ViewGroup.MarginLayoutParams).topMargin + navigation.height
+            listOf(findViewById<View>(R.id.libraryContext), swipeHint).forEach { view ->
+                val params = view.layoutParams as ViewGroup.MarginLayoutParams
+                val margin = bottom + (8 * density).toInt()
+                if (params.topMargin != margin) {
+                    params.topMargin = margin
+                    view.layoutParams = params
+                }
+            }
+            updateLibraryHeroVisibility()
+        }
+    }
+
+    private fun mobileContentTopMarginPx(): Int {
+        val density = resources.displayMetrics.density
+        val navigation = findViewById<View>(R.id.categoryNavigation)
+        val top = (navigation.layoutParams as ViewGroup.MarginLayoutParams).topMargin
+        val height = navigation.height.takeIf { it > 0 } ?: (56 * density).toInt()
+        val contextHeight = findViewById<TextView>(R.id.libraryContext).lineHeight
+        val hintHeight = (28 * density).toInt()
+        return top + height + maxOf(contextHeight, hintHeight) + (16 * density).toInt()
     }
 
     private fun moveToAdjacentDestination(offset: Int) {
@@ -458,6 +503,12 @@ class MainActivity : AppCompatActivity() {
                 if (kind == "home" || kind in discoveredKinds) View.VISIBLE else View.GONE
             findViewById<View>(viewId).isSelected = selectedKind == kind
         }
+        if (!isTelevision() && !resources.getBoolean(R.bool.show_library_hero)) {
+            selectedTabView().post {
+                val tab = selectedTabView()
+                tab.requestRectangleOnScreen(android.graphics.Rect(0, 0, tab.width, tab.height), true)
+            }
+        }
     }
 
     private fun selectedTabView(): View = findViewById(
@@ -467,7 +518,8 @@ class MainActivity : AppCompatActivity() {
     private fun updateInterfaceMode() {
         // La bibliothèque garde une navigation unique, sans mode technique caché.
         advancedMode = false
-        findViewById<View>(R.id.serverLabel).visibility = View.INVISIBLE
+        findViewById<View>(R.id.serverLabel).visibility =
+            if (isTelevision()) View.INVISIBLE else View.GONE
         swipe.isEnabled = true
         updateLibraryHeroVisibility()
     }
@@ -768,12 +820,16 @@ class MainActivity : AppCompatActivity() {
             searchQuery.isBlank() && selectedKind in setOf("movie", "series")
         libraryHero.visibility = if (show) View.VISIBLE else View.GONE
         (swipe.layoutParams as? ViewGroup.MarginLayoutParams)?.let { params ->
-            val target = if (show) TV_LIBRARY_HERO_CONTENT_TOP_MARGIN_DP else {
-                val isTv = resources.configuration.uiMode and Configuration.UI_MODE_TYPE_MASK ==
-                    Configuration.UI_MODE_TYPE_TELEVISION
-                if (isTv && searchQuery.isNotBlank()) 130 else if (isTv) TV_CONTENT_TOP_MARGIN_DP else DEFAULT_CONTENT_TOP_MARGIN_DP
+            val rail = isTelevision() || resources.getBoolean(R.bool.show_library_hero)
+            val topMargin = if (show) {
+                (resources.displayMetrics.density * TV_LIBRARY_HERO_CONTENT_TOP_MARGIN_DP).toInt()
+            } else if (rail) {
+                val target = if (searchQuery.isNotBlank()) 130 else TV_CONTENT_TOP_MARGIN_DP
+                (resources.displayMetrics.density * target).toInt()
+            } else {
+                mobileContentTopMarginPx()
             }
-            params.topMargin = (resources.displayMetrics.density * target).toInt()
+            params.topMargin = topMargin
             swipe.layoutParams = params
         }
     }
@@ -825,10 +881,19 @@ class MainActivity : AppCompatActivity() {
     private fun configureCompactNavigation(screenDp: Float) {
         if (screenDp >= COMPACT_NAVIGATION_MAX_WIDTH_DP) return
         findViewById<View>(R.id.brandName).visibility = View.GONE
-        if (!isTelevision()) findViewById<Button>(R.id.sortFilter).apply {
-            text = "↕"
-            (layoutParams as? ViewGroup.MarginLayoutParams)?.width =
-                (44 * resources.displayMetrics.density).toInt()
+        if (!isTelevision()) {
+            val density = resources.displayMetrics.density
+            findViewById<ImageView>(R.id.brandLogo).apply {
+                layoutParams = (layoutParams as ViewGroup.MarginLayoutParams).apply {
+                    width = (32 * density).toInt()
+                    height = (32 * density).toInt()
+                    marginEnd = (8 * density).toInt()
+                }
+            }
+            findViewById<Button>(R.id.sortFilter).apply {
+                text = "↕"
+                (layoutParams as? ViewGroup.MarginLayoutParams)?.width = (48 * density).toInt()
+            }
         }
         findViewById<Button>(R.id.tabAudio).text = getString(R.string.destination_music)
     }
@@ -913,7 +978,7 @@ class MainActivity : AppCompatActivity() {
             text = if (compact) "↕" else if (isSelected) {
                 if (PluxyApplication.libraryWatched(this@MainActivity) == "watched") "Déjà vus" else "Non vus"
             } else "Trier"
-            setTextColor(getColor(if (isSelected) R.color.accent_bright else R.color.text_primary))
+            setTextColor(pluxyColor(if (isSelected) R.color.accent_bright else R.color.text_primary))
         }
     }
 
@@ -1068,6 +1133,9 @@ class MainActivity : AppCompatActivity() {
         val show = selectedKind == "photo" && searchQuery.isBlank() &&
             allItems.any { it.kind == "photo" }
         control.visibility = if (show) View.VISIBLE else View.GONE
+        val screenDp = resources.configuration.screenWidthDp.toFloat()
+        findViewById<View>(R.id.brand).visibility =
+            if (!isTelevision() && screenDp < 340f && show) View.GONE else View.VISIBLE
         if (show) {
             val label = PluxyApplication.photoFolder(this)
                 .ifBlank { getString(R.string.photo_folder_all) }
@@ -1171,7 +1239,7 @@ class MainActivity : AppCompatActivity() {
             val button = Button(this).apply {
                 isAllCaps = false
                 gravity = Gravity.START or Gravity.CENTER_VERTICAL
-                setTextColor(getColor(R.color.text_primary))
+                setTextColor(pluxyColor(R.color.text_primary))
                 setBackgroundResource(R.drawable.focus_card)
                 stateListAnimator = AnimatorInflater.loadStateListAnimator(
                     this@MainActivity,
@@ -1283,7 +1351,6 @@ class MainActivity : AppCompatActivity() {
         private const val CATEGORY_SWIPE_DISTANCE_DP = 72
         private const val SWIPE_HINT_DISMISS_MS = 180L
         private const val TV_CONTENT_TOP_MARGIN_DP = 104
-        private const val DEFAULT_CONTENT_TOP_MARGIN_DP = 154
         private const val TV_LIBRARY_HERO_CONTENT_TOP_MARGIN_DP = 324
         private const val COMPACT_NAVIGATION_MAX_WIDTH_DP = 600f
         // Une bibliothèque peut évoluer sans action côté TV : le serveur publie le

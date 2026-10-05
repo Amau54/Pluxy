@@ -12,7 +12,6 @@ import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.annotation.OptIn
 import androidx.appcompat.app.AlertDialog
-import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.util.UnstableApi
@@ -30,7 +29,7 @@ import kotlinx.coroutines.launch
 
 /** Activity controls the service player, which survives Home, locking, and UI recreation. */
 @OptIn(UnstableApi::class)
-class AudioPlayerActivity : AppCompatActivity() {
+class AudioPlayerActivity : ThemedActivity() {
     private val moshi = Moshi.Builder().add(KotlinJsonAdapterFactory()).build()
     private lateinit var initial: MediaItem
     private lateinit var titleView: TextView

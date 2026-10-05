@@ -31,18 +31,19 @@
             android:orientation="vertical"
             android:paddingStart="@dimen/screen_pad"
             android:paddingEnd="@dimen/screen_pad"
-            android:paddingTop="56dp"
+            android:paddingTop="@dimen/details_top_pad"
             android:paddingBottom="44dp">
 
-            <!-- En-tête : affiche + infos + actions -->
+            <!-- Affiche et actions : empilées sur téléphone, côte à côte sur grand écran. -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal">
+                android:orientation="@integer/details_header_orientation">
 
                 <FrameLayout
-                    android:layout_width="196dp"
-                    android:layout_height="294dp"
+                    android:layout_width="@dimen/details_poster_width"
+                    android:layout_height="@dimen/details_poster_height"
+                    android:layout_gravity="center_horizontal"
                     android:background="@drawable/poster_rounded"
                     android:clipToOutline="true"
                     android:elevation="12dp">
@@ -57,7 +58,7 @@
                         android:importantForAccessibility="no"
                         android:maxLines="4"
                         android:padding="18dp"
-                        android:textColor="@color/text_primary"
+                        android:textColor="?attr/pluxyTextPrimary"
                         android:textSize="21sp"
                         android:textStyle="bold" />
 
@@ -73,12 +74,14 @@
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="32dp"
+                    android:layout_marginStart="@dimen/details_info_margin_start"
+                    android:layout_marginTop="@dimen/details_info_margin_top"
                     android:orientation="vertical">
 
                     <TextView
                         android:id="@+id/title"
                         style="@style/Text.Display"
+                        android:textSize="@dimen/details_title_size"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content" />
 
@@ -87,20 +90,20 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="10dp"
-                        android:textColor="@color/text_secondary"
+                        android:textColor="?attr/pluxyTextSecondary"
                         android:textSize="@dimen/details_meta_size"
                         android:letterSpacing="0.01" />
 
                     <LinearLayout
-                        android:layout_width="wrap_content"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="22dp"
                         android:orientation="vertical">
 
                         <LinearLayout
-                            android:layout_width="wrap_content"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:orientation="horizontal">
+                            android:orientation="@integer/details_actions_orientation">
 
                             <Button
                                 android:id="@+id/play"
@@ -110,16 +113,17 @@
                             <Button
                                 android:id="@+id/restart"
                                 style="@style/Btn.Secondary"
-                                android:layout_marginStart="14dp"
+                                android:layout_marginStart="@dimen/details_action_margin_start"
+                                android:layout_marginTop="@dimen/details_action_margin_top"
                                 android:text="@string/action_restart"
                                 android:visibility="gone" />
                         </LinearLayout>
 
                         <LinearLayout
-                            android:layout_width="wrap_content"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="12dp"
-                            android:orientation="horizontal">
+                            android:orientation="@integer/details_actions_orientation">
 
                             <Button
                                 android:id="@+id/trailer"
@@ -129,27 +133,38 @@
                             <Button
                                 android:id="@+id/playSettings"
                                 style="@style/Btn.Secondary"
-                                android:layout_marginStart="14dp"
+                                android:layout_marginStart="@dimen/details_action_margin_start"
+                                android:layout_marginTop="@dimen/details_action_margin_top"
                                 android:text="@string/action_audio_subtitles" />
                         </LinearLayout>
                     </LinearLayout>
 
                     <!-- Notes multi-sites (TMDB / IMDb / Rotten Tomatoes / Metacritic) -->
-                    <LinearLayout
-                        android:id="@+id/ratings"
-                        android:layout_width="wrap_content"
+                    <HorizontalScrollView
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="14dp"
-                        android:orientation="horizontal"
-                        android:visibility="gone" />
+                        android:scrollbars="none">
+                        <LinearLayout
+                            android:id="@+id/ratings"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:visibility="gone" />
+                    </HorizontalScrollView>
 
                     <!-- Pastilles techniques (résolution, codec, HDR) renseignées en code -->
-                    <LinearLayout
-                        android:id="@+id/chips"
-                        android:layout_width="wrap_content"
+                    <HorizontalScrollView
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="12dp"
-                        android:orientation="horizontal" />
+                        android:scrollbars="none">
+                        <LinearLayout
+                            android:id="@+id/chips"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal" />
+                    </HorizontalScrollView>
 
                     <TextView
                         android:id="@+id/playDiagnostic"
@@ -168,7 +183,7 @@
                         android:paddingEnd="14dp"
                         android:paddingBottom="8dp"
                         android:text="@string/label_direct_play_check"
-                        android:textColor="@color/text_secondary"
+                        android:textColor="?attr/pluxyTextSecondary"
                         android:textSize="@dimen/details_caption_size"
                         android:stateListAnimator="@animator/focus_lift_btn" />
 
@@ -177,7 +192,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="14dp"
-                        android:textColor="@color/text_secondary"
+                        android:textColor="?attr/pluxyTextSecondary"
                         android:textStyle="italic"
                         android:textSize="@dimen/details_meta_size"
                         android:visibility="gone" />
@@ -187,7 +202,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="10dp"
-                        android:textColor="@color/text_tertiary"
+                        android:textColor="?attr/pluxyTextTertiary"
                         android:textSize="@dimen/details_caption_size"
                         android:visibility="gone" />
 

@@ -8,7 +8,6 @@ import android.view.ViewGroup
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
-import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -18,7 +17,7 @@ import com.pluxy.tv.PluxyApplication
 import com.pluxy.tv.R
 
 /** Préférences locales, entièrement utilisables avec les flèches et OK. */
-class HomePreferencesActivity : AppCompatActivity() {
+class HomePreferencesActivity : ThemedActivity() {
     private val shelfNames = mapOf(
         "continue" to "Reprendre",
         "up_next" to "À suivre",
@@ -41,19 +40,19 @@ class HomePreferencesActivity : AppCompatActivity() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundResource(R.drawable.bg_tv_ambient)
-            val safe = maxOf(dp(48), (resources.displayMetrics.widthPixels * .05f).toInt())
+            val safe = resources.getDimensionPixelSize(R.dimen.screen_pad)
             setPadding(safe, dp(28), safe, dp(24))
         }
         root.addView(TextView(this).apply {
             text = "Personnaliser l’accueil"
             textSize = 28f
-            setTextColor(getColor(R.color.text_primary))
+            setTextColor(pluxyColor(R.color.text_primary))
             setTypeface(typeface, android.graphics.Typeface.BOLD)
         })
         root.addView(TextView(this).apply {
-            text = "Affichez ou masquez chaque rubrique. Utilisez Monter et Descendre pour choisir son ordre. Les changements sont enregistrés sur cette TV."
+            text = "Affichez ou masquez chaque rubrique. Utilisez Monter et Descendre pour choisir son ordre. Les changements sont enregistrés sur cet appareil."
             textSize = 15f
-            setTextColor(getColor(R.color.text_secondary))
+            setTextColor(pluxyColor(R.color.text_secondary))
             setPadding(0, dp(8), 0, dp(18))
         })
         list = RecyclerView(this).apply {
@@ -153,7 +152,7 @@ class HomePreferencesActivity : AppCompatActivity() {
             }
             val label = TextView(context).apply {
                 textSize = 18f
-                setTextColor(context.getColor(R.color.text_primary))
+                setTextColor(context.pluxyColor(R.color.text_primary))
                 gravity = Gravity.CENTER_VERTICAL
                 maxLines = 2
             }
@@ -169,7 +168,7 @@ class HomePreferencesActivity : AppCompatActivity() {
                 textSize = 16f
                 isFocusable = true
                 showText = false
-                setTextColor(context.getColor(R.color.text_primary))
+                setTextColor(context.pluxyColor(R.color.text_primary))
                 setBackgroundResource(R.drawable.focus_card)
                 setPadding(dp(context, 12), dp(context, 8), dp(context, 12), dp(context, 8))
                 minHeight = dp(context, 54)

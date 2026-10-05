@@ -5,6 +5,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.ViewTreeObserver
 import android.util.TypedValue
+import android.graphics.Paint
 import android.widget.ImageView
 import android.widget.ProgressBar
 import android.widget.TextView
@@ -21,6 +22,7 @@ import com.pluxy.tv.R
 import com.pluxy.tv.api.LanUrlPolicy
 import com.pluxy.tv.api.MediaItem
 import kotlin.math.abs
+import kotlin.math.ceil
 
 internal data class CardEnvironment(
     val advancedMode: Boolean,
@@ -195,9 +197,24 @@ internal class HomeShelfAdapter(
         holder.title.text = shelf.title
         val landscape = shelf.id in setOf("continue", "up_next", "movies:continue")
         holder.adapter.updateAspect(if (landscape) ArtworkPolicy.Aspect.LANDSCAPE else ArtworkPolicy.Aspect.POSTER)
-        val height = holder.cards.resources.getDimensionPixelSize(
+        val minimumHeight = holder.cards.resources.getDimensionPixelSize(
             if (landscape) R.dimen.library_landscape_shelf_height else R.dimen.library_shelf_height,
         )
+        val resources = holder.cards.resources
+        val cardWidth = resources.getDimensionPixelSize(
+            if (landscape) R.dimen.library_landscape_card_width else R.dimen.library_card_width,
+        )
+        val artworkHeight = cardWidth * if (landscape) 9f / 16f else 1.5f
+        val paint = Paint()
+        paint.textSize = resources.getDimension(R.dimen.card_title_size)
+        val titleLineHeight = paint.fontMetrics.run { bottom - top }
+        paint.textSize = resources.getDimension(R.dimen.card_meta_size)
+        val metaLineHeight = paint.fontMetrics.run { bottom - top }
+        // Seul le texte grandit avec les préférences d'accessibilité ; les affiches
+        // gardent leur taille. Inclure les deux lignes, la métadonnée et le focus.
+        val contentHeight = artworkHeight + titleLineHeight * 2 + metaLineHeight +
+            30f * resources.displayMetrics.density
+        val height = maxOf(minimumHeight, ceil(contentHeight).toInt())
         if (holder.cards.layoutParams.height != height) {
             holder.cards.layoutParams = holder.cards.layoutParams.apply { this.height = height }
         }

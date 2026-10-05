@@ -34,7 +34,7 @@
         android:layout_marginTop="8dp"
         android:ellipsize="end"
         android:maxLines="1"
-        android:textColor="@color/text_primary"
+        android:textColor="?attr/pluxyTextPrimary"
         android:textSize="14sp"
         android:textStyle="bold" />
 
@@ -45,6 +45,6 @@
         android:layout_marginTop="1dp"
         android:ellipsize="end"
         android:maxLines="1"
-        android:textColor="@color/text_tertiary"
+        android:textColor="?attr/pluxyTextTertiary"
         android:textSize="13sp" />
 </LinearLayout>

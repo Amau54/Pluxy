@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="player_edge_gap">28dp</dimen>
+    <dimen name="player_deck_padding">24dp</dimen>
+    <dimen name="player_icon_size">56dp</dimen>
+    <dimen name="player_primary_size">72dp</dimen>
+    <dimen name="player_title_size">21sp</dimen>
+    <dimen name="player_time_size">16sp</dimen>
+</resources>

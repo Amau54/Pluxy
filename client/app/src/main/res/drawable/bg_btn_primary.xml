@@ -3,20 +3,20 @@
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:state_focused="true">
         <shape android:shape="rectangle">
-            <gradient android:angle="315" android:startColor="@color/accent_bright" android:endColor="@color/accent" />
-            <stroke android:width="2dp" android:color="@color/text_primary" />
+            <gradient android:angle="315" android:startColor="?attr/pluxyAccentBright" android:endColor="?attr/pluxyAccent" />
+            <stroke android:width="2dp" android:color="?attr/pluxyTextPrimary" />
             <corners android:radius="@dimen/radius_md" />
         </shape>
     </item>
     <item android:state_pressed="true">
         <shape android:shape="rectangle">
-            <solid android:color="@color/accent_dim" />
+            <solid android:color="?attr/pluxyAccentDim" />
             <corners android:radius="@dimen/radius_md" />
         </shape>
     </item>
     <item>
         <shape android:shape="rectangle">
-            <gradient android:angle="315" android:startColor="@color/accent" android:endColor="#EBA080" />
+            <gradient android:angle="315" android:startColor="?attr/pluxyAccent" android:endColor="?attr/pluxyAccentDim" />
             <corners android:radius="@dimen/radius_md" />
         </shape>
     </item>

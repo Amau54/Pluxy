@@ -4,7 +4,7 @@
     <corners android:radius="@dimen/radius_md" />
     <gradient
         android:angle="45"
-        android:endColor="#17202D"
-        android:startColor="#303844"
+        android:endColor="?attr/pluxyGlassFocusBottom"
+        android:startColor="?attr/pluxyGlassFocusTop"
         android:type="linear" />
 </shape>

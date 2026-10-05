@@ -14,7 +14,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:ellipsize="end"
-        android:maxLines="1"
+        android:maxLines="2"
         android:textColor="@color/pluxy_text"
         android:textSize="15sp"
         android:textStyle="bold" />
@@ -27,5 +27,5 @@
         android:ellipsize="end"
         android:maxLines="2"
         android:textColor="@color/pluxy_muted"
-        android:textSize="11sp" />
+        android:textSize="12sp" />
 </LinearLayout>

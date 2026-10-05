@@ -13,7 +13,7 @@
         android:layout_width="match_parent"
         android:layout_height="1dp"
         android:layout_marginBottom="12dp"
-        android:background="@color/border_subtle" />
+        android:background="?attr/pluxyBorderSubtle" />
 
     <TextView
         android:id="@+id/sectionTitle"
@@ -21,7 +21,7 @@
         android:layout_height="wrap_content"
         android:ellipsize="end"
         android:maxLines="1"
-        android:textColor="@color/text_primary"
+        android:textColor="?attr/pluxyTextPrimary"
         android:textSize="22sp"
         android:fontFamily="sans-serif-medium"
         android:letterSpacing="0.01" />

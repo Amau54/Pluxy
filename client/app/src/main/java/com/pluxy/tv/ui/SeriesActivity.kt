@@ -1,6 +1,7 @@
 package com.pluxy.tv.ui
 
 import android.content.Intent
+import android.content.res.Configuration
 import android.animation.AnimatorInflater
 import android.graphics.Typeface
 import android.os.Bundle
@@ -12,10 +13,10 @@ import android.widget.Button
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
+import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.annotation.OptIn
-import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.util.UnstableApi
 import androidx.recyclerview.widget.DiffUtil
@@ -45,7 +46,7 @@ import kotlinx.coroutines.withContext
  * restauration du focus par identifiant et cartes d'épisodes illustrées en 16:9.
  */
 @OptIn(UnstableApi::class)
-class SeriesActivity : AppCompatActivity() {
+class SeriesActivity : ThemedActivity() {
 
     private val moshi = Moshi.Builder().add(KotlinJsonAdapterFactory()).build()
     private val api = PluxyApi.create()
@@ -99,6 +100,7 @@ class SeriesActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.seriesTitle).text = displayName(name)
         findViewById<Button>(R.id.seriesRetry).setOnClickListener { load() }
         applyCompactHeightLayout()
+        configurePhoneHeader()
     }
 
     override fun onResume() {
@@ -288,8 +290,8 @@ class SeriesActivity : AppCompatActivity() {
                 R.animator.focus_lift_btn,
             )
             minimumWidth = 0
-            minHeight = 0
-            setPadding(dp(20), 0, dp(20), 0)
+            minHeight = dp(48)
+            setPadding(dp(20), dp(8), dp(20), dp(8))
             setOnFocusChangeListener { _, focused ->
                 if (focused) focusedControlTag = tag as String
             }
@@ -303,7 +305,7 @@ class SeriesActivity : AppCompatActivity() {
             }
         }, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT,
-            dp(40),
+            LinearLayout.LayoutParams.WRAP_CONTENT,
         ).apply { marginEnd = dp(10) })
     }
 
@@ -417,14 +419,14 @@ class SeriesActivity : AppCompatActivity() {
             }
             cell.addView(TextView(this).apply {
                 text = rating.value
-                setTextColor(getColor(R.color.accent_bright))
+                setTextColor(pluxyColor(R.color.accent_bright))
                 textSize = 17f
                 gravity = Gravity.CENTER
                 setTypeface(typeface, Typeface.BOLD)
             })
             cell.addView(TextView(this).apply {
                 text = rating.source
-                setTextColor(getColor(R.color.text_secondary))
+                setTextColor(pluxyColor(R.color.text_secondary))
                 textSize = 13f
                 gravity = Gravity.CENTER
             })
@@ -452,6 +454,35 @@ class SeriesActivity : AppCompatActivity() {
             dp(12),
         )
         list.setPadding(0, 0, 0, dp(8))
+    }
+
+    private fun configurePhoneHeader() {
+        val television = resources.configuration.uiMode and Configuration.UI_MODE_TYPE_MASK ==
+            Configuration.UI_MODE_TYPE_TELEVISION
+        if (television || resources.configuration.smallestScreenWidthDp >= 600) return
+        findViewById<TextView>(R.id.seriesTitle).apply {
+            maxLines = Int.MAX_VALUE
+            ellipsize = null
+        }
+        continueButton.layoutParams = continueButton.layoutParams.apply {
+            width = ViewGroup.LayoutParams.MATCH_PARENT
+        }
+        val content = findViewById<View>(R.id.seriesContent)
+        val header = findViewById<View>(R.id.seriesHeaderContent)
+        val scroll = findViewById<ScrollView>(R.id.seriesHeaderScroll)
+        // Le synopsis et les grands caractères restent accessibles sans faire
+        // disparaître les saisons et la liste d'épisodes sous l'écran.
+        val resizeHeader = {
+            if (content.height > 0 && header.height > 0) {
+                val limit = (content.height * 0.48f).toInt().coerceAtLeast(dp(80))
+                val height = minOf(header.height, limit)
+                if (scroll.layoutParams.height != height) {
+                    scroll.layoutParams = scroll.layoutParams.apply { this.height = height }
+                }
+            }
+        }
+        header.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> resizeHeader() }
+        content.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> resizeHeader() }
     }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()

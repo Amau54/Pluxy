@@ -2,19 +2,19 @@
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:state_pressed="true">
         <shape android:shape="oval">
-            <solid android:color="@color/accent_dim" />
-            <stroke android:width="3dp" android:color="@color/accent_bright" />
+            <solid android:color="?attr/pluxyAccentDim" />
+            <stroke android:width="3dp" android:color="?attr/pluxyAccentBright" />
         </shape>
     </item>
     <item android:state_focused="true">
         <shape android:shape="oval">
-            <solid android:color="@color/accent_bright" />
-            <stroke android:width="3dp" android:color="@color/text_primary" />
+            <solid android:color="?attr/pluxyAccentBright" />
+            <stroke android:width="3dp" android:color="?attr/pluxyTextPrimary" />
         </shape>
     </item>
     <item>
         <shape android:shape="oval">
-            <gradient android:angle="315" android:startColor="@color/accent" android:endColor="#EBA080" />
+            <gradient android:angle="315" android:startColor="?attr/pluxyAccent" android:endColor="?attr/pluxyAccentDim" />
         </shape>
     </item>
 </selector>

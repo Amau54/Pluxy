@@ -1,7 +1,9 @@
 package com.pluxy.tv.player
 
+import com.pluxy.tv.ui.ThemedActivity
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.graphics.Color
 import android.media.MediaMetadata
 import android.media.AudioDeviceCallback
@@ -11,22 +13,30 @@ import android.media.session.MediaSession
 import android.media.session.PlaybackState as PlatformPlaybackState
 import android.net.Uri
 import android.os.Bundle
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.view.KeyEvent
 import android.view.View
+import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.Button
+import android.widget.FrameLayout
+import android.widget.HorizontalScrollView
 import android.widget.ImageButton
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import kotlin.math.abs
 import androidx.activity.OnBackPressedCallback
 import androidx.annotation.OptIn
 import androidx.appcompat.app.AlertDialog
-import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.C
@@ -65,7 +75,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @OptIn(UnstableApi::class)
-class PlayerActivity : AppCompatActivity() {
+class PlayerActivity : ThemedActivity() {
 
     private lateinit var playerView: PlayerView
     private lateinit var statusView: TextView
@@ -80,6 +90,7 @@ class PlayerActivity : AppCompatActivity() {
     private lateinit var playbackErrorPanel: View
     private lateinit var playbackErrorMessage: TextView
     private lateinit var retryPlaybackButton: Button
+    private var compactPlayerControls: Boolean? = null
     private var terminalPlaybackError = false
     private var activityStarted = false
     private var timelineScrubbing = false
@@ -589,6 +600,7 @@ class PlayerActivity : AppCompatActivity() {
         mediaTitleView.text = item.title
         timeDurationView.text = fmtPlayerTime(durationMs)
         timeline.setDuration(durationMs.coerceAtLeast(0L))
+        setupResponsiveControls()
 
         playPauseButton.setOnClickListener { togglePlayPause() }
         findViewById<ImageButton>(R.id.btnRewind).setOnClickListener {
@@ -640,6 +652,148 @@ class PlayerActivity : AppCompatActivity() {
                 scheduleControlsHide()
             }
         })
+    }
+
+    private fun setupResponsiveControls() {
+        val title = findViewById<View>(R.id.playerTitleCapsule)
+        val panel = findViewById<View>(R.id.playerBottomPanel)
+        val update = View.OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            updateResponsiveControls()
+        }
+        controlsOverlay.addOnLayoutChangeListener(update)
+        title.addOnLayoutChangeListener(update)
+        panel.addOnLayoutChangeListener(update)
+        val television = resources.configuration.uiMode and Configuration.UI_MODE_TYPE_MASK ==
+            Configuration.UI_MODE_TYPE_TELEVISION
+        findViewById<ImageButton>(R.id.btnExitPlayback).apply {
+            visibility = if (television) View.GONE else View.VISIBLE
+            setOnClickListener { finish() }
+            androidx.appcompat.widget.TooltipCompat.setTooltipText(this, getString(R.string.player_leave_action))
+        }
+        setupImmersivePlayback()
+        for ((id, description) in listOf(
+            R.id.btnRewind to R.string.player_rewind_description,
+            R.id.btnForward to R.string.player_forward_description,
+            R.id.btnTracks to R.string.player_audio_action,
+            R.id.btnSubtitles to R.string.player_subtitles_action,
+            R.id.btnGear to R.string.player_more,
+        )) {
+            androidx.appcompat.widget.TooltipCompat.setTooltipText(findViewById(id), getString(description))
+        }
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        if (::controlsOverlay.isInitialized) {
+            hideSystemBars()
+            ViewCompat.requestApplyInsets(findViewById(R.id.playerRoot))
+            controlsOverlay.post { updateResponsiveControls() }
+        }
+    }
+
+    private fun setupImmersivePlayback() {
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            window.attributes = window.attributes.apply {
+                layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+            }
+        }
+        val root = findViewById<View>(R.id.playerRoot)
+        ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
+            val cutout = insets.getInsets(WindowInsetsCompat.Type.displayCutout())
+            val gesture = insets.getInsets(WindowInsetsCompat.Type.mandatorySystemGestures())
+            // La vidéo reste plein écran ; seules les commandes évitent les découpes.
+            controlsOverlay.setPadding(cutout.left, cutout.top, cutout.right, maxOf(cutout.bottom, gesture.bottom))
+            val edge = resources.getDimensionPixelSize(R.dimen.media_viewer_screen_pad)
+            val rtl = ViewCompat.getLayoutDirection(root) == ViewCompat.LAYOUT_DIRECTION_RTL
+            val safeStart = if (rtl) cutout.right else cutout.left
+            val safeEnd = if (rtl) cutout.left else cutout.right
+            statusView.layoutParams = (statusView.layoutParams as FrameLayout.LayoutParams).apply {
+                marginStart = edge + safeStart
+                marginEnd = edge + safeEnd
+            }
+            val errorGap = (16 * resources.displayMetrics.density).toInt()
+            playbackErrorPanel.layoutParams = (playbackErrorPanel.layoutParams as FrameLayout.LayoutParams).apply {
+                marginStart = edge + safeStart
+                marginEnd = edge + safeEnd
+                topMargin = errorGap + cutout.top
+                bottomMargin = errorGap + maxOf(cutout.bottom, gesture.bottom)
+            }
+            controlsOverlay.post { updateResponsiveControls() }
+            insets
+        }
+        hideSystemBars()
+        ViewCompat.requestApplyInsets(root)
+    }
+
+    private fun hideSystemBars() {
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            hide(WindowInsetsCompat.Type.systemBars())
+        }
+    }
+
+    /** Garde les commandes accessibles sans recréer la lecture à chaque rotation. */
+    private fun updateResponsiveControls() {
+        if (controlsOverlay.width <= 0 || controlsOverlay.height <= 0) return
+        val density = resources.displayMetrics.density
+        val television = resources.configuration.uiMode and Configuration.UI_MODE_TYPE_MASK ==
+            Configuration.UI_MODE_TYPE_TELEVISION
+        val compact = !television && controlsOverlay.width / density >= 480f &&
+            controlsOverlay.width > controlsOverlay.height &&
+            controlsOverlay.height / density <= 480f
+        val title = findViewById<View>(R.id.playerTitleCapsule)
+        val titleParams = title.layoutParams as FrameLayout.LayoutParams
+        val edge = resources.getDimensionPixelSize(R.dimen.media_viewer_screen_pad)
+        val exitSpace = if (television) 0 else (60 * density).toInt()
+        if (titleParams.marginEnd != edge + exitSpace) {
+            title.layoutParams = titleParams.apply { marginEnd = edge + exitSpace }
+        }
+        val titleSpace = controlsOverlay.width - controlsOverlay.paddingLeft - controlsOverlay.paddingRight -
+            titleParams.marginStart - titleParams.marginEnd - title.paddingLeft - title.paddingRight - (15 * density).toInt()
+        if (mediaTitleView.maxWidth != titleSpace.coerceAtLeast(0)) {
+            mediaTitleView.maxWidth = titleSpace.coerceAtLeast(0)
+        }
+        if (compactPlayerControls != compact) {
+            compactPlayerControls = compact
+            val rows = findViewById<LinearLayout>(R.id.playerActionRows)
+            rows.orientation = if (compact) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
+            val secondary = findViewById<HorizontalScrollView>(R.id.playerSecondaryScroll)
+            secondary.layoutParams = (secondary.layoutParams as LinearLayout.LayoutParams).apply {
+                width = if (compact) 0 else ViewGroup.LayoutParams.MATCH_PARENT
+                weight = if (compact) 1f else 0f
+                marginStart = if (compact) (16 * density).toInt() else 0
+            }
+            for ((id, label) in listOf(
+                R.id.btnTracks to R.string.player_audio_action,
+                R.id.btnSubtitles to R.string.player_subtitles_action,
+            )) {
+                findViewById<Button>(id).apply {
+                    text = if (compact) "" else getString(label)
+                    compoundDrawablePadding = if (compact) 0 else (8 * density).toInt()
+                    val horizontalPadding = if (compact) 0 else (14 * density).toInt()
+                    setPaddingRelative(horizontalPadding, paddingTop, horizontalPadding, paddingBottom)
+                    layoutParams = layoutParams.apply {
+                        width = if (compact) (48 * density).toInt() else ViewGroup.LayoutParams.WRAP_CONTENT
+                    }
+                }
+            }
+        }
+
+        val statusParams = statusView.layoutParams as FrameLayout.LayoutParams
+        val statusTop = title.bottom + (8 * density).toInt()
+        if (statusParams.topMargin != statusTop) {
+            statusView.layoutParams = statusParams.apply { topMargin = statusTop }
+        }
+        val scroll = findViewById<ScrollView>(R.id.playerPanelScroll)
+        val panel = findViewById<View>(R.id.playerBottomPanel)
+        val margin = (scroll.layoutParams as FrameLayout.LayoutParams).bottomMargin
+        val belowTitle = (controlsOverlay.height - controlsOverlay.paddingBottom - title.bottom - margin - 12 * density).toInt()
+        val cap = if (compact) belowTitle else minOf(belowTitle, (controlsOverlay.height * 0.6f).toInt())
+        val height = minOf(panel.measuredHeight, cap.coerceAtLeast((48 * density).toInt()))
+        if (height > 0 && scroll.layoutParams.height != height) {
+            scroll.layoutParams = scroll.layoutParams.apply { this.height = height }
+        }
     }
 
     private fun setupBackNavigation() {
@@ -709,6 +863,7 @@ class PlayerActivity : AppCompatActivity() {
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) hideSystemBars()
         if (hasFocus && ::controlsOverlay.isInitialized && controlsOverlay.visibility == View.VISIBLE) {
             scheduleControlsHide()
         }

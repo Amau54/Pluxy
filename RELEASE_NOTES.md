@@ -1,14 +1,12 @@
-# Pluxy 1.5.1
+# Pluxy 1.5.2
 
-Lecteur et serveur Android : **version 1.5.1, versionCode 46**.
+Lecteur et serveur Android : **version 1.5.2, versionCode 47**.
 
-- Interface TV revue : panneaux translucides, lueur discrète et sélection plus visible.
-- Recherche commune aux films, séries, photos et musique.
-- Reprise de lecture, épisode suivant, galeries photo et albums musicaux.
-- Catalogue conservé quand un dossier Android devient temporairement inaccessible.
-- Démarrage et arrêt du serveur Android plus fiables.
-- Serveur PC : installation automatique de Python et réparation des composants au lancement.
-- Construction et installation des APK plus rapides, avec contrôle de leur version et signature.
+- Trois thèmes dans les réglages du lecteur : Corail, Océan et Minuit.
+- Lecteur vidéo revu : panneaux en verre fumé, reflets discrets et commandes plus lisibles.
+- Fiches, épisodes et navigation adaptés aux petits écrans et au toucher.
+- Réglages plus lisibles, y compris avec des caractères agrandis.
+- Gestion des dossiers et écran d’envoi du serveur Android adaptés au téléphone.
 
 ## Mise à jour des APK de test
 

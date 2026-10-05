@@ -5,9 +5,9 @@
     android:viewportWidth="320"
     android:viewportHeight="180">
     <path
-        android:fillColor="@color/surface_variant"
+        android:fillColor="?attr/pluxySurfaceVariant"
         android:pathData="M0,0h320v180h-320z" />
     <path
-        android:fillColor="@color/accent"
+        android:fillColor="?attr/pluxyAccent"
         android:pathData="M137,52L137,128L203,90Z" />
 </vector>

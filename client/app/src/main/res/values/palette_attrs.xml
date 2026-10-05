@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <attr name="pluxyBg" format="color" />
+    <attr name="pluxyBgElev" format="color" />
+    <attr name="pluxySurface" format="color" />
+    <attr name="pluxySurfaceVariant" format="color" />
+    <attr name="pluxySurfaceFocus" format="color" />
+    <attr name="pluxyGlassTop" format="color" />
+    <attr name="pluxyGlassBottom" format="color" />
+    <attr name="pluxyGlassFocusTop" format="color" />
+    <attr name="pluxyGlassFocusBottom" format="color" />
+    <attr name="pluxyGlassGlint" format="color" />
+    <attr name="pluxyGlassGlintTrans" format="color" />
+    <attr name="pluxyAmbientCoral" format="color" />
+    <attr name="pluxyAmbientCoralTrans" format="color" />
+    <attr name="pluxyAmbientRose" format="color" />
+    <attr name="pluxyAmbientRoseTrans" format="color" />
+    <attr name="pluxyGlowEdge" format="color" />
+    <attr name="pluxyAccent" format="color" />
+    <attr name="pluxyAccentBright" format="color" />
+    <attr name="pluxyAccentDim" format="color" />
+    <attr name="pluxyInfo" format="color" />
+    <attr name="pluxySuccess" format="color" />
+    <attr name="pluxyTextPrimary" format="color" />
+    <attr name="pluxyTextSecondary" format="color" />
+    <attr name="pluxyTextTertiary" format="color" />
+    <attr name="pluxyTextOnAccent" format="color" />
+    <attr name="pluxyBorder" format="color" />
+    <attr name="pluxyBorderSubtle" format="color" />
+    <attr name="pluxyBorderFocus" format="color" />
+    <attr name="pluxyScrimStrong" format="color" />
+    <attr name="pluxyBgTrans" format="color" />
+    <attr name="pluxyBgFull" format="color" />
+    <attr name="pluxyPlayerUnplayed" format="color" />
+    <attr name="pluxyPlayerBuffered" format="color" />
+    <attr name="pluxyPlayerGlassTop" format="color" />
+    <attr name="pluxyPlayerGlassBottom" format="color" />
+</resources>

@@ -1,6 +1,8 @@
-# APK de test — Pluxy 1.5.1 (46)
+# APK de test — Pluxy 1.5.2 (47)
 
 Lecteur Android TV/mobile et serveur Android, hors Google Play.
+
+Trois thèmes au choix, lecteur vidéo en verre fumé et écrans adaptés au téléphone.
 `BUILD_INFO.json` indique le commit, la version et les certificats.
 Les sommes de contrôle sont dans `SHA256SUMS.txt`.
 

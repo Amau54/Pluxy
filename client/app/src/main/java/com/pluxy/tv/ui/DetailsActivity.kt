@@ -15,7 +15,6 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.annotation.OptIn
 import androidx.appcompat.app.AlertDialog
-import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.util.UnstableApi
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -42,7 +41,7 @@ import kotlinx.coroutines.CancellationException
 
 /** Fiche détaillée Pluxy : synopsis, casting, bande-annonce et actions de lecture. */
 @OptIn(UnstableApi::class)
-class DetailsActivity : AppCompatActivity() {
+class DetailsActivity : ThemedActivity() {
 
     private val moshi = Moshi.Builder().add(KotlinJsonAdapterFactory()).build()
     private lateinit var item: MediaItem
@@ -57,6 +56,13 @@ class DetailsActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_details)
+        if (resources.getInteger(R.integer.details_actions_orientation) == LinearLayout.VERTICAL) {
+            listOf(R.id.play, R.id.restart, R.id.trailer, R.id.playSettings).forEach { id ->
+                findViewById<Button>(id).apply {
+                    layoutParams = layoutParams.apply { width = ViewGroup.LayoutParams.MATCH_PARENT }
+                }
+            }
+        }
 
         val json = intent.getStringExtra(EXTRA_ITEM) ?: run { finish(); return }
         item = moshi.adapter(MediaItem::class.java).fromJson(json) ?: run { finish(); return }
@@ -163,14 +169,14 @@ class DetailsActivity : AppCompatActivity() {
             }
             cell.addView(TextView(this).apply {
                 text = r.value
-                setTextColor(getColor(R.color.accent))
+                setTextColor(pluxyColor(R.color.accent))
                 textSize = 16f
                 gravity = Gravity.CENTER
                 setTypeface(typeface, Typeface.BOLD)
             })
             cell.addView(TextView(this).apply {
                 text = r.source
-                setTextColor(getColor(R.color.text_tertiary))
+                setTextColor(pluxyColor(R.color.text_tertiary))
                 textSize = 13f
                 gravity = Gravity.CENTER
                 letterSpacing = 0.02f
@@ -204,7 +210,7 @@ class DetailsActivity : AppCompatActivity() {
             this.text = text
             setBackgroundResource(if (accent) R.drawable.bg_chip_accent else R.drawable.bg_chip)
             setTextColor(
-                getColor(if (accent) R.color.accent else R.color.text_secondary),
+                pluxyColor(if (accent) R.color.accent else R.color.text_secondary),
             )
             textSize = 14f
             letterSpacing = 0.03f
@@ -295,7 +301,7 @@ class DetailsActivity : AppCompatActivity() {
             renderPlaybackActions()
             val ui = PlaybackDiagnostic.from(decision)
             view.text = when (ui.level) {
-                DiagnosticLevel.DIRECT -> getString(R.string.label_direct_play_status, ui.title)
+                DiagnosticLevel.DIRECT -> ui.title
                 DiagnosticLevel.ADAPTATION -> getString(R.string.label_adaptation_status, ui.title)
                 DiagnosticLevel.WARNING -> getString(R.string.label_warning_status, ui.title)
                 DiagnosticLevel.UNSUPPORTED ->
@@ -304,7 +310,7 @@ class DetailsActivity : AppCompatActivity() {
             view.setTextColor(
                 when (ui.level) {
                     DiagnosticLevel.DIRECT -> 0xFF68D391.toInt()
-                    DiagnosticLevel.ADAPTATION -> getColor(R.color.accent)
+                    DiagnosticLevel.ADAPTATION -> pluxyColor(R.color.accent)
                     DiagnosticLevel.WARNING -> 0xFFF6C85F.toInt()
                     DiagnosticLevel.UNSUPPORTED -> 0xFFFF7B7B.toInt()
                 },

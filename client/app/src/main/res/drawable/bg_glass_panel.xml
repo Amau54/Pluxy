@@ -4,16 +4,16 @@
     <item>
         <shape android:shape="rectangle">
             <gradient android:angle="315"
-                android:startColor="@color/glass_top" android:endColor="@color/glass_bottom" />
+                android:startColor="?attr/pluxyGlassTop" android:endColor="?attr/pluxyGlassBottom" />
             <corners android:radius="@dimen/radius_lg" />
-            <stroke android:width="1dp" android:color="@color/border" />
+            <stroke android:width="1dp" android:color="?attr/pluxyBorder" />
         </shape>
     </item>
     <item android:height="1dp" android:gravity="top"
         android:left="18dp" android:right="18dp">
         <shape android:shape="rectangle">
-            <gradient android:angle="0" android:startColor="@color/glass_glint_trans"
-                android:centerColor="@color/glass_glint" android:endColor="@color/glass_glint_trans" />
+            <gradient android:angle="0" android:startColor="?attr/pluxyGlassGlintTrans"
+                android:centerColor="?attr/pluxyGlassGlint" android:endColor="?attr/pluxyGlassGlintTrans" />
         </shape>
     </item>
 </layer-list>

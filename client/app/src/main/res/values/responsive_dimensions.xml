@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <integer name="details_header_orientation">1</integer>
+    <integer name="details_actions_orientation">1</integer>
+    <dimen name="details_top_pad">24dp</dimen>
+    <dimen name="details_poster_width">144dp</dimen>
+    <dimen name="details_poster_height">216dp</dimen>
+    <dimen name="details_info_margin_start">0dp</dimen>
+    <dimen name="details_info_margin_top">24dp</dimen>
+    <dimen name="details_action_margin_start">0dp</dimen>
+    <dimen name="details_action_margin_top">10dp</dimen>
+    <dimen name="details_title_size">28sp</dimen>
+</resources>
