@@ -5,7 +5,7 @@
     android:layout_height="match_parent"
     android:fitsSystemWindows="true"
     android:background="@drawable/bg_tv_ambient"
-    android:paddingTop="28dp"
+    android:paddingTop="@dimen/library_top_pad"
     android:paddingBottom="@dimen/library_bottom_pad">
 
     <!-- Barre de titre : logo + « Pluxy » (gauche, fixe) · serveur (centre, extensible)
@@ -13,15 +13,14 @@
     <LinearLayout
         android:id="@+id/topBar"
         android:layout_width="match_parent"
-        android:layout_height="58dp"
+        android:layout_height="@dimen/library_toolbar_height"
         android:layout_marginStart="@dimen/screen_pad"
         android:layout_marginEnd="@dimen/screen_pad"
         android:layout_marginTop="12dp"
-        android:background="@drawable/bg_glass_toolbar"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:paddingStart="16dp"
-        android:paddingEnd="12dp"
+        android:paddingStart="0dp"
+        android:paddingEnd="0dp"
         android:clipChildren="false"
         android:clipToPadding="false">
 
@@ -69,7 +68,13 @@
         <Button
             android:id="@+id/photoFolders"
             style="@style/Btn.TopBarChoice"
-            android:layout_marginEnd="8dp"
+            android:layout_marginEnd="4dp"
+            android:background="@drawable/bg_library_choice"
+            android:drawableEnd="@drawable/ic_library_dropdown"
+            android:drawablePadding="4dp"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:stateListAnimator="@null"
             android:contentDescription="@string/action_choose_photo_folder"
             android:text="@string/photo_folder_all"
             android:visibility="gone" />
@@ -77,7 +82,9 @@
         <ImageButton
             android:id="@+id/search"
             style="@style/Btn.Icon"
-            android:layout_marginEnd="8dp"
+            android:layout_marginEnd="4dp"
+            android:background="@drawable/bg_library_icon"
+            android:stateListAnimator="@null"
             android:contentDescription="@string/action_search_all"
             android:scaleType="center"
             android:src="@drawable/ic_search"
@@ -88,7 +95,9 @@
             style="@style/Btn.TopBarChoice"
             android:layout_width="96dp"
             android:layout_height="48dp"
-            android:layout_marginEnd="8dp"
+            android:layout_marginEnd="4dp"
+            android:background="@drawable/bg_library_choice"
+            android:stateListAnimator="@null"
             android:contentDescription="@string/action_sort_filter"
             android:text="Trier"
             android:visibility="gone" />
@@ -96,6 +105,8 @@
         <ImageButton
             android:id="@+id/settings"
             style="@style/Btn.Icon"
+            android:background="@drawable/bg_library_icon"
+            android:stateListAnimator="@null"
             android:scaleType="center"
             android:src="@drawable/ic_settings"
             app:tint="?attr/pluxyTextPrimary"
@@ -106,17 +117,16 @@
         android:id="@+id/categoryNavigation"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:minHeight="56dp"
+        android:minHeight="48dp"
         android:layout_marginStart="@dimen/screen_pad"
         android:layout_marginEnd="@dimen/screen_pad"
-        android:layout_marginTop="80dp"
-        android:background="@drawable/bg_glass_tabs"
+        android:layout_marginTop="@dimen/library_navigation_top"
         android:clipChildren="false"
         android:clipToPadding="false"
         android:gravity="center"
         android:orientation="horizontal"
-        android:paddingTop="4dp"
-        android:paddingBottom="4dp">
+        android:paddingTop="0dp"
+        android:paddingBottom="0dp">
 
         <HorizontalScrollView
             android:id="@+id/categoryScroller"
@@ -140,9 +150,9 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:minHeight="48dp"
-                    android:minWidth="92dp"
-                    android:paddingStart="16dp"
-                    android:paddingEnd="16dp"
+                    android:minWidth="64dp"
+                    android:paddingStart="10dp"
+                    android:paddingEnd="10dp"
                     android:text="@string/destination_home" />
 
                 <Button
@@ -151,10 +161,10 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:minHeight="48dp"
-                    android:layout_marginStart="6dp"
-                    android:minWidth="92dp"
-                    android:paddingStart="16dp"
-                    android:paddingEnd="16dp"
+                    android:layout_marginStart="2dp"
+                    android:minWidth="64dp"
+                    android:paddingStart="10dp"
+                    android:paddingEnd="10dp"
                     android:text="@string/destination_movies" />
 
                 <Button
@@ -163,10 +173,10 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:minHeight="48dp"
-                    android:layout_marginStart="6dp"
-                    android:minWidth="92dp"
-                    android:paddingStart="16dp"
-                    android:paddingEnd="16dp"
+                    android:layout_marginStart="2dp"
+                    android:minWidth="64dp"
+                    android:paddingStart="10dp"
+                    android:paddingEnd="10dp"
                     android:text="@string/destination_series" />
 
                 <Button
@@ -175,10 +185,10 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:minHeight="48dp"
-                    android:layout_marginStart="6dp"
-                    android:minWidth="92dp"
-                    android:paddingStart="16dp"
-                    android:paddingEnd="16dp"
+                    android:layout_marginStart="2dp"
+                    android:minWidth="64dp"
+                    android:paddingStart="10dp"
+                    android:paddingEnd="10dp"
                     android:text="@string/destination_photos" />
 
                 <Button
@@ -187,10 +197,10 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:minHeight="48dp"
-                    android:layout_marginStart="6dp"
-                    android:minWidth="92dp"
-                    android:paddingStart="16dp"
-                    android:paddingEnd="16dp"
+                    android:layout_marginStart="2dp"
+                    android:minWidth="64dp"
+                    android:paddingStart="10dp"
+                    android:paddingEnd="10dp"
                     android:text="@string/destination_music" />
             </LinearLayout>
         </HorizontalScrollView>

@@ -10,7 +10,6 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.widget.SwitchCompat
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.lifecycleScope
@@ -102,7 +101,7 @@ class SettingsActivity : ThemedActivity() {
         section("Apparence")
         val appearance = AppearancePreferences.theme(this)
         rowButton("Thème", appearance.label, appearance.description)
-            .setOnClickListener { pickAppearanceTheme(appearance) }
+            .setOnClickListener { anchor -> pickAppearanceTheme(anchor, appearance) }
 
         section("Connexion")
         rowButton(
@@ -121,7 +120,7 @@ class SettingsActivity : ThemedActivity() {
             "Mode de lecture",
             playbackStrategy.title,
             playbackStrategy.description,
-        ).setOnClickListener { pickPlaybackStrategy(playbackStrategy) }
+        ).setOnClickListener { anchor -> pickPlaybackStrategy(anchor, playbackStrategy) }
         val autoNext = PluxyApplication.autoPlayNextEpisode(this)
         localSwitchRow("Épisode suivant automatique", autoNext) {
             PluxyApplication.setAutoPlayNextEpisode(this, !autoNext)
@@ -132,12 +131,12 @@ class SettingsActivity : ThemedActivity() {
             "Langue audio",
             audioLanguageLabel(PluxyApplication.audioLang(this)),
             "Choisit la piste prioritaire quand plusieurs langues sont disponibles.",
-        ).setOnClickListener { pickAudioLanguage() }
+        ).setOnClickListener { anchor -> pickAudioLanguage(anchor) }
         rowButton(
             "Sous-titres",
             subtitleModeLabel(PluxyApplication.subsMode(this)),
             "Affiche automatiquement les sous-titres ou les masque.",
-        ).setOnClickListener { pickSubtitleMode() }
+        ).setOnClickListener { anchor -> pickSubtitleMode(anchor) }
 
         section("Bibliothèque")
         rowButton(
@@ -280,43 +279,45 @@ class SettingsActivity : ThemedActivity() {
     }
 
     /** Choix local, disponible même dans l'interface épurée et sans serveur joignable. */
-    private fun pickPlaybackStrategy(current: PlaybackStrategy) {
+    private fun pickPlaybackStrategy(anchor: View, current: PlaybackStrategy) {
         val choices = PlaybackStrategy.entries
-        val labels = choices.map { it.title }.toTypedArray()
-        AlertDialog.Builder(this)
-            .setTitle("Mode de lecture")
-            .setSingleChoiceItems(labels, choices.indexOf(current)) { dialog, which ->
-                val selected = choices[which]
+        CompactChoiceMenu.show(
+            activity = this,
+            anchor = anchor,
+            title = "Mode de lecture",
+            choices = choices.map { CompactChoiceMenu.Choice(it.title, it.key) },
+            selectedValue = current.key,
+            onSelect = { value ->
+                val selected = PlaybackStrategy.fromKey(value)
                 PluxyApplication.setPlaybackStrategy(this, selected.key)
+                restoredFocusTag = anchor.tag as? String
                 render()
                 Toast.makeText(
                     this,
                     "Lecture : ${selected.title}",
                     Toast.LENGTH_SHORT,
                 ).show()
-                dialog.dismiss()
-            }
-            .setNegativeButton("Annuler", null)
-            .show()
+            },
+        )
     }
 
-    private fun pickAppearanceTheme(current: AppearanceTheme) {
+    private fun pickAppearanceTheme(anchor: View, current: AppearanceTheme) {
         val choices = AppearanceTheme.entries
-        AlertDialog.Builder(this)
-            .setTitle("Thème")
-            .setSingleChoiceItems(
-                choices.map { "${it.label} · ${it.description}" }.toTypedArray(),
-                choices.indexOf(current),
-            ) { dialog, which ->
-                val selected = choices[which]
-                dialog.dismiss()
+        CompactChoiceMenu.show(
+            activity = this,
+            anchor = anchor,
+            title = "Thème",
+            choices = choices.map { CompactChoiceMenu.Choice(it.label, it.key, it.description) },
+            selectedValue = current.key,
+            onSelect = { value ->
+                val selected = AppearanceTheme.fromKey(value)
                 if (selected != current) {
                     AppearancePreferences.setTheme(this, selected)
+                    anchor.requestFocus()
                     recreate()
                 }
-            }
-            .setNegativeButton("Annuler", null)
-            .show()
+            },
+        )
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -325,7 +326,7 @@ class SettingsActivity : ThemedActivity() {
         super.onSaveInstanceState(outState)
     }
 
-    private fun pickAudioLanguage() {
+    private fun pickAudioLanguage(anchor: View) {
         val choices = listOf(
             "fr" to "Français",
             "en" to "English",
@@ -335,35 +336,35 @@ class SettingsActivity : ThemedActivity() {
             "" to "Original (auto)",
         )
         val current = PluxyApplication.audioLang(this)
-        AlertDialog.Builder(this)
-            .setTitle("Langue audio")
-            .setSingleChoiceItems(
-                choices.map { it.second }.toTypedArray(),
-                choices.indexOfFirst { it.first == current }.coerceAtLeast(0),
-            ) { dialog, which ->
-                PluxyApplication.setPlaybackPrefs(this, choices[which].first, PluxyApplication.subsMode(this))
-                dialog.dismiss()
+        CompactChoiceMenu.show(
+            activity = this,
+            anchor = anchor,
+            title = "Langue audio",
+            choices = choices.map { CompactChoiceMenu.Choice(it.second, it.first) },
+            selectedValue = choices.firstOrNull { it.first == current }?.first ?: "",
+            onSelect = { value ->
+                PluxyApplication.setPlaybackPrefs(this, value, PluxyApplication.subsMode(this))
+                restoredFocusTag = anchor.tag as? String
                 render()
-            }
-            .setNegativeButton("Annuler", null)
-            .show()
+            },
+        )
     }
 
-    private fun pickSubtitleMode() {
+    private fun pickSubtitleMode(anchor: View) {
         val choices = listOf("auto" to "Automatiques", "off" to "Désactivés")
         val current = PluxyApplication.subsMode(this)
-        AlertDialog.Builder(this)
-            .setTitle("Sous-titres")
-            .setSingleChoiceItems(
-                choices.map { it.second }.toTypedArray(),
-                choices.indexOfFirst { it.first == current }.coerceAtLeast(0),
-            ) { dialog, which ->
-                PluxyApplication.setPlaybackPrefs(this, PluxyApplication.audioLang(this), choices[which].first)
-                dialog.dismiss()
+        CompactChoiceMenu.show(
+            activity = this,
+            anchor = anchor,
+            title = "Sous-titres",
+            choices = choices.map { CompactChoiceMenu.Choice(it.second, it.first) },
+            selectedValue = choices.firstOrNull { it.first == current }?.first ?: "auto",
+            onSelect = { value ->
+                PluxyApplication.setPlaybackPrefs(this, PluxyApplication.audioLang(this), value)
+                restoredFocusTag = anchor.tag as? String
                 render()
-            }
-            .setNegativeButton("Annuler", null)
-            .show()
+            },
+        )
     }
 
     private fun audioLanguageLabel(value: String): String = when (value) {

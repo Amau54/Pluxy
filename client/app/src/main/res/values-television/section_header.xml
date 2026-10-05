@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="section_header_title_size">20sp</dimen>
+    <dimen name="section_header_touch_height">52dp</dimen>
+    <dimen name="section_header_plain_height">36dp</dimen>
+</resources>

@@ -1,7 +1,7 @@
 package com.pluxy.tv.ui
 
-import android.animation.AnimatorInflater
 import android.content.Intent
+import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.os.Bundle
 import android.view.FocusFinder
@@ -338,7 +338,7 @@ class MainActivity : ThemedActivity() {
             return
         }
 
-        swipeHint.visibility = View.VISIBLE
+        swipeHint.visibility = View.GONE
         val minimumDistance = resources.displayMetrics.density * CATEGORY_SWIPE_DISTANCE_DP
         val gestureDetector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
             override fun onDown(event: MotionEvent): Boolean = true
@@ -382,11 +382,11 @@ class MainActivity : ThemedActivity() {
         findViewById<LinearLayout>(R.id.categoryNavigation).apply {
             background = getDrawable(R.drawable.bg_glass_nav_rail)
             layoutParams = FrameLayout.LayoutParams(
-                (164 * density).toInt(),
+                (152 * density).toInt(),
                 FrameLayout.LayoutParams.WRAP_CONTENT,
                 Gravity.START or Gravity.TOP,
             ).apply {
-                topMargin = (132 * density).toInt()
+                topMargin = (116 * density).toInt()
                 leftMargin = (48 * density).toInt()
             }
             elevation = (6 * density)
@@ -403,13 +403,13 @@ class MainActivity : ThemedActivity() {
         // contenu arrive après le premier chargement réseau et qu'elles étaient cachées.
         allDestinations().forEach { (id, _) ->
             findViewById<Button>(id).apply {
-                minHeight = (50 * density).toInt()
-                setPadding((12 * density).toInt(), (10 * density).toInt(), (12 * density).toInt(), (10 * density).toInt())
+                minHeight = (48 * density).toInt()
+                setPadding((12 * density).toInt(), (6 * density).toInt(), (12 * density).toInt(), (6 * density).toInt())
                 maxLines = 2
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT,
                     LinearLayout.LayoutParams.WRAP_CONTENT,
-                ).apply { setMargins(0, (3 * density).toInt(), 0, (3 * density).toInt()) }
+                ).apply { setMargins(0, 0, 0, 0) }
             }
         }
         val start = (230 * density).toInt()
@@ -447,9 +447,9 @@ class MainActivity : ThemedActivity() {
         val navigation = findViewById<View>(R.id.categoryNavigation)
         val top = (navigation.layoutParams as ViewGroup.MarginLayoutParams).topMargin
         val height = navigation.height.takeIf { it > 0 } ?: (56 * density).toInt()
-        val contextHeight = findViewById<TextView>(R.id.libraryContext).lineHeight
-        val hintHeight = (28 * density).toInt()
-        return top + height + maxOf(contextHeight, hintHeight) + (16 * density).toInt()
+        val context = findViewById<TextView>(R.id.libraryContext)
+        val contextHeight = if (context.visibility == View.VISIBLE) context.lineHeight + (8 * density).toInt() else 0
+        return top + height + contextHeight + (8 * density).toInt()
     }
 
     private fun moveToAdjacentDestination(offset: Int) {
@@ -689,8 +689,8 @@ class MainActivity : ThemedActivity() {
         val environment = cardEnvironment()
         libraryAdapter.updateEnvironment(environment)
         homeAdapter.updateEnvironment(environment)
-        updateLibraryHeroVisibility()
         updateLibraryContext()
+        updateLibraryHeroVisibility()
         updatePhotoFolderControl()
         contentJob?.cancel()
         val revision = ++contentRevision
@@ -879,7 +879,7 @@ class MainActivity : ThemedActivity() {
     }.joinToString(" · ").ifBlank { item.container.uppercase() }
 
     private fun configureCompactNavigation(screenDp: Float) {
-        if (screenDp >= COMPACT_NAVIGATION_MAX_WIDTH_DP) return
+        if (isTelevision() || resources.getBoolean(R.bool.show_library_hero)) return
         findViewById<View>(R.id.brandName).visibility = View.GONE
         if (!isTelevision()) {
             val density = resources.displayMetrics.density
@@ -890,15 +890,23 @@ class MainActivity : ThemedActivity() {
                     marginEnd = (8 * density).toInt()
                 }
             }
+            findViewById<Button>(R.id.photoFolders).apply {
+                layoutParams = layoutParams.apply { width = ((if (screenDp < 340f) 96 else 112) * density).toInt() }
+            }
             findViewById<Button>(R.id.sortFilter).apply {
-                text = "↕"
+                text = ""
+                setCompoundDrawablesRelativeWithIntrinsicBounds(R.drawable.ic_library_sort, 0, 0, 0)
+                compoundDrawablePadding = 0
+                setPadding((12 * density).toInt(), 0, (12 * density).toInt(), 0)
                 (layoutParams as? ViewGroup.MarginLayoutParams)?.width = (48 * density).toInt()
             }
         }
         findViewById<Button>(R.id.tabAudio).text = getString(R.string.destination_music)
     }
 
-    private fun cardEnvironment() = CardEnvironment(advancedMode, lanImages)
+    private fun cardEnvironment() = CardEnvironment(
+        advancedMode, lanImages, photoFolderInHeader = selectedKind == "photo" && searchQuery.isBlank(),
+    )
 
     private fun focusStateKey(): String =
         if (searchQuery.isBlank()) selectedKind else "$selectedKind:search"
@@ -973,12 +981,14 @@ class MainActivity : ThemedActivity() {
                 View.VISIBLE
             } else View.GONE
             isSelected = watched != "all" && watchedFilterRelevant()
-            val compact = !isTelevision() && resources.displayMetrics.widthPixels /
-                resources.displayMetrics.density < COMPACT_NAVIGATION_MAX_WIDTH_DP
-            text = if (compact) "↕" else if (isSelected) {
+            val compact = !isTelevision() && !resources.getBoolean(R.bool.show_library_hero)
+            text = if (compact) "" else if (isSelected) {
                 if (PluxyApplication.libraryWatched(this@MainActivity) == "watched") "Déjà vus" else "Non vus"
             } else "Trier"
             setTextColor(pluxyColor(if (isSelected) R.color.accent_bright else R.color.text_primary))
+            if (compact) compoundDrawableTintList = ColorStateList.valueOf(
+                pluxyColor(if (isSelected) R.color.accent_bright else R.color.text_primary),
+            )
         }
     }
 
@@ -1133,14 +1143,13 @@ class MainActivity : ThemedActivity() {
         val show = selectedKind == "photo" && searchQuery.isBlank() &&
             allItems.any { it.kind == "photo" }
         control.visibility = if (show) View.VISIBLE else View.GONE
-        val screenDp = resources.configuration.screenWidthDp.toFloat()
-        findViewById<View>(R.id.brand).visibility =
-            if (!isTelevision() && screenDp < 340f && show) View.GONE else View.VISIBLE
+        findViewById<View>(R.id.brand).visibility = View.VISIBLE
         if (show) {
-            val label = PluxyApplication.photoFolder(this)
-                .ifBlank { getString(R.string.photo_folder_all) }
-            control.text = "$label ▾"
-            control.contentDescription = getString(R.string.photo_folder_control, label)
+            val folder = PluxyApplication.photoFolder(this)
+            control.text = folder.ifBlank { getString(R.string.photo_album_menu) }
+            control.contentDescription = getString(
+                R.string.photo_folder_control, folder.ifBlank { getString(R.string.photo_folder_all) },
+            )
             control.nextFocusDownId = R.id.tabHome
             control.nextFocusLeftId = R.id.tabHome
             control.nextFocusRightId = R.id.search
@@ -1160,40 +1169,38 @@ class MainActivity : ThemedActivity() {
     }
 
     private fun openPhotoFolders() {
-        val folders = allItems.asSequence()
-            .filter { it.kind == "photo" }
-            .map(TvLibraryContent::photoFolderLabel)
-            .distinct()
-            .sortedBy(LibraryOrganizer::searchKey)
-            .toList()
-        val options = listOf(getString(R.string.photo_folder_all) to "") +
-            folders.map { it to it }
-        val current = PluxyApplication.photoFolder(this)
-        AlertDialog.Builder(this)
-            .setTitle(getString(R.string.action_choose_photo_folder))
-            .setSingleChoiceItems(
-                options.map { it.first }.toTypedArray(),
-                options.indexOfFirst { it.second == current }.coerceAtLeast(0),
-            ) { dialog, index ->
-                PluxyApplication.setPhotoFolder(this, options[index].second)
+        val photos = allItems.filter { it.kind == "photo" }
+        val folders = photos.groupingBy(TvLibraryContent::photoFolderLabel).eachCount()
+            .toSortedMap(compareBy(LibraryOrganizer::searchKey))
+        val choices = listOf(
+            CompactChoiceMenu.Choice(getString(R.string.photo_folder_all), "", "${photos.size} photos", inlineDetail = true),
+        ) + folders.map { (folder, count) ->
+            CompactChoiceMenu.Choice(folder, folder, "$count ${if (count == 1) "photo" else "photos"}", inlineDetail = true)
+        }
+        CompactChoiceMenu.show(
+            activity = this,
+            anchor = findViewById(R.id.photoFolders),
+            title = getString(R.string.photo_album_menu),
+            choices = choices,
+            selectedValue = PluxyApplication.photoFolder(this),
+            actions = listOf(
+                CompactChoiceMenu.Action(getString(R.string.photo_collapse_all)) {
+                    collapsedPhotoFolders.clear()
+                    collapsedPhotoFolders += folders.keys
+                    applyAndShow(restoreFocus = false)
+                },
+                CompactChoiceMenu.Action(getString(R.string.photo_expand_all)) {
+                    collapsedPhotoFolders.clear()
+                    applyAndShow(restoreFocus = false)
+                },
+            ),
+            onSelect = { folder ->
+                PluxyApplication.setPhotoFolder(this, folder)
                 updatePhotoFolderControl()
                 applyAndShow(restoreFocus = false)
-                dialog.dismiss()
-                restorePhotoFolderFocus()
-            }
-            .setPositiveButton(R.string.photo_collapse_all) { _, _ ->
-                collapsedPhotoFolders.clear()
-                collapsedPhotoFolders += folders
-                applyAndShow(restoreFocus = false)
-                restorePhotoFolderFocus()
-            }
-            .setNeutralButton(R.string.photo_expand_all) { _, _ ->
-                collapsedPhotoFolders.clear()
-                applyAndShow(restoreFocus = false)
-                restorePhotoFolderFocus()
-            }
-            .setNegativeButton("Annuler", null)
-            .show()
+            },
+            onDismiss = ::restorePhotoFolderFocus,
+        )
     }
 
     private fun restorePhotoFolderFocus() {
@@ -1216,77 +1223,38 @@ class MainActivity : ThemedActivity() {
     private fun openSortFilter() {
         val sortOptions = sortOptionsForDestination()
         if (sortOptions.isEmpty()) return
-        val pad = (16 * resources.displayMetrics.density).toInt()
-        val panel = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(pad, pad / 2, pad, pad / 2)
-        }
-        val dialog = AlertDialog.Builder(this)
-            .setTitle("Trier et filtrer")
-            .setView(panel)
-            .setPositiveButton("Fermer", null)
-            .create()
-
-        fun row(
-            title: String,
-            options: List<Pair<String, String>>,
-            initial: String,
-            apply: (String) -> Unit,
-        ) {
-            fun labelFor(value: String) =
-                options.firstOrNull { it.second == value }?.first ?: value
-            var current = initial
-            val button = Button(this).apply {
-                isAllCaps = false
-                gravity = Gravity.START or Gravity.CENTER_VERTICAL
-                setTextColor(pluxyColor(R.color.text_primary))
-                setBackgroundResource(R.drawable.focus_card)
-                stateListAnimator = AnimatorInflater.loadStateListAnimator(
-                    this@MainActivity,
-                    R.animator.focus_lift_btn,
-                )
-                setPadding(pad, pad * 3 / 4, pad, pad * 3 / 4)
-                text = getString(R.string.setting_current_value, title, labelFor(current))
-            }
-            button.setOnClickListener {
-                val checked = options.indexOfFirst { it.second == current }.coerceAtLeast(0)
-                AlertDialog.Builder(this)
-                    .setTitle(title)
-                    .setSingleChoiceItems(options.map { it.first }.toTypedArray(), checked) {
-                            choiceDialog, index ->
-                        current = options[index].second
-                        apply(current)
-                        button.text =
-                            getString(R.string.setting_current_value, title, labelFor(current))
-                        applyAndShow()
-                        choiceDialog.dismiss()
+        val anchor = findViewById<View>(R.id.sortFilter)
+        val filters = listOf("Tous" to "all", "Non vus" to "unwatched", "Déjà vus" to "watched")
+        val filter = PluxyApplication.libraryWatched(this)
+        val filterLabel = filters.firstOrNull { it.second == filter }?.first ?: "Tous"
+        CompactChoiceMenu.show(
+            activity = this,
+            anchor = anchor,
+            title = "Trier par",
+            choices = sortOptions.map { CompactChoiceMenu.Choice(it.first, it.second) },
+            selectedValue = effectiveSort(),
+            actions = if (watchedFilterRelevant()) listOf(
+                CompactChoiceMenu.Action("Afficher : $filterLabel  ›") {
+                    anchor.post {
+                        CompactChoiceMenu.show(
+                            activity = this,
+                            anchor = anchor,
+                            title = "Déjà vus",
+                            choices = filters.map { CompactChoiceMenu.Choice(it.first, it.second) },
+                            selectedValue = filter,
+                            onSelect = {
+                                PluxyApplication.setLibraryWatched(this, it)
+                                applyAndShow(restoreFocus = false)
+                            },
+                        )
                     }
-                    .show()
-            }
-            panel.addView(
-                button,
-                LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT,
-                ).apply { topMargin = pad / 2 },
-            )
-        }
-
-        row(
-            "Trier par",
-            sortOptions,
-            effectiveSort(),
-            { PluxyApplication.setLibrarySort(this, it) },
+                },
+            ) else emptyList(),
+            onSelect = {
+                PluxyApplication.setLibrarySort(this, it)
+                applyAndShow(restoreFocus = false)
+            },
         )
-        if (watchedFilterRelevant()) {
-            row(
-                "Déjà vus",
-                listOf("Tous" to "all", "Non vus" to "unwatched", "Déjà vus" to "watched"),
-                PluxyApplication.libraryWatched(this),
-                { PluxyApplication.setLibraryWatched(this, it) },
-            )
-        }
-        dialog.show()
     }
 
     private fun watchedFilterRelevant(): Boolean =

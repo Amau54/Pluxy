@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="library_top_pad">16dp</dimen>
+    <dimen name="library_toolbar_height">48dp</dimen>
+    <dimen name="library_navigation_top">64dp</dimen>
+    <dimen name="library_tab_text_size">14sp</dimen>
+    <string name="photo_album_menu">Albums</string>
+</resources>

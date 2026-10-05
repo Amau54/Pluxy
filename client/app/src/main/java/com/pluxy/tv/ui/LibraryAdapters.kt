@@ -9,6 +9,8 @@ import android.graphics.Paint
 import android.widget.ImageView
 import android.widget.ProgressBar
 import android.widget.TextView
+import androidx.core.view.ViewCompat
+import androidx.core.view.accessibility.AccessibilityNodeInfoCompat
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -27,6 +29,7 @@ import kotlin.math.ceil
 internal data class CardEnvironment(
     val advancedMode: Boolean,
     val lanImages: ImageLoader,
+    val photoFolderInHeader: Boolean = false,
 )
 
 internal class LibraryAdapter(
@@ -67,23 +70,44 @@ internal class LibraryAdapter(
     override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
         val row = getItem(position)
         if (holder is HeaderViewHolder && row is LibRow.Header) {
-            holder.title.text = if (row.collapsible) {
-                "${if (row.expanded) "⌄" else "›"}  ${row.title}"
-            } else row.title
+            holder.title.text = row.title
+            holder.title.maxLines = if (row.collapsible) 2 else 1
+            holder.chevron.visibility = if (row.collapsible) View.VISIBLE else View.GONE
+            holder.chevron.rotation = if (row.expanded) 90f else 0f
             holder.itemView.isFocusable = row.collapsible
             holder.itemView.isClickable = row.collapsible
+            holder.itemView.minimumHeight = holder.itemView.resources.getDimensionPixelSize(
+                if (row.collapsible) R.dimen.section_header_touch_height else R.dimen.section_header_plain_height,
+            )
             holder.itemView.background = if (row.collapsible) {
-                holder.itemView.context.getDrawable(R.drawable.focus_card)
+                holder.itemView.context.getDrawable(R.drawable.bg_section_header)
             } else null
             holder.itemView.setOnFocusChangeListener { _, focused ->
                 if (focused && row.collapsible) onFocused(LibraryFocusTarget(null, row.stableKey), row)
             }
-            holder.itemView.contentDescription = if (row.collapsible) {
-                "${row.title}, ${if (row.expanded) "replier" else "déplier"}. OK pour modifier."
-            } else null
+            holder.itemView.contentDescription = row.title
+            ViewCompat.setAccessibilityHeading(holder.itemView, true)
+            ViewCompat.setStateDescription(holder.itemView, if (row.collapsible) {
+                holder.itemView.context.getString(
+                    if (row.expanded) R.string.section_expanded else R.string.section_collapsed,
+                )
+            } else null)
             holder.itemView.setOnClickListener(if (row.collapsible) {
                 View.OnClickListener { onHeaderToggle(row) }
             } else null)
+            if (row.collapsible) {
+                ViewCompat.replaceAccessibilityAction(
+                    holder.itemView,
+                    AccessibilityNodeInfoCompat.AccessibilityActionCompat.ACTION_CLICK,
+                    holder.itemView.context.getString(
+                        if (row.expanded) R.string.section_collapse_action else R.string.section_expand_action,
+                    ),
+                ) { _, _ -> onHeaderToggle(row); true }
+            } else {
+                ViewCompat.removeAccessibilityAction(
+                    holder.itemView, AccessibilityNodeInfoCompat.ACTION_CLICK,
+                )
+            }
             return
         }
         bindCard(
@@ -420,6 +444,7 @@ internal class ShelfCardAdapter(
 
 internal class HeaderViewHolder(view: View) : RecyclerView.ViewHolder(view) {
     val title: TextView = view.findViewById(R.id.sectionTitle)
+    val chevron: ImageView = view.findViewById(R.id.sectionChevron)
 }
 
 internal class CardViewHolder(view: View) : RecyclerView.ViewHolder(view) {
@@ -468,7 +493,7 @@ private fun bindMediaCard(
     forcedAspect: ArtworkPolicy.Aspect?,
 ) {
     holder.title.text = media.title
-    val details = contextualSubtitle?.takeIf { it.isNotBlank() } ?: mediaMeta(
+    val details = contextualSubtitle?.takeIf { it.isNotBlank() } ?: if (media.kind == "photo" && environment.photoFolderInHeader) "" else mediaMeta(
         media,
         environment.advancedMode,
     )
