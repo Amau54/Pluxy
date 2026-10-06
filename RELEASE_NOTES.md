@@ -1,11 +1,12 @@
-# Pluxy 1.5.4
+# Pluxy 1.5.5
 
-Lecteur et serveur Android : **version 1.5.4, versionCode 49**.
+Lecteur et serveur Android : **version 1.5.5, versionCode 50**.
 
-- Lecteur vidéo : barre de commandes basse et centrée, icônes discrètes, titre léger et menus de choix compacts.
-- Fiches, bibliothèque et réglages plus denses, avec des bordures et des reflets plus fins.
-- Commandes photo et audio compactes ; interface serveur assortie.
-- Zones tactiles de 48 dp et focus télécommande conservés, avec adaptation aux grandes polices.
+- Icônes vectorielles aux extrémités arrondies dans les lecteurs, menus et réglages.
+- Contours adoucis et rayons harmonisés entre les applications et les réglages PC.
+- Pictogrammes du serveur Android indépendants de la police ; coins des affiches de secours dessinés avec lissage.
+- Interface compacte, zones tactiles de 48 dp et focus télécommande conservés.
+- Sur PC, sélection native des dossiers Windows : fonctionne aussi avec Python installé sans Tkinter.
 
 ## Mise à jour des APK de test
 

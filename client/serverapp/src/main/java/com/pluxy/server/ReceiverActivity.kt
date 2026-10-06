@@ -11,6 +11,7 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.SeekBar
 import android.widget.TextView
@@ -299,7 +300,7 @@ class ReceiverActivity : AppCompatActivity() {
     }
 
     private fun bindActions() {
-        findViewById<Button>(R.id.receiverBack).setOnClickListener { finish() }
+        findViewById<View>(R.id.receiverBack).setOnClickListener { finish() }
         findViewById<Button>(R.id.filterVideos).setOnClickListener { setFilter(MediaFilter.VIDEO) }
         findViewById<Button>(R.id.filterPhotos).setOnClickListener { setFilter(MediaFilter.PHOTO) }
         findViewById<Button>(R.id.filterAudio).setOnClickListener { setFilter(MediaFilter.AUDIO) }
@@ -750,14 +751,19 @@ private class RemoteMediaAdapter(
     }
 
     private fun bindFolder(holder: FolderHolder, folder: BrowserRow.Folder) {
-        holder.chevron.text = if (folder.expanded) "⌄" else "›"
+        holder.chevron.setImageResource(if (folder.expanded) R.drawable.ic_chevron_down else R.drawable.ic_chevron_right)
         holder.title.text = folder.name
         holder.count.text = "${folder.count} élément${if (folder.count > 1) "s" else ""}"
+        ViewCompat.setStateDescription(holder.itemView, if (folder.expanded) "Dossier ouvert" else "Dossier fermé")
         holder.itemView.setOnClickListener { onFolderClick(folder.name) }
     }
 
     private fun bindMedia(holder: Holder, item: MediaEntry) {
-        holder.kind.text = when (item.kind) { "photo" -> "▧"; "audio" -> "♪"; else -> "▶" }
+        holder.kind.setImageResource(when (item.kind) {
+            "photo" -> R.drawable.ic_media_photo
+            "audio" -> R.drawable.ic_media_music
+            else -> R.drawable.ic_media_video
+        })
         holder.title.text = item.title
         holder.description.text = when (item.kind) {
             "audio" -> listOfNotNull(item.artist, item.album, item.container.uppercase()).joinToString(" · ")
@@ -774,19 +780,20 @@ private class RemoteMediaAdapter(
         holder.itemView.setBackgroundResource(
             if (item.id == selectedId) R.drawable.bg_selected else R.drawable.bg_button_secondary,
         )
+        holder.itemView.isSelected = item.id == selectedId
         holder.selected.visibility = if (item.id == selectedId) View.VISIBLE else View.GONE
         holder.itemView.setOnClickListener { onMediaClick(item) }
     }
 
     class Holder(view: View) : RecyclerView.ViewHolder(view) {
-        val kind: TextView = view.findViewById(R.id.mediaKind)
+        val kind: ImageView = view.findViewById(R.id.mediaKind)
         val title: TextView = view.findViewById(R.id.mediaTitle)
         val description: TextView = view.findViewById(R.id.mediaDescription)
-        val selected: TextView = view.findViewById(R.id.mediaSelected)
+        val selected: ImageView = view.findViewById(R.id.mediaSelected)
     }
 
     class FolderHolder(view: View) : RecyclerView.ViewHolder(view) {
-        val chevron: TextView = view.findViewById(R.id.folderChevron)
+        val chevron: ImageView = view.findViewById(R.id.folderChevron)
         val title: TextView = view.findViewById(R.id.folderTitle)
         val count: TextView = view.findViewById(R.id.folderCount)
     }

@@ -59,7 +59,7 @@ object CompactChoiceMenu {
 
         fun shape(top: Int, bottom: Int, border: Int = Color.TRANSPARENT) =
             GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(top, bottom)).apply {
-                cornerRadius = dp(11).toFloat()
+                cornerRadius = activity.resources.getDimension(R.dimen.radius_md)
                 setStroke(dp(1), border)
             }
 
@@ -94,7 +94,7 @@ object CompactChoiceMenu {
                 ColorUtils.setAlphaComponent(activity.pluxyColor(R.color.glass_top), 255),
                 ColorUtils.setAlphaComponent(activity.pluxyColor(R.color.glass_bottom), 255),
                 activity.pluxyColor(R.color.border),
-            ).apply { cornerRadius = dp(14).toFloat() }
+            ).apply { cornerRadius = activity.resources.getDimension(R.dimen.radius_lg) }
             clipToOutline = true
         }
         ViewCompat.setAccessibilityPaneTitle(root, title)

@@ -2,5 +2,5 @@
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
     <solid android:color="?attr/pluxyPlayerGlassBottom" />
     <stroke android:width="0.5dp" android:color="?attr/pluxyBorderSubtle" />
-    <corners android:radius="8dp" />
+    <corners android:radius="@dimen/radius_sm" />
 </shape>

@@ -24,7 +24,9 @@ async function request(url, options = {}, timeout = 15000) {
     const response = await fetch(url, {...options, signal: controller.signal});
     const data = await response.json().catch(() => null);
     if (!response.ok) {
-      throw new Error(typeof data?.detail === 'string' ? data.detail : 'Requête refusée (' + response.status + ').');
+      const error = new Error(typeof data?.detail === 'string' ? data.detail : 'Requête refusée (' + response.status + ').');
+      error.status = response.status;
+      throw error;
     }
     if (!data) throw new Error('Réponse du serveur illisible.');
     return data;
@@ -85,7 +87,14 @@ function renderFolders() {
     label.textContent = path;
     label.title = path;
     const remove = document.createElement('button');
-    remove.textContent = '×';
+    const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    icon.setAttribute('class', 'icon');
+    icon.setAttribute('viewBox', '0 0 24 24');
+    icon.setAttribute('aria-hidden', 'true');
+    const cross = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    cross.setAttribute('d', 'M6.5 6.5l11 11M17.5 6.5l-11 11');
+    icon.append(cross);
+    remove.append(icon);
     remove.setAttribute('aria-label', 'Retirer le dossier ' + path);
     remove.onclick = () => {
       CFG.server.media_dirs = items.filter(item => item !== path);
@@ -197,7 +206,7 @@ async function pickFolder() {
     renderFolders();
     updateControls();
   } catch (error) {
-    toast(error.message + ' Saisissez le chemin manuellement.', true);
+    toast(error.message + (error.status === 503 ? ' Saisissez le chemin manuellement.' : ''), true);
   } finally {
     picking = false;
     updateControls();

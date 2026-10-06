@@ -1,13 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="96dp"
-    android:height="96dp"
-    android:viewportWidth="96"
-    android:viewportHeight="96">
-    <path
-        android:fillColor="?attr/pluxyBgElev"
-        android:pathData="M0,0h96v96h-96z" />
-    <path
-        android:fillColor="?attr/pluxyAccent"
-        android:pathData="M24,25h48a7,7 0,0 1,7 7v35a7,7 0,0 1,-7 7h-48a7,7 0,0 1,-7 -7v-35a7,7 0,0 1,7 -7zM29,34a7,7 0,1 0,0 14a7,7 0,0 0,0 -14zM23,66h50l-15,-18l-10,12l-7,-8z" />
+    android:width="96dp" android:height="96dp"
+    android:viewportWidth="24" android:viewportHeight="24">
+    <path android:fillColor="?attr/pluxyBgElev" android:pathData="M0,0H24V24H0Z" />
+    <path android:fillColor="@android:color/transparent"
+        android:strokeColor="?attr/pluxyAccent" android:strokeWidth="1.35"
+        android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M6,4H18Q20,4 20,6V18Q20,20 18,20H6Q4,20 4,18V6Q4,4 6,4ZM4,16L9,11L13,15L16,12L20,16M15,8a1.25,1.25 0,1 0,2.5,0a1.25,1.25 0,1 0,-2.5,0" />
 </vector>

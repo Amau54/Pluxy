@@ -5,14 +5,14 @@
     </item>
     <item android:state_pressed="true">
         <shape>
-            <corners android:radius="8dp" />
+            <corners android:radius="@dimen/radius_sm" />
             <solid android:color="?attr/pluxyGlassFocusBottom" />
             <stroke android:width="1dp" android:color="?attr/pluxyBorderFocus" />
         </shape>
     </item>
     <item android:state_focused="true">
         <shape>
-            <corners android:radius="8dp" />
+            <corners android:radius="@dimen/radius_sm" />
             <solid android:color="?attr/pluxyGlassFocusBottom" />
             <stroke android:width="1dp" android:color="?attr/pluxyBorderFocus" />
         </shape>

@@ -5,9 +5,9 @@
     <dimen name="screen_pad">20dp</dimen>
 
     <!-- Rayons -->
-    <dimen name="radius_sm">6dp</dimen>
-    <dimen name="radius_md">10dp</dimen>
-    <dimen name="radius_lg">12dp</dimen>
+    <dimen name="radius_sm">8dp</dimen>
+    <dimen name="radius_md">12dp</dimen>
+    <dimen name="radius_lg">14dp</dimen>
     <dimen name="radius_pill">100dp</dimen>
 
     <!-- Bordures de focus -->

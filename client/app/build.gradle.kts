@@ -38,8 +38,8 @@ android {
         applicationId = "com.pluxy.tv"
         minSdk = 23            // Android TV 6.0+ ET mobile (Android 6+)
         targetSdk = 36
-        versionCode = 49
-        versionName = "1.5.4"
+        versionCode = 50
+        versionName = "1.5.5"
     }
 
     signingConfigs {

@@ -29,6 +29,8 @@ class BrandedArtworkDrawable(
     private val decorationPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val clip = Path()
+    private val upperDecoration = Path()
+    private val lowerDecoration = Path()
     private var gradient: LinearGradient? = null
     private var labelText = ""
     private var displayTitle = ""
@@ -53,6 +55,12 @@ class BrandedArtworkDrawable(
             radius,
             Path.Direction.CW,
         )
+        upperDecoration.reset()
+        upperDecoration.addCircle(bounds.right - width * 0.08f, bounds.top + height * 0.18f, width * 0.42f, Path.Direction.CW)
+        upperDecoration.op(clip, Path.Op.INTERSECT)
+        lowerDecoration.reset()
+        lowerDecoration.addCircle(bounds.left + width * 0.08f, bounds.bottom - height * 0.08f, width * 0.5f, Path.Direction.CW)
+        lowerDecoration.op(clip, Path.Op.INTERSECT)
 
         val hueShift = ((title.hashCode().toLong() and 0x7fffffffL) % 28L).toInt()
         gradient = LinearGradient(
@@ -84,28 +92,17 @@ class BrandedArtworkDrawable(
         val area = bounds
         if (area.isEmpty) return
         canvas.save()
-        canvas.clipPath(clip)
-
         paint.alpha = drawableAlpha
         paint.shader = gradient
-        canvas.drawRect(area, paint)
+        // Dessiner le contour conserve le lissage des coins, sans calque intermédiaire.
+        canvas.drawPath(clip, paint)
         paint.shader = null
 
         decorationPaint.color = Color.argb(effectiveAlpha(14), 255, 255, 255)
-        canvas.drawCircle(
-            area.right - area.width() * 0.08f,
-            area.top + area.height() * 0.18f,
-            area.width() * 0.42f,
-            decorationPaint,
-        )
+        canvas.drawPath(upperDecoration, decorationPaint)
         decorationPaint.color = Color.argb(effectiveAlpha(34), 0, 0, 0)
-        canvas.drawCircle(
-            area.left + area.width() * 0.08f,
-            area.bottom - area.height() * 0.08f,
-            area.width() * 0.5f,
-            decorationPaint,
-        )
-
+        canvas.drawPath(lowerDecoration, decorationPaint)
+        canvas.clipRect(area)
         drawLabel(canvas, area)
         drawMonogram(canvas, area)
         drawTitle(canvas, area)

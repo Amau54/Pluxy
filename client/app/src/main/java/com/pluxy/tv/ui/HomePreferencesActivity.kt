@@ -6,6 +6,7 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
+import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.widget.SwitchCompat
@@ -178,20 +179,18 @@ class HomePreferencesActivity : ThemedActivity() {
             })
             val moves = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
             controls.addView(moves)
-            fun moveButton(text: String) = Button(context).apply {
-                this.text = text
-                textSize = if (television) 18f else 16f
-                isAllCaps = false
-                setTextColor(context.getColorStateList(R.color.tab_text))
+            fun moveButton(icon: Int) = ImageButton(context).apply {
+                setImageResource(icon)
+                imageTintList = context.getColorStateList(R.color.tab_text)
+                isFocusable = true
                 setBackgroundResource(R.drawable.bg_setting_row)
                 stateListAnimator = null
-                minHeight = dp(context, 48)
-                minWidth = 0
+                minimumHeight = dp(context, 48)
                 minimumWidth = 0
-                setPadding(0, 0, 0, 0)
+                setPadding(dp(context, 12), dp(context, 12), dp(context, 12), dp(context, 12))
             }
-            val up = moveButton("↑")
-            val down = moveButton("↓")
+            val up = moveButton(R.drawable.ic_arrow_up)
+            val down = moveButton(R.drawable.ic_arrow_down)
             moves.addView(up, LinearLayout.LayoutParams(dp(context, 48), dp(context, 48)))
             moves.addView(down, LinearLayout.LayoutParams(dp(context, 48), dp(context, 48)))
             return Holder(row, label, toggle, up, down)
@@ -228,8 +227,8 @@ class HomePreferencesActivity : ThemedActivity() {
             view: LinearLayout,
             val label: TextView,
             val toggle: SwitchCompat,
-            val up: Button,
-            val down: Button,
+            val up: ImageButton,
+            val down: ImageButton,
         ) : RecyclerView.ViewHolder(view) { var shelfId: String? = null }
 
         companion object {

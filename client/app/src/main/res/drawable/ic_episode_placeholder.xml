@@ -9,5 +9,5 @@
         android:pathData="M0,0h320v180h-320z" />
     <path
         android:fillColor="?attr/pluxyAccent"
-        android:pathData="M137,52L137,128L203,90Z" />
+        android:pathData="M139,57Q139,53 143,55L199,87Q204,90 199,93L143,125Q139,127 139,123Z" />
 </vector>

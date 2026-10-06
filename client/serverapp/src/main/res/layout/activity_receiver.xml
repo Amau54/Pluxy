@@ -33,7 +33,7 @@
                 android:layout_weight="1"
                 android:background="@drawable/bg_button_quiet"
                 android:minHeight="0dp"
-                android:text="‹  Précédente"
+                android:text="Précédente"
                 android:textSize="14sp"
                 android:textAllCaps="false"
                 android:textColor="@color/pluxy_text" />
@@ -51,7 +51,7 @@
                 android:layout_weight="1"
                 android:background="@drawable/bg_button_primary"
                 android:minHeight="0dp"
-                android:text="Suivante  ›"
+                android:text="Suivante"
                 android:textSize="14sp"
                 android:textAllCaps="false"
                 android:textColor="@color/pluxy_on_accent" />
@@ -62,18 +62,16 @@
             android:layout_height="wrap_content"
             android:gravity="center_vertical"
             android:orientation="horizontal">
-            <Button
+            <ImageButton
                 android:id="@+id/receiverBack"
                 android:layout_width="48dp"
                 android:layout_height="48dp"
                 android:background="@drawable/bg_button_quiet"
                 android:contentDescription="Retour"
-                android:minWidth="0dp"
-                android:minHeight="0dp"
-                android:text="‹"
-                android:textAllCaps="false"
-                android:textColor="@color/pluxy_text"
-                android:textSize="22sp" />
+                android:padding="12dp"
+                android:scaleType="centerInside"
+                android:src="@drawable/ic_chevron_left"
+                app:tint="@color/pluxy_text" />
             <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"

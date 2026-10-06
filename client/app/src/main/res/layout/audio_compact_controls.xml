@@ -60,7 +60,7 @@
             <ImageButton
                 android:id="@id/exo_prev"
                 style="@style/AuxiliaryViewer.Icon"
-                android:src="@drawable/exo_icon_previous"
+                android:src="@drawable/ic_player_previous"
                 android:contentDescription="@string/exo_controls_previous_description" />
             <ImageButton
                 android:id="@id/exo_rew"
@@ -80,7 +80,7 @@
             <ImageButton
                 android:id="@id/exo_next"
                 style="@style/AuxiliaryViewer.Icon"
-                android:src="@drawable/exo_icon_next"
+                android:src="@drawable/ic_player_next"
                 android:contentDescription="@string/exo_controls_next_description" />
         </LinearLayout>
     </HorizontalScrollView>

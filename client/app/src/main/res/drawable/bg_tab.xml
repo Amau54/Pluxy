@@ -3,28 +3,28 @@
 <selector>
     <item android:state_selected="true" android:state_focused="true">
         <shape android:shape="rectangle">
-            <corners android:radius="10dp" />
+            <corners android:radius="@dimen/radius_md" />
             <gradient android:angle="315" android:startColor="?attr/pluxyGlassFocusTop" android:endColor="?attr/pluxyGlassFocusBottom" />
             <stroke android:width="2dp" android:color="?attr/pluxyBorderFocus" />
         </shape>
     </item>
     <item android:state_selected="true">
         <shape android:shape="rectangle">
-            <corners android:radius="10dp" />
+            <corners android:radius="@dimen/radius_md" />
             <gradient android:angle="315" android:startColor="?attr/pluxyGlassFocusTop" android:endColor="?attr/pluxyGlassFocusBottom" />
             <stroke android:width="0.5dp" android:color="?attr/pluxyGlowEdge" />
         </shape>
     </item>
     <item android:state_focused="true">
         <shape android:shape="rectangle">
-            <corners android:radius="10dp" />
+            <corners android:radius="@dimen/radius_md" />
             <gradient android:angle="315" android:startColor="?attr/pluxyGlassFocusTop" android:endColor="?attr/pluxyGlassFocusBottom" />
             <stroke android:width="2dp" android:color="?attr/pluxyBorderFocus" />
         </shape>
     </item>
     <item>
         <shape android:shape="rectangle">
-            <corners android:radius="10dp" />
+            <corners android:radius="@dimen/radius_md" />
             <solid android:color="@android:color/transparent" />
         </shape>
     </item>

@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException, Request
 
 from ..state import get_state
 from ..tools import ffmpeg_available
+from ..folder_picker import FolderPickerBusy, choose_media_folder
 from ..security import (
     filtered_remote_settings,
     is_loopback_request,
@@ -26,15 +27,9 @@ def pick_folder(request: Request) -> dict:
     """
     require_local_admin(request)
     try:
-        import tkinter as tk
-        from tkinter import filedialog
-
-        root = tk.Tk()
-        root.withdraw()
-        root.attributes("-topmost", True)
-        folder = filedialog.askdirectory(title="Choisir un dossier de médias", mustexist=True)
-        root.destroy()
-        return {"path": folder or ""}
+        return {"path": choose_media_folder()}
+    except FolderPickerBusy as exc:
+        raise HTTPException(409, str(exc)) from exc
     except Exception as exc:
         raise HTTPException(503, "Le sélecteur de dossier Windows est indisponible.") from exc
 
