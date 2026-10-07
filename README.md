@@ -65,6 +65,7 @@ en charge en DLNA. Google Cast nécessite les services Google sur le téléphone
 - Reprise des vidéos, épisode suivant et recherche dans toute la bibliothèque.
 - Films et séries en grille ; vue Découvrir pour les nouveautés et les reprises.
 - Filtres par genre, année, état de lecture, durée, résolution et HDR ; tri séparé.
+- Accès aux films par première lettre depuis le menu de tri.
 - Collections de votre choix ou collections alimentées par vos filtres.
 - Photos par album ou date de prise de vue, galerie et diaporama.
 - Musique par album, avec les pistes dans l'ordre des disques et des numéros.

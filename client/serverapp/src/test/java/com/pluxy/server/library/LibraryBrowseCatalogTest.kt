@@ -5,6 +5,18 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class LibraryBrowseCatalogTest {
+    @Test fun `alphabetical pages use metadata title and ignore accents`() {
+        val catalog = LibraryBrowseCatalog("letters", listOf(
+            entry("a", "Zulu", metadata = BrowseMetadata(title = "Évasion")),
+            entry("b", "Été"), entry("c", "Alpha"),
+        ))
+        val query = query("kind" to "movie", "title_prefix" to "E")
+        val first = catalog.page(1, 0, null, query)
+        val last = catalog.page(1, first.nextOffset!!, first.revision, query)
+        assertEquals(2, first.total)
+        assertEquals(listOf("b", "a"), (first.items + last.items).map { it.media.id })
+        assertThrows(IllegalArgumentException::class.java) { query("title_prefix" to "AB") }
+    }
     @Test fun `title pages follow the title displayed from metadata`() {
         val catalog = LibraryBrowseCatalog("titles", listOf(
             entry("a", "Zulu", metadata = BrowseMetadata(title = "Alpha")),

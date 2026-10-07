@@ -676,6 +676,7 @@ class MainActivity : ThemedActivity() {
         search = query.search, watched = query.watchedFilter, genres = query.genres, year = query.year,
         durationMaxMinutes = query.durationMaxMinutes, resolution = query.resolution, hdrOnly = query.hdrOnly,
         sort = query.sort, descending = query.descending,
+        titlePrefix = query.titlePrefix,
     )
 
     private suspend fun loadCatalogue(serverUrl: String, query: TvLibraryContent.Query, view: String, collection: LibraryCollection?): BrowserSnapshot {
@@ -892,7 +893,7 @@ class MainActivity : ThemedActivity() {
                 val focusAction = shouldFocusLibraryEmptyAction(restoreFocus, focusFirst,
                     navigationRevision != focusNavigationRevision, grid.hasFocus(), currentFocus != null)
                 if (filterHidesResults || LibraryBrowserChrome.activeFilters(query).isNotEmpty()) showEmpty("Aucun média ne correspond aux filtres.", "Réinitialiser les filtres", focusAction) {
-                    saveBrowserQuery(query.copy(watchedFilter = "all", genres = emptySet(), year = null, durationMaxMinutes = null, resolution = "all", hdrOnly = false))
+                    saveBrowserQuery(query.copy(watchedFilter = "all", genres = emptySet(), year = null, durationMaxMinutes = null, resolution = "all", hdrOnly = false, titlePrefix = ""))
                 } else showEmpty(emptyMessage(), focusAction = focusAction)
                 return@launch
             }
@@ -1342,9 +1343,19 @@ class MainActivity : ThemedActivity() {
         }
         CompactChoiceMenu.show(this, anchor, "Trier par",
             options.map { CompactChoiceMenu.Choice(it.first, it.second) }, query.sort,
-            actions = listOf(CompactChoiceMenu.Action("Inverser l’ordre") {
-                saveBrowserQuery(query.copy(descending = !(query.descending ?: (query.sort != "title"))))
-            }), onSelect = { saveBrowserQuery(query.copy(sort = it, descending = null)) })
+            actions = buildList {
+                add(CompactChoiceMenu.Action("Inverser l’ordre") {
+                    saveBrowserQuery(query.copy(descending = !(query.descending ?: (query.sort != "title"))))
+                })
+                if (selectedKind == "movie" && searchQuery.isBlank()) add(CompactChoiceMenu.Action("Première lettre…") {
+                    val letters = listOf("Tous les titres") + ('A'..'Z').map(Char::toString)
+                    AlertDialog.Builder(this@MainActivity).setTitle("Première lettre")
+                        .setSingleChoiceItems(letters.toTypedArray(), letters.indexOf(query.titlePrefix.uppercase()).coerceAtLeast(0)) { dialog, index ->
+                            dialog.dismiss()
+                            saveBrowserQuery(query.copy(titlePrefix = if (index == 0) "" else letters[index], sort = "title", descending = false))
+                        }.setNegativeButton("Annuler", null).show()
+                })
+            }, onSelect = { saveBrowserQuery(query.copy(sort = it, descending = null)) })
     }
 
     private fun effectiveSort(): String = currentQuery().sort
@@ -1401,6 +1412,7 @@ class MainActivity : ThemedActivity() {
             key == "duration" -> query.copy(durationMaxMinutes = null)
             key == "resolution" -> query.copy(resolution = "all")
             key == "hdr" -> query.copy(hdrOnly = false)
+            key == "letter" -> query.copy(titlePrefix = "")
             else -> query
         })
     }

@@ -24,6 +24,7 @@ object TvLibraryContent {
         /** null : titres croissants, dates et nombres décroissants. */
         val descending: Boolean? = null,
         val collectionId: String = "",
+        val titlePrefix: String = "",
     )
 
     fun homeShelves(
@@ -235,6 +236,8 @@ object TvLibraryContent {
     }
 
     private fun matchesMetadata(item: MediaItem, query: Query): Boolean {
+        if (query.titlePrefix.isNotBlank() && !LibraryOrganizer.searchKey(LibraryOrganizer.displayTitle(item))
+                .startsWith(LibraryOrganizer.searchKey(query.titlePrefix))) return false
         if (query.genres.isNotEmpty() && item.genres.none { genre -> query.genres.any {
                 LibraryOrganizer.searchKey(it) == LibraryOrganizer.searchKey(genre) } }) return false
         if (query.year != null && item.year != query.year) return false

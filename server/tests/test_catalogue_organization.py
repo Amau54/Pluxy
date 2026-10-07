@@ -409,6 +409,19 @@ def test_warm_large_catalogue_queries_do_not_read_or_stat_metadata_files(tmp_pat
     assert len(catalogue.page(query, 9_900, 100, revision)[0]) == 100
 
 
+def test_alphabetical_pages_use_displayed_title_and_ignore_accents(tmp_path, monkeypatch):
+    from pluxy.catalogue import Catalogue, Query
+    from pluxy.models import MovieMetadata
+    state, _root, _calls = make_state(tmp_path, monkeypatch)
+    populate(state)
+    state.metadata._save("b", MovieMetadata(title="Évasion", matched=True))
+    catalogue = Catalogue(state.library, state.metadata, state.watch)
+    first, total, revision = catalogue.page(Query(kind="movie", title_prefix="E"), 0, 1)
+    last = catalogue.page(Query(kind="movie", title_prefix="E"), 1, 1, revision)[0]
+    assert total == 2 and [item.id for item in first + last] == ["a", "b"]
+    assert catalogue.page(Query(kind="movie", title_prefix="A"), 0, 100)[1] == 0
+
+
 def test_http_query_paging_facets_and_validation(tmp_path, monkeypatch):
     from pluxy.main import app
     state, _root, _calls = make_state(tmp_path, monkeypatch)
@@ -423,9 +436,10 @@ def test_http_query_paging_facets_and_validation(tmp_path, monkeypatch):
             assert second.status_code == 200 and second.json()["next_offset"] is None
             genres = await client.get("/api/library/items/page", params=[("genre", "Comédie"), ("genre", "Action")])
             assert genres.json()["total"] == 2
+            assert (await client.get("/api/library/items/page", params={"kind": "movie", "title_prefix": "E"})).json()["total"] == 1
             assert (await client.get("/api/library/facets")).json()["query_supported"]
             assert len((await client.get("/api/library/home")).json()["items"]) == 5
-            for params in ({"sort": "unknown"}, {"resolution": "8k"}, {"year": 0}, {"genre": ["x"] * 33}):
+            for params in ({"sort": "unknown"}, {"resolution": "8k"}, {"year": 0}, {"genre": ["x"] * 33}, {"title_prefix": "AB"}):
                 assert (await client.get("/api/library/items/page", params=params)).status_code == 422
             state.watch.set("c", 20_000, 100_000)
             assert (await client.get("/api/library/items/page", params={"revision": first.json()["revision"]})).status_code == 409

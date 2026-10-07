@@ -72,14 +72,15 @@ def items_page(request: Request, limit: int = Query(default=500, ge=1, le=500),
                resolution: Literal["all", "4k", "1080p", "720p", "sd"] = "all",
                hdr_only: bool = False,
                sort: Literal["title", "added", "year", "duration"] = "title",
-               descending: bool = False) -> dict:
+               descending: bool = False,
+               title_prefix: str = Query(default="", pattern="^[A-Za-z]?$")) -> dict:
     st = get_state(request)
     if any(len(value) > 128 for value in genre):
         raise HTTPException(422, "Genre trop long")
     try:
         values, total, current = _catalogue(st).page(
             CatalogueQuery(kind, q, watched, tuple(genre), year, duration_max_minutes,
-                           resolution, hdr_only, sort, descending), offset, limit, revision)
+                           resolution, hdr_only, sort, descending, title_prefix), offset, limit, revision)
     except ValueError as error:
         raise HTTPException(409, "Le catalogue a change ; recommencer depuis la premiere page") from error
     return {"items": values, "total": total,

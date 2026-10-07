@@ -8,6 +8,13 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TvLibraryContentTest {
+    @Test fun `premiere lettre suit le titre affiche sans accent`() {
+        val items = listOf(media("a").copy(title = "Alpha", metadataTitle = "Évasion"),
+            media("b").copy(title = "Été"), media("c").copy(title = "Alpha"))
+        val query = TvLibraryContent.Query("movie", titlePrefix = "E", sort = "title")
+        assertEquals(listOf("b", "a"), TvLibraryContent.rows(items, query).filterIsInstance<LibRow.MediaRow>().map { it.item.id })
+        assertEquals(listOf("c"), TvLibraryContent.filterItems(items, query.copy(titlePrefix = "A")).map { it.id })
+    }
     @Test fun `bibliotheque exhaustive et decouverte sans doublons`() {
         val items = (1..80).map { media("film$it", addedAt = it.toDouble()) }
         val grid = TvLibraryContent.rows(items, TvLibraryContent.Query("movie"))

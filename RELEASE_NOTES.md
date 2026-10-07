@@ -4,6 +4,7 @@ Lecteur et serveur Android : **version 1.6.0, versionCode 51**.
 
 - Bibliothèques en grille et vue Découvrir, sans répéter les mêmes médias dans les rangées.
 - Filtres par genre, année, lecture, durée, résolution et HDR ; tri indépendant et filtres actifs faciles à retirer.
+- Accès alphabétique aux films depuis le menu de tri, avec filtrage sur le serveur.
 - Collections manuelles ou automatiques, mémorisées par serveur sur le lecteur.
 - Albums photo, chronologie utilisant la date de prise de vue et albums musicaux avec pistes ordonnées.
 - Navigation mobile en bas, commandes TV compactes et densités Compact/Confort.

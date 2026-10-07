@@ -168,6 +168,7 @@ class LibraryBrowserChrome(
             query.durationMaxMinutes?.let { add("duration" to "≤ $it min") }
             if (query.resolution != "all") add("resolution" to query.resolution.uppercase())
             if (query.hdrOnly) add("hdr" to "HDR")
+            if (query.titlePrefix.isNotBlank()) add("letter" to "Lettre ${query.titlePrefix.uppercase()}")
         }
     }
 }

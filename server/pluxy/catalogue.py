@@ -59,6 +59,7 @@ class Query:
     hdr_only: bool = False
     sort: str = "title"
     descending: bool = False
+    title_prefix: str = ""
 
 
 @dataclass(frozen=True)
@@ -109,6 +110,8 @@ class Catalogue:
     @staticmethod
     def _matches(row: Row, query: Query) -> bool:
         item = row.item
+        if query.title_prefix and not row.title.startswith(query.title_prefix):
+            return False
         if query.kind != "all" and (
             (query.kind == "video" and item.kind not in {"movie", "series"})
             or (query.kind != "video" and item.kind != query.kind)
@@ -137,7 +140,7 @@ class Catalogue:
         if revision is not None and revision != current:
             raise ValueError("Le catalogue a changé")
         # Normalisation de la clé réduit les doublons du petit cache de filtres.
-        query = Query(**{**query.__dict__, "q": folded(query.q).strip(),
+        query = Query(**{**query.__dict__, "q": folded(query.q).strip(), "title_prefix": folded(query.title_prefix),
                          "genres": tuple(sorted({folded(value).strip() for value in query.genres if value.strip()}))})
         with self._lock:
             values = self._queries.get(query) if current == self._revision else None

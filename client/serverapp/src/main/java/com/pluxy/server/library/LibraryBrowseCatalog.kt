@@ -24,6 +24,7 @@ internal data class LibraryQuery(
     val hdrOnly: Boolean = false,
     val sort: String = "title",
     val descending: Boolean = false,
+    val titlePrefix: String = "",
 ) {
     val words: List<String> = query.split(whitespace).filter(String::isNotBlank)
     companion object {
@@ -49,6 +50,8 @@ internal data class LibraryQuery(
             require(genres.size <= 32 && genres.all { it.length <= 100 }) { "genre invalide" }
             val query = parameters["q"].orEmpty().trim()
             require(query.length <= 300) { "q trop long" }
+            val prefix = parameters["title_prefix"].orEmpty().lowercase(Locale.ROOT)
+            require(prefix.isEmpty() || prefix.length == 1 && prefix[0] in 'a'..'z') { "title_prefix invalide" }
             return LibraryQuery(
                 kind = option("kind", "all", setOf("all", "video", "movie", "series", "photo", "audio")),
                 query = normalizeLibraryText(query),
@@ -57,6 +60,7 @@ internal data class LibraryQuery(
                 resolution = option("resolution", "all", setOf("all", "4k", "1080p", "720p", "sd")),
                 hdrOnly = flag("hdr_only"), sort = option("sort", "title", setOf("title", "added", "year", "duration")),
                 descending = flag("descending"),
+                titlePrefix = prefix,
             )
         }
     }
@@ -113,6 +117,7 @@ internal class LibraryBrowseCatalog(val revision: String, entries: List<BrowseEn
     }
 
     private fun matches(entry: BrowseEntry, query: LibraryQuery): Boolean {
+        if (query.titlePrefix.isNotEmpty() && !entry.sortTitle.startsWith(query.titlePrefix)) return false
         if (!kindMatches(entry.media.kind, query.kind) || query.query.isNotEmpty() &&
             query.words.any { !entry.searchText.contains(it) }) return false
         if (query.genres.isNotEmpty() && entry.normalizedGenres.none { it in query.genres }) return false

@@ -14,6 +14,7 @@ data class LibraryRequest(
     val hdrOnly: Boolean = false,
     val sort: String = "title",
     val descending: Boolean? = null,
+    val titlePrefix: String = "",
 ) {
     internal fun path(limit: Int, offset: Int, revision: String?): String {
         require(limit in 1..500 && offset >= 0)
@@ -27,6 +28,7 @@ data class LibraryRequest(
         durationMaxMinutes?.let { url.addQueryParameter("duration_max_minutes", it.toString()) }
         if (resolution != "all") url.addQueryParameter("resolution", resolution)
         if (hdrOnly) url.addQueryParameter("hdr_only", "true")
+        if (titlePrefix.isNotBlank()) url.addQueryParameter("title_prefix", titlePrefix)
         url.addQueryParameter("sort", sort.takeIf { it in setOf("title", "added", "year", "duration") } ?: "added")
         url.addQueryParameter("descending", (descending ?: (sort != "title")).toString())
         revision?.let { url.addQueryParameter("revision", it) }

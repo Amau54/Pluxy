@@ -88,7 +88,7 @@ object LibraryFilterDialog {
         AlertDialog.Builder(context).setTitle("Filtres")
             .setView(ScrollView(context).apply { addView(rows) })
             .setPositiveButton("Appliquer") { _, _ -> apply(draft) }
-            .setNeutralButton("Réinitialiser") { _, _ -> apply(original.copy(watchedFilter = "all", genres = emptySet(), year = null, durationMaxMinutes = null, resolution = "all", hdrOnly = false)) }
+            .setNeutralButton("Réinitialiser") { _, _ -> apply(original.copy(watchedFilter = "all", genres = emptySet(), year = null, durationMaxMinutes = null, resolution = "all", hdrOnly = false, titlePrefix = "")) }
             .setNegativeButton("Annuler", null).show()
     }
 }
