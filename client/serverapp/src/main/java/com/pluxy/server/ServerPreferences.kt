@@ -156,6 +156,8 @@ class ServerPreferences(context: Context) {
         return watchStore.get(itemId).state
     }
 
+    internal val watchRevision: Long get() = watchStore.revision
+
     @Synchronized
     fun setWatchState(itemId: String, positionMs: Long, durationMs: Long, sessionId: String? = null, sequence: Long? = null): WatchState {
         return watchStore.update(itemId, positionMs, durationMs, sessionId, sequence).state

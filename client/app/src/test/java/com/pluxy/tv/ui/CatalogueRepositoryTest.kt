@@ -111,5 +111,43 @@ class CatalogueRepositoryTest {
             assertTrue(runCatching { store.load(url) { error("loader must not run") } }.exceptionOrNull() is IllegalArgumentException)
         }
     }
+    @Test fun `kinds keep independent snapshots and never poison the full catalogue`() = runBlocking {
+        val store = CatalogueStore(clockMs = { 0L }, capacity = 3,
+            scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined))
+        val all = store.load("http://server:8420") { listOf(media("movie"), media("track")) }
+        val audio = store.load("http://SERVER:8420/", mediaKind = "audio") { listOf(media("track")) }
+        val photos = store.load("http://server:8420", mediaKind = "photo") { listOf(media("image")) }
+        assertSame(all, store.cached("http://server:8420"))
+        assertSame(audio, store.load("http://server:8420", mediaKind = "audio") { error("unexpected load") })
+        assertEquals("http://server:8420", photos.serverUrl)
+        assertEquals(listOf("image"), photos.items.map { it.id })
+    }
+    @Test fun `same server different kinds do not share an in flight response`() = runBlocking {
+        val store = store()
+        val gate = CompletableDeferred<Unit>()
+        val audio = async(start = CoroutineStart.UNDISPATCHED) {
+            store.load("http://server:8420", mediaKind = "audio") { gate.await(); listOf(media("track")) }
+        }
+        val photo = store.load("http://server:8420", mediaKind = "photo") { listOf(media("image")) }
+        assertEquals("image", photo.items.single().id)
+        assertFalse(audio.isCompleted)
+        gate.complete(Unit)
+        assertEquals("track", audio.await().items.single().id)
+    }
+    @Test fun `server rescan invalidates every kind including pending loads`() = runBlocking {
+        val store = store()
+        store.load("http://server:8420", mediaKind = "audio") { listOf(media("track")) }
+        val gate = CompletableDeferred<Unit>()
+        val photo = async(start = CoroutineStart.UNDISPATCHED) {
+            store.load("http://server:8420", mediaKind = "photo") {
+                withContext(NonCancellable) { gate.await() }; listOf(media("old"))
+            }
+        }
+        store.invalidate("http://SERVER:8420/")
+        gate.complete(Unit)
+        assertNull(store.cached("http://server:8420", "audio"))
+        assertTrue(runCatching { photo.await() }.exceptionOrNull() is CancellationException)
+        assertEquals("new", store.load("http://server:8420", mediaKind = "photo") { listOf(media("new")) }.items.single().id)
+    }
     private fun media(id: String) = MediaItem(id, id, "$id.mp4", "mp4", 1, 10.0)
 }

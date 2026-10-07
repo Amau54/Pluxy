@@ -1,6 +1,8 @@
 """API bibliothèque — scan, listing, détail média, métadonnées."""
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import APIRouter, HTTPException, Request, Query
 from fastapi.responses import FileResponse
 
@@ -9,6 +11,7 @@ from ..probe import probe
 from ..state import AppState, get_state
 from ..security import is_loopback_request, require_local_admin
 from ..thumbnails import ThumbnailBusy
+from ..catalogue import Catalogue, Query as CatalogueQuery, public_item
 
 router = APIRouter(prefix="/api/library", tags=["library"])
 
@@ -19,27 +22,18 @@ def _enrich(item: MediaItem, st: AppState) -> MediaItem:
     On ne renvoie jamais le chemin absolu réel au client (fuite d'info sur le
     serveur). On travaille sur une COPIE pour ne pas muter l'objet indexé.
     """
-    pub = item.model_copy()
-    pub.path = ""                              # ne pas exposer le chemin serveur
-    pub.external_subs = []
-    meta = st.metadata.cached(item.id)
-    if meta:
-        pub.year = meta.year
-        pub.poster_url = meta.poster_url
-        pub.has_metadata = meta.matched
-    # Toujours exposer la capture locale : le client peut ainsi la conserver
-    # comme solution de repli lorsque l'affiche TMDB est inaccessible hors ligne.
-    if pub.kind in {"movie", "series"}:
-        pub.thumbnail_url = f"/api/library/items/{item.id}/thumbnail"
-    # Fusionne l'état de visionnage PERSISTANT (le client affiche « vu » / reprise).
-    w = st.watch.get(item.id)
-    pos = int(w.get("position_ms", 0) or 0)
-    dur = int(w.get("duration_ms", 0) or 0)
-    pub.watched = bool(w.get("watched"))
-    pub.in_progress = (not pub.watched) and pos > 0
-    pub.progress = (pos / dur) if (pub.in_progress and dur > 0) else 0.0
-    pub.last_played_at = float(w.get("last_played_at", 0) or 0)
-    return pub
+    return public_item(item, st.metadata.cached(item.id), st.watch.get(item.id))
+
+
+Kind = Literal["all", "video", "movie", "series", "photo", "audio"]
+
+
+def _catalogue(st: AppState) -> Catalogue:
+    # Les tests et intégrations qui construisent leur propre AppState gardent
+    # le même contrat, sans qu'une route retourne un instantané périmé.
+    if not hasattr(st, "catalogue"):
+        st.catalogue = Catalogue(st.library, st.metadata, st.watch)
+    return st.catalogue
 
 
 @router.post("/scan")
@@ -63,20 +57,43 @@ def scan_status(request: Request) -> dict:
 @router.get("/items", response_model=list[MediaItem])
 def items(request: Request) -> list[MediaItem]:
     st = get_state(request)
-    return [_enrich(it, st) for it in st.library.all()]
+    return _catalogue(st).page(CatalogueQuery(), 0, 10_000)[0]
 
 
 @router.get("/items/page")
 def items_page(request: Request, limit: int = Query(default=500, ge=1, le=500),
                offset: int = Query(default=0, ge=0, le=10_000),
-               revision: str | None = Query(default=None, max_length=64)) -> dict:
+               revision: str | None = Query(default=None, max_length=64),
+               kind: Kind = "all", q: str = Query(default="", max_length=256),
+               watched: Literal["all", "unwatched", "watched", "in_progress"] = "all",
+               genre: list[str] = Query(default=[], max_length=32),
+               year: int | None = Query(default=None, ge=1, le=9999),
+               duration_max_minutes: int | None = Query(default=None, ge=1, le=100_000),
+               resolution: Literal["all", "4k", "1080p", "720p", "sd"] = "all",
+               hdr_only: bool = False,
+               sort: Literal["title", "added", "year", "duration"] = "title",
+               descending: bool = False) -> dict:
     st = get_state(request)
+    if any(len(value) > 128 for value in genre):
+        raise HTTPException(422, "Genre trop long")
     try:
-        values, total, current = st.library.page(offset, limit, revision)
+        values, total, current = _catalogue(st).page(
+            CatalogueQuery(kind, q, watched, tuple(genre), year, duration_max_minutes,
+                           resolution, hdr_only, sort, descending), offset, limit, revision)
     except ValueError as error:
         raise HTTPException(409, "Le catalogue a change ; recommencer depuis la premiere page") from error
-    return {"items": [_enrich(item, st) for item in values], "total": total,
+    return {"items": values, "total": total,
             "revision": current, "next_offset": offset + len(values) if offset + len(values) < total else None}
+
+
+@router.get("/facets")
+def facets(request: Request, kind: Kind = "all") -> dict:
+    return _catalogue(get_state(request)).facets(kind)
+
+
+@router.get("/home")
+def home(request: Request) -> dict:
+    return _catalogue(get_state(request)).home()
 
 
 @router.get("/items/{item_id}", response_model=MediaItem)
@@ -93,7 +110,7 @@ def item_thumbnail(item_id: str, request: Request):
     """Capture locale disponible même lorsqu'une affiche distante est référencée."""
     st = get_state(request)
     it = st.library.get(item_id)
-    if not it or it.kind not in {"movie", "series"}:
+    if not it or it.kind not in {"movie", "series", "photo", "audio"}:
         raise HTTPException(404, "Miniature introuvable")
     try:
         path = st.thumbnails.jpeg(it)
@@ -106,7 +123,7 @@ def item_thumbnail(item_id: str, request: Request):
         media_type="image/jpeg",
         headers={
             "Cache-Control": "private, max-age=86400",
-            "ETag": f'"thumb-{item.id}-{path.stat().st_mtime_ns}"',
+            "ETag": f'"thumb-{it.id}-{path.stat().st_mtime_ns}"',
         },
     )
 

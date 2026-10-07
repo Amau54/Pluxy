@@ -30,6 +30,7 @@ internal data class CardEnvironment(
     val advancedMode: Boolean,
     val lanImages: ImageLoader,
     val photoFolderInHeader: Boolean = false,
+    val compact: Boolean = true,
 )
 
 internal class LibraryAdapter(
@@ -39,6 +40,9 @@ internal class LibraryAdapter(
     private val onSeries: (LibRow.SeriesRow) -> Unit,
     private val onHeaderToggle: (LibRow.Header) -> Unit,
     private val onFocused: (LibraryFocusTarget, LibRow) -> Unit,
+    private val onAlbum: (LibRow.AlbumRow) -> Unit = {},
+    private val onCollection: (LibRow.CollectionRow) -> Unit = {},
+    private val onLongPress: (LibRow) -> Unit = {},
 ) : ListAdapter<LibRow, RecyclerView.ViewHolder>(ROW_DIFF) {
     private var environment = environment
     private val focusRequests = RecyclerFocusRequester()
@@ -118,6 +122,9 @@ internal class LibraryAdapter(
             onQuickPlay = onQuickPlay,
             onSeries = onSeries,
             onFocused = { onFocused(LibraryFocusTarget(null, it.stableKey), it) },
+            onAlbum = onAlbum,
+            onCollection = onCollection,
+            onLongPress = onLongPress,
         )
     }
 
@@ -162,6 +169,9 @@ internal class HomeShelfAdapter(
     private val onQuickPlay: (MediaItem) -> Unit,
     private val onSeries: (LibRow.SeriesRow) -> Unit,
     private val onFocused: (LibraryFocusTarget, LibRow) -> Unit,
+    private val onAlbum: (LibRow.AlbumRow) -> Unit = {},
+    private val onCollection: (LibRow.CollectionRow) -> Unit = {},
+    private val onLongPress: (LibRow) -> Unit = {},
 ) : ListAdapter<HomeShelf, HomeShelfAdapter.ShelfViewHolder>(SHELF_DIFF) {
     private val recycledCards = RecyclerView.RecycledViewPool()
     private val horizontalPositions = mutableMapOf<String, ShelfScrollAnchor>()
@@ -195,6 +205,9 @@ internal class HomeShelfAdapter(
             onMedia = onMedia,
             onQuickPlay = onQuickPlay,
             onSeries = onSeries,
+            onAlbum = onAlbum,
+            onCollection = onCollection,
+            onLongPress = onLongPress,
             onFocused = { row ->
                 holder.shelfId?.let { onFocused(LibraryFocusTarget(it, row.stableKey), row) }
             },
@@ -225,9 +238,9 @@ internal class HomeShelfAdapter(
             if (landscape) R.dimen.library_landscape_shelf_height else R.dimen.library_shelf_height,
         )
         val resources = holder.cards.resources
-        val cardWidth = resources.getDimensionPixelSize(
+        val cardWidth = (resources.getDimensionPixelSize(
             if (landscape) R.dimen.library_landscape_card_width else R.dimen.library_card_width,
-        )
+        ) * if (environment.compact) 1f else 1.1f).toInt()
         val artworkHeight = cardWidth * if (landscape) 9f / 16f else 1.5f
         val paint = Paint()
         paint.textSize = resources.getDimension(R.dimen.card_title_size)
@@ -366,6 +379,9 @@ internal class ShelfCardAdapter(
     private val onQuickPlay: (MediaItem) -> Unit,
     private val onSeries: (LibRow.SeriesRow) -> Unit,
     private val onFocused: (LibRow) -> Unit,
+    private val onAlbum: (LibRow.AlbumRow) -> Unit = {},
+    private val onCollection: (LibRow.CollectionRow) -> Unit = {},
+    private val onLongPress: (LibRow) -> Unit = {},
 ) : ListAdapter<LibRow, CardViewHolder>(ROW_DIFF) {
     private var environment = environment
     private var aspect = ArtworkPolicy.Aspect.POSTER
@@ -386,8 +402,9 @@ internal class ShelfCardAdapter(
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): CardViewHolder {
         val view = LayoutInflater.from(parent.context).inflate(R.layout.item_media, parent, false)
         val density = parent.resources.displayMetrics.density
-        val width = parent.resources.getDimensionPixelSize(R.dimen.library_card_width)
-        val margin = (6 * density).toInt()
+        val width = (parent.resources.getDimensionPixelSize(R.dimen.library_card_width) *
+            if (environment.compact) 1f else 1.1f).toInt()
+        val margin = ((if (environment.compact) 6 else 8) * density).toInt()
         view.layoutParams = RecyclerView.LayoutParams(
             width,
             ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -398,9 +415,9 @@ internal class ShelfCardAdapter(
     }
 
     override fun onBindViewHolder(holder: CardViewHolder, position: Int) {
-        val width = holder.itemView.resources.getDimensionPixelSize(
+        val width = (holder.itemView.resources.getDimensionPixelSize(
             if (aspect == ArtworkPolicy.Aspect.LANDSCAPE) R.dimen.library_landscape_card_width else R.dimen.library_card_width,
-        )
+        ) * if (environment.compact) 1f else 1.1f).toInt()
         if (holder.itemView.layoutParams.width != width) {
             holder.itemView.layoutParams = holder.itemView.layoutParams.apply { this.width = width }
         }
@@ -413,6 +430,9 @@ internal class ShelfCardAdapter(
             onSeries,
             onFocused,
             aspect,
+            onAlbum,
+            onCollection,
+            onLongPress,
         )
     }
 
@@ -465,11 +485,15 @@ private fun bindCard(
     onSeries: (LibRow.SeriesRow) -> Unit,
     onFocused: (LibRow) -> Unit,
     forcedAspect: ArtworkPolicy.Aspect? = null,
+    onAlbum: (LibRow.AlbumRow) -> Unit = {},
+    onCollection: (LibRow.CollectionRow) -> Unit = {},
+    onLongPress: (LibRow) -> Unit = {},
 ) {
     holder.itemView.tag = row.stableKey
     holder.itemView.setOnFocusChangeListener { _, focused ->
         if (focused) onFocused(row)
     }
+    holder.itemView.setOnLongClickListener { onLongPress(row); true }
     when (row) {
         is LibRow.MediaRow -> bindMediaCard(
             holder, row.item, null, false, environment, onMedia, onQuickPlay, forcedAspect,
@@ -478,6 +502,8 @@ private fun bindCard(
             holder, row.item, row.subtitle, true, environment, onMedia, onQuickPlay, forcedAspect,
         )
         is LibRow.SeriesRow -> bindSeriesCard(holder, row, environment, onSeries, forcedAspect)
+        is LibRow.AlbumRow -> bindAlbumCard(holder, row, environment, onAlbum)
+        is LibRow.CollectionRow -> bindCollectionCard(holder, row, environment, onCollection)
         is LibRow.Header -> Unit
     }
 }
@@ -492,7 +518,8 @@ private fun bindMediaCard(
     onQuickPlay: (MediaItem) -> Unit,
     forcedAspect: ArtworkPolicy.Aspect?,
 ) {
-    holder.title.text = media.title
+    val displayTitle = LibraryOrganizer.displayTitle(media)
+    holder.title.text = displayTitle
     val details = contextualSubtitle?.takeIf { it.isNotBlank() } ?: if (media.kind == "photo" && environment.photoFolderInHeader) "" else mediaMeta(
         media,
         environment.advancedMode,
@@ -519,9 +546,9 @@ private fun bindMediaCard(
         tmdbPosterUrl = LanUrlPolicy.safeTmdbImage(media.posterUrl),
         localThumbnailUrl = localThumbnail,
     )
-    loadArtwork(holder, media.id, media.title, plan, environment, forcedAspect)
+    loadArtwork(holder, media.id, displayTitle, plan, environment, forcedAspect)
     holder.itemView.contentDescription = buildString {
-        append(media.title)
+        append(displayTitle)
         if (holder.meta.text.isNotBlank()) append(", ${holder.meta.text}")
         if (media.inProgress) append(", lecture en cours")
         if (media.watched) append(", vu")
@@ -550,7 +577,7 @@ private fun bindSeriesCard(
     val allWatched = series.count > 0 && series.watchedCount >= series.count
     holder.watched.visibility = if (allWatched) View.VISIBLE else View.GONE
     holder.resume.visibility =
-        if (series.watchedCount in 1 until series.count) View.VISIBLE else View.GONE
+        if (series.inProgressCount > 0 || series.watchedCount in 1 until series.count) View.VISIBLE else View.GONE
     holder.resume.progress =
         if (series.count > 0) (series.watchedCount * 100 / series.count).coerceIn(1, 100) else 0
     holder.poster.alpha = if (allWatched) 0.68f else 1f
@@ -564,6 +591,44 @@ private fun bindSeriesCard(
     holder.itemView.contentDescription =
         "$title, ${holder.meta.text}${if (allWatched) ", série vue" else ""}"
     holder.itemView.setOnClickListener { onSeries(series) }
+}
+
+private fun bindAlbumCard(
+    holder: CardViewHolder, album: LibRow.AlbumRow, environment: CardEnvironment,
+    onAlbum: (LibRow.AlbumRow) -> Unit,
+) {
+    holder.title.text = album.name
+    holder.meta.text = album.subtitle
+    holder.meta.visibility = View.VISIBLE
+    holder.hdr.visibility = View.GONE
+    holder.watched.visibility = View.GONE
+    holder.resume.visibility = View.GONE
+    holder.poster.alpha = 1f
+    val plan = ArtworkPolicy.plan(kind = album.kind,
+        localThumbnailUrl = resolveLanThumbnail(holder.itemView, album.thumbnail))
+    loadArtwork(holder, album.stableKey, album.name, plan, environment, ArtworkPolicy.Aspect.SQUARE)
+    holder.itemView.contentDescription = "${album.name}, ${album.subtitle}"
+    holder.itemView.setOnClickListener { onAlbum(album) }
+}
+
+private fun bindCollectionCard(
+    holder: CardViewHolder, row: LibRow.CollectionRow, environment: CardEnvironment,
+    onCollection: (LibRow.CollectionRow) -> Unit,
+) {
+    holder.title.text = row.collection.name
+    val count = row.items.count { it.kind != "series" } + row.items.filter { it.kind == "series" }
+        .map(::mediaSeriesIdentity).distinct().size
+    holder.meta.text = "$count ${if (count > 1) "médias" else "média"}${if (row.collection.smartQuery != null) " · Automatique" else ""}"
+    holder.meta.visibility = View.VISIBLE
+    holder.hdr.visibility = View.GONE
+    holder.watched.visibility = View.GONE
+    holder.resume.visibility = View.GONE
+    holder.poster.alpha = 1f
+    val plan = ArtworkPolicy.plan("movie", tmdbPosterUrl = LanUrlPolicy.safeTmdbImage(row.thumbnail),
+        localThumbnailUrl = resolveLanThumbnail(holder.itemView, row.thumbnail))
+    loadArtwork(holder, row.stableKey, row.collection.name, plan, environment, ArtworkPolicy.Aspect.POSTER)
+    holder.itemView.contentDescription = "${row.collection.name}, ${holder.meta.text}"
+    holder.itemView.setOnClickListener { onCollection(row) }
 }
 
 private fun loadArtwork(

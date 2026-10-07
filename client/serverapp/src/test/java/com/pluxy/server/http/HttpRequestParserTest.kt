@@ -9,6 +9,12 @@ import java.io.ByteArrayInputStream
 import java.nio.charset.StandardCharsets
 
 class HttpRequestParserTest {
+    @Test fun `repeated genres preserve all values while existing query lookup remains compatible`() {
+        val request = parse("GET /api/library/items/page?genre=Action&genre=Com%C3%A9die&kind=movie HTTP/1.1\r\nHost: phone\r\n\r\n")!!
+        assertEquals(listOf("Action", "Comédie"), request.queryValues["genre"])
+        assertEquals("Comédie", request.query["genre"])
+        assertEquals("movie", request.query["kind"])
+    }
     @Test
     fun `empty connection has no request`() {
         assertNull(parse(""))

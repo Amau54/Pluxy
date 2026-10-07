@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent" android:layout_height="match_parent"
+    android:orientation="vertical" android:fitsSystemWindows="true"
+    android:padding="@dimen/screen_pad" android:background="@drawable/bg_tv_ambient">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="horizontal" android:gravity="center_vertical">
+        <ImageButton android:id="@+id/albumBack" android:layout_width="48dp" android:layout_height="48dp"
+            android:padding="12dp" android:background="@drawable/bg_btn_icon"
+            android:src="@drawable/ic_chevron_left" app:tint="?attr/pluxyTextPrimary"
+            android:contentDescription="@string/album_back" android:focusable="true" />
+        <ImageView android:id="@+id/albumCover" android:layout_width="64dp" android:layout_height="64dp"
+            android:layout_marginStart="12dp" android:background="@drawable/poster_rounded"
+            android:clipToOutline="true" android:scaleType="centerCrop"
+            android:contentDescription="@null" android:importantForAccessibility="no" android:visibility="gone" />
+        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content"
+            android:layout_weight="1" android:layout_marginStart="12dp" android:orientation="vertical">
+            <TextView android:id="@+id/albumTitle" android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:textColor="?attr/pluxyTextPrimary" android:textSize="@dimen/details_title_size"
+                android:fontFamily="sans-serif-medium" android:maxLines="2" android:ellipsize="end" />
+            <TextView android:id="@+id/albumSubtitle" android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:layout_marginTop="4dp" android:textColor="?attr/pluxyTextSecondary"
+                android:textSize="@dimen/auxiliary_meta_size" android:maxLines="2" />
+        </LinearLayout>
+    </LinearLayout>
+    <Button android:id="@+id/albumPlay" style="@style/Btn.Primary" android:layout_height="48dp"
+        android:layout_marginTop="12dp" android:text="@string/album_play" android:visibility="gone" />
+    <FrameLayout android:layout_width="match_parent" android:layout_height="0dp"
+        android:layout_weight="1" android:layout_marginTop="14dp">
+        <androidx.recyclerview.widget.RecyclerView android:id="@+id/albumItems"
+            android:layout_width="match_parent" android:layout_height="match_parent"
+            android:clipToPadding="false" android:paddingBottom="12dp" />
+        <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent"
+            android:gravity="center" android:orientation="vertical" android:clickable="false" android:focusable="false">
+            <ProgressBar android:id="@+id/albumLoading" android:layout_width="40dp" android:layout_height="40dp"
+                android:indeterminateTint="?attr/pluxyAccent" android:visibility="gone" />
+            <TextView android:id="@+id/albumMessage" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:textColor="?attr/pluxyTextSecondary" android:textSize="@dimen/auxiliary_meta_size"
+                android:gravity="center" android:visibility="gone" />
+            <Button android:id="@+id/albumRetry" style="@style/Btn.Secondary" android:layout_height="48dp"
+                android:layout_marginTop="12dp" android:text="@string/action_retry" android:visibility="gone" />
+        </LinearLayout>
+    </FrameLayout>
+</LinearLayout>

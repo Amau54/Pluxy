@@ -19,6 +19,11 @@ from typing import List, Literal
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 _CONFIG_READ_ATTEMPTS = 6
+VIDEO_SCAN_EXTENSIONS = [".mkv", ".mp4", ".m4v", ".mov", ".avi", ".ts", ".webm"]
+DEFAULT_SCAN_EXTENSIONS = VIDEO_SCAN_EXTENSIONS + [
+    ".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".tif", ".tiff",
+    ".mp3", ".flac", ".m4a", ".m4b", ".aac", ".ogg", ".oga", ".opus", ".wav", ".wma",
+]
 
 
 def _read_config_text(path: Path) -> str:
@@ -52,7 +57,7 @@ class ServerCfg(BaseModel):
     # Démarrer le serveur automatiquement à l'ouverture de session Windows.
     autostart: bool = False
     scan_extensions: List[str] = Field(
-        default_factory=lambda: [".mkv", ".mp4", ".m4v", ".mov", ".avi", ".ts", ".webm"],
+        default_factory=lambda: list(DEFAULT_SCAN_EXTENSIONS),
         max_length=64,
     )
 
@@ -190,7 +195,7 @@ class DiscoveryCfg(BaseModel):
 
 
 # Version du schéma de config (incrémentée à chaque migration de réglages).
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 
 # --------------------------------------------------------------------------- #
@@ -313,6 +318,11 @@ class ConfigManager:
                 # Codec de repli mis à jour (eac3 > ac3).
                 if au.get("target_codec") == "ac3":
                     au["target_codec"] = "eac3"
+            changed = True
+        if ver < 4:
+            server = data.get("server")
+            if isinstance(server, dict) and server.get("scan_extensions") == VIDEO_SCAN_EXTENSIONS:
+                server["scan_extensions"] = list(DEFAULT_SCAN_EXTENSIONS)
             changed = True
         if changed:
             data["schema_version"] = SCHEMA_VERSION

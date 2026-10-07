@@ -51,6 +51,7 @@ class AudioPlayerActivity : ThemedActivity() {
     private var playWhenReady = true
     private var artworkKey: String? = null
     private var ownerServerUrl = ""
+    private var collectionId = ""
 
     private val connection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName, binder: IBinder) {
@@ -81,6 +82,7 @@ class AudioPlayerActivity : ThemedActivity() {
         positionMs = savedInstanceState?.getLong(STATE_POSITION, 0L) ?: 0L
         playWhenReady = savedInstanceState?.getBoolean(STATE_PLAY, true) ?: true
         restoreSession = savedInstanceState != null || intent.getBooleanExtra(EXTRA_RESUME_SESSION, false)
+        collectionId = savedInstanceState?.getString(STATE_COLLECTION_ID) ?: intent.getStringExtra(EXTRA_COLLECTION_ID).orEmpty()
         ownerServerUrl = savedInstanceState?.getString(STATE_SERVER_URL)
             ?: intent.getStringExtra(AudioPlaybackService.EXTRA_SERVER_URL)
             ?: PluxyApplication.serverBaseUrl(this)
@@ -119,6 +121,7 @@ class AudioPlayerActivity : ThemedActivity() {
             .putExtra(AudioPlaybackService.EXTRA_POSITION, positionMs)
             .putExtra(AudioPlaybackService.EXTRA_PLAY, playWhenReady)
             .putExtra(AudioPlaybackService.EXTRA_SERVER_URL, ownerServerUrl)
+            .putExtra(EXTRA_COLLECTION_ID, collectionId)
         ContextCompat.startForegroundService(this, intent)
         requestedSession = true
     }
@@ -204,6 +207,7 @@ class AudioPlayerActivity : ThemedActivity() {
         outState.putLong(STATE_POSITION, positionMs)
         outState.putBoolean(STATE_PLAY, playWhenReady)
         outState.putString(STATE_SERVER_URL, ownerServerUrl)
+        outState.putString(STATE_COLLECTION_ID, collectionId)
         super.onSaveInstanceState(outState)
     }
 
@@ -221,9 +225,11 @@ class AudioPlayerActivity : ThemedActivity() {
     companion object {
         const val EXTRA_ITEM = "extra_audio_item_json"
         const val EXTRA_RESUME_SESSION = "extra_audio_resume_session"
+        const val EXTRA_COLLECTION_ID = "extra_audio_collection_id"
         private const val STATE_ITEM = "audio_current_item"
         private const val STATE_POSITION = "audio_position"
         private const val STATE_PLAY = "audio_play_when_ready"
         private const val STATE_SERVER_URL = "audio_server_url"
+        private const val STATE_COLLECTION_ID = "audio_collection_id"
     }
 }

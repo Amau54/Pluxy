@@ -25,6 +25,7 @@ import com.pluxy.tv.PluxyApplication
 import com.pluxy.tv.R
 import com.pluxy.tv.api.BufferConfig
 import com.pluxy.tv.api.MediaItem
+import com.pluxy.tv.api.LibraryRequest
 import com.pluxy.tv.api.PluxyApi
 import com.pluxy.tv.api.networkOrNull
 import com.pluxy.tv.player.PluxyPlayerFactory
@@ -70,6 +71,7 @@ class AudioPlaybackService : Service() {
     private var stopping = false
     private var requestedPositionMs = 0L
     private var requestedPlayWhenReady = true
+    private var collectionId = ""
 
     @Suppress("DEPRECATION")
     override fun onCreate() {
@@ -129,6 +131,7 @@ class AudioPlaybackService : Service() {
                 val owner = intent.getStringExtra(EXTRA_SERVER_URL) ?: PluxyApplication.serverBaseUrl(this)
                 val url = runCatching { catalogueServerKey(owner) }.getOrNull()
                 if (url == null) { stopPlayback(); return START_NOT_STICKY }
+                collectionId = intent.getStringExtra(AudioPlayerActivity.EXTRA_COLLECTION_ID).orEmpty()
                 load(item, intent.getLongExtra(EXTRA_POSITION, 0L), intent.getBooleanExtra(EXTRA_PLAY, true), url)
             }
             ACTION_PLAY -> retryOrPlay()
@@ -162,12 +165,18 @@ class AudioPlaybackService : Service() {
             try {
                 val buffer = networkOrNull { client.clientRuntime().buffer } ?: DEFAULT_BUFFER
                 val catalogue = networkOrNull {
-                    CatalogueRepository.load(ownerUrl) {
+                    CatalogueRepository.load(ownerUrl, mediaKind = "audio") {
                         val reader = PluxyApi(ownerUrl)
-                        try { reader.listItems() } finally { reader.close() }
+                        try { reader.listItems(LibraryRequest(kind = "audio")) } finally { reader.close() }
                     }
                 }?.items.orEmpty()
-                val ordered = withContext(Dispatchers.Default) { orderedAlbumTracks(catalogue, item) }
+                val ordered = withContext(Dispatchers.Default) {
+                    val allowed = if (collectionId.isBlank()) catalogue else {
+                        LibraryPreferences.collections(this@AudioPlaybackService, ownerUrl).firstOrNull { it.id == collectionId }
+                            ?.let { TvLibraryContent.collectionItems(catalogue, it) }.orEmpty()
+                    }
+                    orderedAlbumTracks(allowed, item)
+                }
                 tracks = ordered.takeIf { values -> values.any { it.id == item.id } } ?: listOf(item)
                 val exo = PluxyPlayerFactory.build(this@AudioPlaybackService, buffer, serverUrl)
                 player = exo
@@ -320,6 +329,7 @@ class AudioPlaybackService : Service() {
             .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
             .putExtra(AudioPlayerActivity.EXTRA_RESUME_SESSION, true)
             .putExtra(EXTRA_SERVER_URL, serverUrl)
+            .putExtra(AudioPlayerActivity.EXTRA_COLLECTION_ID, collectionId)
         current?.let { returnIntent.putExtra(AudioPlayerActivity.EXTRA_ITEM, moshi.adapter(MediaItem::class.java).toJson(it)) }
         val content = PendingIntent.getActivity(this, 0, returnIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val exo = player

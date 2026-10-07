@@ -17,6 +17,7 @@ from .transcoder import TranscodeManager
 from .thumbnails import VideoThumbnailer
 from .vodhls import VodHls
 from .watchstate import WatchStore
+from .catalogue import Catalogue
 
 
 class AppState:
@@ -34,6 +35,7 @@ class AppState:
         self.vod = VodHls(self.cfgm.cfg, data)
         self.metadata = MetadataProvider(self.cfgm, data)
         self.watch = WatchStore(data)
+        self.catalogue = Catalogue(self.library, self.metadata, self.watch)
         self.thumbnails = VideoThumbnailer(self.cfgm.cfg, data)
         # Dernière décision de lecture par média (capacités client réelles) — réutilisée
         # par les endpoints de flux (remux) pour cibler le bon codec audio.
@@ -139,6 +141,8 @@ class AppState:
         for item in self.library.all():
             if self._closing.is_set():
                 break
+            if item.kind not in {"movie", "series"}:
+                continue
             try:
                 self.metadata.get(item, force=force, share_series=True)
             except Exception:

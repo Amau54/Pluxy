@@ -14,6 +14,7 @@ import android.provider.OpenableColumns
 import android.provider.DocumentsContract
 import android.util.AtomicFile
 import androidx.documentfile.provider.DocumentFile
+import androidx.exifinterface.media.ExifInterface
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -45,6 +46,8 @@ class MediaLibrary(
     fun all(): List<MediaEntry> = catalog.items
 
     fun get(id: String): MediaEntry? = catalog.get(id)
+
+    internal fun snapshot(): MediaCatalog = catalog
 
     fun page(limit: Int, offset: Int, revision: String?): MediaPage = catalog.page(limit, offset, revision)
 
@@ -87,6 +90,7 @@ class MediaLibrary(
             .distinctBy { it.kind to it.treeUri }
         if (selected.isEmpty()) return@withContext ScanResult(emptyList())
         val previous = catalog.items.associateBy { it.uri }
+        val discoveredAt = System.currentTimeMillis()
         val found = ArrayList<MediaEntry>()
         val visited = HashSet<String>()
         val seenFiles = HashSet<String>()
@@ -104,6 +108,7 @@ class MediaLibrary(
                         previous = previous,
                         found = found,
                         seenFiles = seenFiles,
+                        discoveredAt = discoveredAt,
                     )
                     usableSourceCount++
                     if (found.size >= MAX_MEDIA_ITEMS) {
@@ -211,7 +216,7 @@ class MediaLibrary(
                     }
 
                     if (old != null && oldMatchesSource && old.size == size &&
-                        old.modifiedAtMs == modified && old.probeRevision >= MEDIA_PROBE_REVISION
+                        old.modifiedAtMs == modified && old.probeRevision >= requiredProbeRevision(source.kind)
                     ) {
                         found += old.copy(
                             sourceKey = source.identity(), available = true,
@@ -226,6 +231,8 @@ class MediaLibrary(
                             season = parsed?.season,
                             episode = parsed?.episode,
                             folder = displayFolder(source, node.ancestors),
+                            folderId = folderIdentity(source.identity(), node.directory.uri.toString()),
+                            relativePath = (node.ancestors + fileName).joinToString("/"),
                             subtitles = subs,
                         )
                         continue
@@ -242,6 +249,8 @@ class MediaLibrary(
                         mimeType = child.type,
                         size = size,
                         modifiedAtMs = modified,
+                        addedAtMs = old?.addedAtMs ?: discoveredAt,
+                        capturedAtMs = probe.capturedAtMs,
                         durationSeconds = probe.durationSeconds,
                         width = probe.width,
                         height = probe.height,
@@ -257,6 +266,8 @@ class MediaLibrary(
                         artist = probe.artist,
                         album = probe.album,
                         folder = displayFolder(source, node.ancestors),
+                        folderId = folderIdentity(source.identity(), node.directory.uri.toString()),
+                        relativePath = (node.ancestors + fileName).joinToString("/"),
                         subtitles = subs,
                         sourceKey = source.identity(),
                         discNumber = probe.discNumber, trackNumber = probe.trackNumber,
@@ -302,6 +313,7 @@ class MediaLibrary(
         previous: Map<String, MediaEntry>,
         found: MutableList<MediaEntry>,
         seenFiles: MutableSet<String>,
+        discoveredAt: Long,
     ) {
         val permission = AutomaticMediaPermission.required(Build.VERSION.SDK_INT, source.kind)
         requireAutomaticMediaPermission(permission)
@@ -316,8 +328,10 @@ class MediaLibrary(
             add(MediaStore.MediaColumns.SIZE)
             add(MediaStore.MediaColumns.DATE_MODIFIED)
             add(MediaStore.MediaColumns.MIME_TYPE)
+            if (source.kind == LibrarySourceKind.PHOTO) add(MediaStore.Images.ImageColumns.DATE_TAKEN)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 add(MediaStore.MediaColumns.RELATIVE_PATH)
+                add(MediaStore.MediaColumns.VOLUME_NAME)
             }
         }.toTypedArray()
         val selection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -348,6 +362,8 @@ class MediaLibrary(
                 val folder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     cursor.string(MediaStore.MediaColumns.RELATIVE_PATH)?.trim('/')?.ifBlank { null }
                 } else null
+                val volume = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) cursor.string(MediaStore.MediaColumns.VOLUME_NAME).orEmpty() else ""
+                val folderId = folderIdentity("${source.identity()}:$volume", folder.orEmpty())
                 val parsed = if (source.kind == LibrarySourceKind.VIDEO) {
                     FilenameParser.parse(fileName, folder?.split('/')?.filter(String::isNotBlank).orEmpty())
                 } else null
@@ -357,7 +373,7 @@ class MediaLibrary(
                     else -> old?.kind == source.kind.publicKind
                 }
                 if (old != null && oldMatchesSource && old.size == size &&
-                    old.modifiedAtMs == modified && old.probeRevision >= MEDIA_PROBE_REVISION
+                    old.modifiedAtMs == modified && old.probeRevision >= requiredProbeRevision(source.kind)
                 ) {
                     found += old.copy(
                         sourceKey = source.identity(), available = true,
@@ -372,10 +388,13 @@ class MediaLibrary(
                         season = parsed?.season,
                         episode = parsed?.episode,
                         folder = folder,
+                        folderId = folderId,
+                        relativePath = listOfNotNull(folder, fileName).joinToString("/"),
                     )
                     continue
                 }
-                val probe = probe(uri, fileName, source.kind)
+                val probe = probe(uri, fileName, source.kind,
+                    cursor.long(MediaStore.Images.ImageColumns.DATE_TAKEN)?.takeIf { it > 0 })
                 found += MediaEntry(
                     id = stableId(uriValue),
                     uri = uriValue,
@@ -386,6 +405,8 @@ class MediaLibrary(
                     mimeType = mimeType,
                     size = size,
                     modifiedAtMs = modified,
+                    addedAtMs = old?.addedAtMs ?: discoveredAt,
+                    capturedAtMs = probe.capturedAtMs,
                     durationSeconds = probe.durationSeconds,
                     width = probe.width,
                     height = probe.height,
@@ -401,6 +422,8 @@ class MediaLibrary(
                     artist = probe.artist,
                     album = probe.album,
                     folder = folder,
+                    folderId = folderId,
+                    relativePath = listOfNotNull(folder, fileName).joinToString("/"),
                     subtitles = emptyList(),
                     sourceKey = source.identity(),
                     discNumber = probe.discNumber, trackNumber = probe.trackNumber,
@@ -444,10 +467,9 @@ class MediaLibrary(
         }.sortedBy { it.name.lowercase(Locale.ROOT) }
     }
 
-    private fun probe(uri: Uri, fileName: String, sourceKind: LibrarySourceKind): ProbeResult {
-        // Une photothèque peut contenir des milliers d'éléments : aucune image n'est
-        // ouverte pendant le scan. Les dimensions et le décodage restent paresseux.
-        if (sourceKind == LibrarySourceKind.PHOTO) return ProbeResult()
+    private fun probe(uri: Uri, fileName: String, sourceKind: LibrarySourceKind, capturedAtHint: Long? = null): ProbeResult {
+        // Read only image headers once per new/modified photo; never decode a bitmap during a scan.
+        if (sourceKind == LibrarySourceKind.PHOTO) return ProbeResult(capturedAtMs = capturedAtHint ?: photoTakenAt(uri))
         val retriever = MediaMetadataRetriever()
         return try {
             retriever.setDataSource(context, uri)
@@ -490,6 +512,15 @@ class MediaLibrary(
             runCatching { retriever.release() }
         }
     }
+
+    private fun photoTakenAt(uri: Uri): Long? = runCatching {
+        context.contentResolver.openInputStream(uri)?.use { input ->
+            val exif = ExifInterface(input)
+            photoDateMs(exif.getAttribute(ExifInterface.TAG_DATETIME_ORIGINAL), exif.getAttribute(ExifInterface.TAG_OFFSET_TIME_ORIGINAL))
+                ?: photoDateMs(exif.getAttribute(ExifInterface.TAG_DATETIME_DIGITIZED), exif.getAttribute(ExifInterface.TAG_OFFSET_TIME_DIGITIZED))
+                ?: photoDateMs(exif.getAttribute(ExifInterface.TAG_DATETIME), exif.getAttribute(ExifInterface.TAG_OFFSET_TIME))
+        }
+    }.getOrNull()
 
     /** Un seul passage MediaExtractor récupère vidéo et audio pour limiter I/O et batterie. */
     private fun extractTrackInfo(uri: Uri): TrackInfo {
@@ -598,6 +629,7 @@ class MediaLibrary(
         val audioCodec: String? = null,
         val audioChannels: Int? = null,
         val isHdr: Boolean = false,
+        val capturedAtMs: Long? = null,
     )
     private data class TrackInfo(
         val videoCodec: String? = null,
@@ -614,7 +646,7 @@ class MediaLibrary(
         private const val MAX_SCAN_DEPTH = 64
         private const val MAX_DIRECTORY_COUNT = 25_000
         private const val MAX_MEDIA_ITEMS = 10_000
-        private const val MEDIA_PROBE_REVISION = 3
+        private fun requiredProbeRevision(kind: LibrarySourceKind): Int = if (kind == LibrarySourceKind.PHOTO) 4 else 3
         private val SUBTITLE_EXTENSIONS = setOf("srt", "vtt", "ass", "ssa")
         private val LANGUAGE_CODES = setOf(
             "fr", "fre", "fra", "en", "eng", "es", "spa", "de", "ger", "deu", "it", "ita",

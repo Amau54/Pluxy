@@ -19,17 +19,32 @@ class LibraryOrganizerTest {
         )
         assertTrue(LibraryOrganizer.matchesSearch(track, "beyonce"))
         assertTrue(LibraryOrganizer.matchesSearch(track, "concerts"))
+        assertTrue(LibraryOrganizer.matchesSearch(track, "beyonce ete concerts"))
+        assertFalse(LibraryOrganizer.matchesSearch(track, "beyonce cinema"))
         assertFalse(LibraryOrganizer.matchesSearch(track, "cinema"))
+    }
+
+    @Test fun `search treats compatibility unicode and german fold consistently`() {
+        assertTrue(LibraryOrganizer.matchesSearch(item("a", "photo", title = "Straße ﬁlm"), "strasse film"))
+    }
+
+    @Test fun `enriched movie title is searchable and displayed without replacing episode titles`() {
+        val movie = item("a", "movie", title = "source.2020.1080p").copy(metadataTitle = "Le Grand Film")
+        assertTrue(LibraryOrganizer.matchesSearch(movie, "grand film"))
+        assertEquals("Le Grand Film", LibraryOrganizer.displayTitle(movie))
+        assertEquals("Épisode 1", LibraryOrganizer.displayTitle(movie.copy(kind = "series", title = "Épisode 1")))
     }
 
     @Test
     fun `photo folder wins over date and missing date is explicit`() {
         val folderPhoto = item("p1", "photo", folder = "Voyages / Rome", addedAt = 1.0)
         val unknownPhoto = item("p2", "photo", addedAt = 0.0)
-        assertEquals("folder:voyages / rome", LibraryOrganizer.photoAlbumKey(folderPhoto))
+        assertEquals("folder:Voyages / Rome", LibraryOrganizer.photoAlbumKey(folderPhoto))
         assertEquals("Voyages / Rome", LibraryOrganizer.photoAlbumLabel(folderPhoto))
-        assertEquals("date:unknown", LibraryOrganizer.photoAlbumKey(unknownPhoto))
-        assertEquals("Photos sans date", LibraryOrganizer.photoAlbumLabel(unknownPhoto))
+        assertEquals("folder:Dossier principal", LibraryOrganizer.photoAlbumKey(unknownPhoto))
+        assertEquals("Dossier principal", LibraryOrganizer.photoAlbumLabel(unknownPhoto))
+        assertEquals("date:unknown", LibraryOrganizer.photoMonthKey(unknownPhoto))
+        assertEquals("Date de prise de vue inconnue", LibraryOrganizer.photoMonthLabel(unknownPhoto))
     }
 
     @Test

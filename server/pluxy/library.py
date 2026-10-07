@@ -14,6 +14,7 @@ import stat as _stat
 import threading
 import time
 import unicodedata
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Dict, List
 
@@ -42,6 +43,9 @@ _LANG_CODES = {
 }
 
 MAX_MEDIA_ITEMS = 10_000
+PHOTO_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".tif", ".tiff"}
+AUDIO_EXTENSIONS = {".mp3", ".flac", ".m4a", ".m4b", ".aac", ".ogg", ".oga", ".opus", ".wav", ".wma"}
+AUDIO_ARTWORK_NAMES = {"cover.jpg", "folder.jpg", "album.jpg", "front.jpg", "cover.png", "folder.png", "cover.jpeg", "folder.jpeg"}
 
 
 class Library:
@@ -89,6 +93,10 @@ class Library:
                 raise ValueError("Le catalogue a change")
             return list(self._sorted_items[offset:offset + limit]), len(self._sorted_items), self._revision
 
+    def snapshot(self) -> tuple[str, tuple[MediaItem, ...]]:
+        with self._lock:
+            return self._revision, tuple(self._sorted_items)
+
     @property
     def is_scanning(self) -> bool:
         with self._lock:
@@ -109,6 +117,10 @@ class Library:
                 items: dict[str, MediaItem] = {}
                 for value in data[:MAX_MEDIA_ITEMS] if isinstance(data, list) else []:
                     try:
+                        # L'ancien added_at représentait mtime : conserver l'ordre
+                        # historique et en faire également le marqueur technique.
+                        if isinstance(value, dict) and "modified_at" not in value:
+                            value = {**value, "modified_at": value.get("added_at", 0)}
                         item = MediaItem.model_validate(value)
                         items[item.id] = item
                     except Exception:
@@ -143,6 +155,7 @@ class Library:
         with self._lock:
             previous = {item_id: item.model_copy(deep=True) for item_id, item in self._items.items()}
         missing_roots: list[Path] = []
+        discovered_at = time.time()
         try:
             for root in cfg.server.media_dirs:
                 if stop_event is not None and stop_event.is_set():
@@ -164,6 +177,7 @@ class Library:
                     if len(found) >= MAX_MEDIA_ITEMS:
                         break
                     parent = Path(directory)
+                    has_audio = any(Path(name).suffix.lower() in AUDIO_EXTENSIONS for name in names)
                     sidecars = sorted(
                         (parent / name for name in names
                          if Path(name).suffix.lower() in sub_exts and (parent / name).is_file()),
@@ -192,7 +206,21 @@ class Library:
                         if not _stat.S_ISREG(stat.st_mode):
                             continue
                         kind = _detect_kind(f)
-                        added_at = stat.st_mtime
+                        if kind == "photo" and has_audio and name.casefold() in AUDIO_ARTWORK_NAMES:
+                            continue
+                        existing = previous.get(item_id)
+                        added_at = existing.added_at if existing else discovered_at
+                        modified_at = stat.st_mtime
+                        relative = f.relative_to(base).as_posix()
+                        folder = f.parent.relative_to(base).as_posix()
+                        if folder == ".":
+                            folder = base.name or "Médias"
+                        album_fields = {
+                            "folder": folder,
+                            "folder_id": self.make_id(str(f.parent)),
+                            "relative_path": relative,
+                            "year": _fn.parse(f.stem).year if kind in {"movie", "series"} else None,
+                        }
                         sname, skey, season, episode = (
                             _parse_series(f) if kind == "series" else (None, None, None, None)
                         )
@@ -200,9 +228,8 @@ class Library:
                         sub_tracks = self._sub_tracks(f, subs)
                         # Taille ET date de modification : un fichier remplacé à
                         # taille identique doit être réanalysé.
-                        existing = previous.get(item_id)
-                        if (existing and existing.size == stat.st_size and existing.added_at == added_at
-                                and ((existing.probe_complete and existing.duration > 0)
+                        if (existing and existing.size == stat.st_size and existing.modified_at == modified_at
+                                and ((existing.probe_complete and (existing.duration > 0 or kind == "photo"))
                                      or existing.probe_retry_at > time.time())):
                             found[item_id] = existing.model_copy(update={
                                 "kind": kind,
@@ -212,7 +239,17 @@ class Library:
                                 "episode": episode,
                                 "external_subs": [str(s) for s in subs],
                                 "subtitles": sub_tracks,
+                                **album_fields,
                             })
+                            continue
+                        if kind == "photo":
+                            width, height, captured_at = _photo_details(f)
+                            found[item_id] = MediaItem(
+                                id=item_id, title=f.stem, path=str(f), container=f.suffix[1:].lower(),
+                                size=stat.st_size, duration=0, width=width, height=height,
+                                kind=kind, added_at=added_at, modified_at=modified_at,
+                                captured_at=captured_at, **album_fields,
+                            )
                             continue
                         try:
                             info = probe(cfg.ffmpeg.ffprobe_path, str(f))
@@ -222,6 +259,7 @@ class Library:
                                 id=item_id, title=f.stem, path=str(f),
                                 container=f.suffix.lstrip(".").lower(),
                                 size=stat.st_size, duration=0.0, kind=kind, added_at=added_at,
+                                modified_at=modified_at, **album_fields,
                                 series_name=sname, series_key=skey, season=season, episode=episode,
                                 external_subs=[str(s) for s in subs], subtitles=sub_tracks,
                                 probe_complete=False, probe_retry_at=time.time() + 60,
@@ -234,7 +272,11 @@ class Library:
                             container=info.container, size=stat.st_size, duration=info.duration,
                             width=v.width if v else None, height=v.height if v else None,
                             video_codec=v.codec if v else None, is_hdr=v.is_hdr if v else False,
-                            kind=kind, added_at=added_at,
+                            kind=kind, added_at=added_at, modified_at=modified_at, **album_fields,
+                            artist=info.tags.get("album_artist") or info.tags.get("artist"),
+                            album=info.tags.get("album"),
+                            track_number=_tag_number(info.tags.get("track")),
+                            disc_number=_tag_number(info.tags.get("disc")),
                             series_name=sname, series_key=skey, season=season, episode=episode,
                             external_subs=[str(s) for s in subs], subtitles=sub_tracks,
                         )
@@ -336,6 +378,10 @@ def _safe_mtime(p: Path) -> float:
 def _detect_kind(p: Path) -> str:
     """Déduit film vs série : motif d'épisode (nom OU sous-dossier « Saison 2 »…),
     ou dossier racine « Séries/TV »."""
+    if p.suffix.lower() in PHOTO_EXTENSIONS:
+        return "photo"
+    if p.suffix.lower() in AUDIO_EXTENSIONS:
+        return "audio"
     if _SERIES_RE.search(p.name):
         return "series"
     if {part.lower() for part in p.parts} & _SERIES_DIRS:
@@ -344,6 +390,43 @@ def _detect_kind(p: Path) -> str:
     if _SERIES_RE.search(str(p)):
         return "series"
     return "movie"
+
+
+def _tag_number(value: str | None) -> int | None:
+    try:
+        number = int((value or "").split("/", 1)[0])
+        return number if 0 < number < 100_000 else None
+    except ValueError:
+        return None
+
+
+def _photo_details(path: Path) -> tuple[int | None, int | None, float | None]:
+    """Lit les en-têtes et EXIF sans décoder les pixels de la photo."""
+    from PIL import Image
+    try:
+        with Image.open(path) as image:
+            width, height = image.size
+            exif = image.getexif()
+            details = exif.get_ifd(34665) if 34665 in exif else exif
+            captured = details.get(36867) or details.get(36868)  # Original / Digitized
+            offset = details.get(36881) or details.get(36882)
+            captured_at = None
+            if captured:
+                try:
+                    moment = datetime.strptime(str(captured).strip("\x00 "), "%Y:%m:%d %H:%M:%S")
+                    # EXIF sans zone représente une heure locale de prise de vue.
+                    # UTC conserve ses composantes, indépendamment de la zone du PC.
+                    zone = timezone.utc
+                    if offset and re.fullmatch(r"[+-]\d{2}:\d{2}", str(offset)):
+                        text = str(offset)
+                        minutes = int(text[1:3]) * 60 + int(text[4:6])
+                        zone = timezone(timedelta(minutes=minutes * (-1 if text[0] == "-" else 1)))
+                    captured_at = moment.replace(tzinfo=zone).timestamp()
+                except (ValueError, OverflowError):
+                    pass
+            return width, height, captured_at
+    except (OSError, ValueError, SyntaxError, Image.DecompressionBombError):
+        return None, None, None
 
 
 # Suffixe « saison/season/SX/partie/intégrale/complete » en fin de nom (dossier ou

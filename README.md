@@ -6,7 +6,7 @@
 
 Vos films, séries, photos et musique sur la TV.
 
-**1.5.5 · Android TV et Android 6.0+**
+**1.6.0 · Android TV et Android 6.0+**
 
 [Lecteur Android](https://github.com/Amau54/Pluxy/releases/download/dev-latest/Pluxy-debug.apk)
 · [Serveur Android](https://github.com/Amau54/Pluxy/releases/download/dev-latest/Pluxy-Server-Android-debug.apk)
@@ -63,13 +63,21 @@ en charge en DLNA. Google Cast nécessite les services Google sur le téléphone
 ## Lecture et bibliothèque
 
 - Reprise des vidéos, épisode suivant et recherche dans toute la bibliothèque.
-- Photos en galerie ou en diaporama, musique regroupée par artiste et album.
+- Films et séries en grille ; vue Découvrir pour les nouveautés et les reprises.
+- Filtres par genre, année, état de lecture, durée, résolution et HDR ; tri séparé.
+- Collections de votre choix ou collections alimentées par vos filtres.
+- Photos par album ou date de prise de vue, galerie et diaporama.
+- Musique par album, avec les pistes dans l'ordre des disques et des numéros.
+- Navigation mobile en bas de l'écran ; densité Compact ou Confort dans les réglages.
 - Audio, sous-titres et déplacement dans la vidéo depuis la télécommande.
 - Réglages simples au quotidien, options supplémentaires dans le mode avancé.
 
 Les affiches et synopsis TMDB sont facultatifs. Ajoutez votre propre clé dans
 les réglages. Sans clé, Pluxy utilise les noms de fichiers et les images locales.
 Les services externes utilisés sont décrits dans la [politique de confidentialité](docs/PRIVACY_POLICY.md).
+
+Les filtres et la vue sont mémorisés pour chaque bibliothèque et chaque serveur.
+Les collections sont conservées sur le lecteur qui les a créées.
 
 ## Installer une APK sur la TV
 

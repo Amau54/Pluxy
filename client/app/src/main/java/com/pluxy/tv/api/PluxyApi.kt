@@ -107,14 +107,11 @@ class PluxyApi(val baseUrl: String, val sessionId: String = UUID.randomUUID().to
         }
 
     // --- Endpoints ------------------------------------------------------- //
-    suspend fun listItems(): List<MediaItem> = withContext(Dispatchers.IO) {
+    suspend fun listItems(query: LibraryRequest = LibraryRequest()): List<MediaItem> = withContext(Dispatchers.IO) {
         repeat(2) { attempt ->
             try {
                 return@withContext collectLibraryPages { offset, revision ->
-                    val revisionQuery = revision?.let {
-                        "&revision=" + java.net.URLEncoder.encode(it, "UTF-8")
-                    }.orEmpty()
-                    getJson<LibraryPage>("/api/library/items/page?limit=500&offset=$offset$revisionQuery")
+                    getJson<LibraryPage>(query.path(500, offset, revision))
                 }
             } catch (error: ApiException) {
                 if (error.code in setOf(404, 405)) return@withContext legacyListItems()
@@ -122,6 +119,18 @@ class PluxyApi(val baseUrl: String, val sessionId: String = UUID.randomUUID().to
             }
         }
         throw ApiException(409, "La bibliothèque a changé pendant le chargement")
+    }
+
+    suspend fun libraryPage(query: LibraryRequest, offset: Int = 0, revision: String? = null): LibraryPage =
+        withContext(Dispatchers.IO) { getJson(query.path(100, offset, revision)) }
+
+    suspend fun libraryFacets(kind: String = "all"): LibraryFacets = withContext(Dispatchers.IO) {
+        val suffix = if (kind == "all") "" else "?kind=" + java.net.URLEncoder.encode(kind, "UTF-8")
+        getJson("/api/library/facets$suffix")
+    }
+
+    suspend fun libraryOverview(): LibraryOverview = withContext(Dispatchers.IO) {
+        getJson("/api/library/home")
     }
 
     private suspend fun legacyListItems(): List<MediaItem> =

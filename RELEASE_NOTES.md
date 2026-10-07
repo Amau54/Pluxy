@@ -1,12 +1,16 @@
-# Pluxy 1.5.5
+# Pluxy 1.6.0
 
-Lecteur et serveur Android : **version 1.5.5, versionCode 50**.
+Lecteur et serveur Android : **version 1.6.0, versionCode 51**.
 
-- Icônes vectorielles aux extrémités arrondies dans les lecteurs, menus et réglages.
-- Contours adoucis et rayons harmonisés entre les applications et les réglages PC.
-- Pictogrammes du serveur Android indépendants de la police ; coins des affiches de secours dessinés avec lissage.
-- Interface compacte, zones tactiles de 48 dp et focus télécommande conservés.
-- Sur PC, sélection native des dossiers Windows : fonctionne aussi avec Python installé sans Tkinter.
+- Bibliothèques en grille et vue Découvrir, sans répéter les mêmes médias dans les rangées.
+- Filtres par genre, année, lecture, durée, résolution et HDR ; tri indépendant et filtres actifs faciles à retirer.
+- Collections manuelles ou automatiques, mémorisées par serveur sur le lecteur.
+- Albums photo, chronologie utilisant la date de prise de vue et albums musicaux avec pistes ordonnées.
+- Navigation mobile en bas, commandes TV compactes et densités Compact/Confort.
+- Chargement progressif des films, filtres et cache en mémoire sur les deux serveurs.
+- Date d'ajout conservée lors des rescans ; recherche sur les titres affichés, sans tenir compte des accents.
+- Serveur PC compatible avec les photos et la musique ; miniatures et pochettes locales réparées.
+- Reprise du premier épisode commencé et conservation de la collection pendant la lecture.
 
 ## Mise à jour des APK de test
 

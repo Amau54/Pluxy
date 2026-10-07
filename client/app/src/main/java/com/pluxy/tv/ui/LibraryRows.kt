@@ -32,10 +32,42 @@ sealed class LibRow {
         val poster: String?,
         val thumbnail: String?,
         val latestAdded: Double,
+        val inProgressCount: Int = 0,
+        val latestPlayed: Double = 0.0,
+        val year: Int? = null,
     ) : LibRow() {
         override val stableKey: String = "series:$key"
     }
+
+    data class AlbumRow(
+        val key: String,
+        val name: String,
+        val subtitle: String,
+        val items: List<MediaItem>,
+        val thumbnail: String?,
+        val latestAdded: Double,
+        val kind: String,
+    ) : LibRow() {
+        override val stableKey: String = "album:$kind:$key"
+    }
+
+    data class CollectionRow(
+        val collection: LibraryCollection,
+        val items: List<MediaItem>,
+        val thumbnail: String?,
+    ) : LibRow() {
+        override val stableKey: String = "collection:${collection.id}"
+    }
 }
+
+/** Une sélection locale par identifiants, ou une sélection automatique par filtres. */
+@com.squareup.moshi.JsonClass(generateAdapter = false)
+data class LibraryCollection(
+    val id: String,
+    val name: String,
+    val mediaIds: Set<String> = emptySet(),
+    val smartQuery: TvLibraryContent.Query? = null,
+)
 
 data class HomeShelf(
     val id: String,

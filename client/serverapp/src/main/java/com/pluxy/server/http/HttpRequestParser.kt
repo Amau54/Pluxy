@@ -12,6 +12,7 @@ internal data class HttpRequest(
     val query: Map<String, String>,
     val headers: Map<String, String>,
     val body: ByteArray,
+    val queryValues: Map<String, List<String>> = query.mapValues { listOf(it.value) },
 )
 
 internal class HttpFailure(
@@ -81,11 +82,13 @@ internal object HttpRequestParser {
         val target = parts[1]
         // '+' is literal in a path; only query values use form-style decoding.
         val path = decode(target.substringBefore('?').replace("+", "%2B"))
-        val query = target.substringAfter('?', "").split('&').mapNotNull { pair ->
+        val queryPairs = target.substringAfter('?', "").split('&').mapNotNull { pair ->
             if (pair.isBlank()) return@mapNotNull null
             decode(pair.substringBefore('=')) to decode(pair.substringAfter('=', ""))
-        }.toMap()
-        return HttpRequest(parts[0].uppercase(Locale.ROOT), path, query, headers, body)
+        }
+        val query = queryPairs.toMap()
+        val queryValues = queryPairs.groupBy({ it.first }, { it.second })
+        return HttpRequest(parts[0].uppercase(Locale.ROOT), path, query, headers, body, queryValues)
     }
 
     private fun contentLength(raw: String?): Int {

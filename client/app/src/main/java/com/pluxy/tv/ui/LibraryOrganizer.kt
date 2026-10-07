@@ -14,9 +14,13 @@ object LibraryOrganizer {
 
     internal fun matchesSearchKey(item: MediaItem, needle: String): Boolean {
         if (needle.isBlank()) return true
-        return listOfNotNull(item.title, item.seriesName, item.artist, item.album, item.folder)
-            .any { searchable(it).contains(needle) }
+        val haystack = searchKey(listOfNotNull(item.title, item.metadataTitle, item.seriesName, item.artist, item.album, item.folder)
+            .joinToString(" "))
+        return needle.split(WHITESPACE).filter { it.isNotBlank() }.all(haystack::contains)
     }
+
+    fun displayTitle(item: MediaItem): String = if (item.kind == "movie")
+        item.metadataTitle?.trim()?.takeIf { it.isNotEmpty() } ?: item.title else item.title
 
     /** Kotlin's sortedBy evaluates its selector for each comparison. Prepare expensive
      * Unicode keys once while retaining the stable order of equal normalized values. */
@@ -26,18 +30,44 @@ object LibraryOrganizer {
             .map { it.first }
 
     fun photoAlbumKey(item: MediaItem): String {
-        val folder = item.folder?.trim()?.takeIf { it.isNotEmpty() }
-        if (folder != null) return "folder:${searchable(folder)}"
-        if (!hasUsableDate(item.addedAt)) return UNKNOWN_DATE_KEY
-        return "date:${monthKey(item.addedAt)}"
+        item.folderId?.trim()?.takeIf { it.isNotEmpty() }?.let { return "source:$it" }
+        return "folder:${item.folder?.trim()?.takeIf { it.isNotEmpty() } ?: "Dossier principal"}"
     }
 
     fun photoAlbumLabel(item: MediaItem): String {
         item.folder?.trim()?.takeIf { it.isNotEmpty() }?.let { return it }
-        if (!hasUsableDate(item.addedAt)) return "Photos sans date"
-        return SimpleDateFormat("MMMM yyyy", Locale.FRENCH)
-            .format(epochDate(item.addedAt))
+        return "Dossier principal"
+    }
+
+    fun photoMonthKey(item: MediaItem): String = captureTime(item)?.let { "date:${monthKey(it)}" }
+        ?: UNKNOWN_DATE_KEY
+
+    fun photoMonthLabel(item: MediaItem): String = captureTime(item)?.let {
+        SimpleDateFormat("MMMM yyyy", Locale.FRENCH).format(epochDate(it))
             .replaceFirstChar { it.uppercaseChar() }
+    } ?: "Date de prise de vue inconnue"
+
+    fun captureTime(item: MediaItem): Double? = item.capturedAt?.takeIf(::hasUsableDate)
+
+    fun albumTracks(items: List<MediaItem>): List<MediaItem> = items.sortedWith(
+        compareBy<MediaItem> { it.discNumber?.takeIf { number -> number > 0 } ?: 1 }
+            .thenBy { it.trackNumber?.takeIf { number -> number > 0 }
+                ?: TRACK_PREFIX.find(it.path.substringAfterLast('/').substringAfterLast('\\'))
+                    ?.groupValues?.get(1)?.toIntOrNull()?.takeIf { number -> number > 0 } ?: Int.MAX_VALUE }
+            .thenBy { searchKey(it.title) }
+            .thenBy { it.id },
+    )
+
+    fun resolution(item: MediaItem): String? {
+        val width = item.width?.coerceAtLeast(0) ?: 0
+        val height = item.height?.coerceAtLeast(0) ?: 0
+        return when {
+            width >= 3840 || height >= 2160 -> "4k"
+            width >= 1920 || height >= 1080 -> "1080p"
+            width >= 1280 || height >= 720 -> "720p"
+            width > 0 || height > 0 -> "sd"
+            else -> null
+        }
     }
 
     fun audioAlbumKey(item: MediaItem): String {
@@ -45,7 +75,7 @@ object LibraryOrganizer {
         val artist = item.artist?.trim()?.takeIf { it.isNotEmpty() }
         if (album != null) return "album:${searchable(artist.orEmpty())}|${searchable(album)}"
         val folder = item.folder?.trim()?.takeIf { it.isNotEmpty() }
-        if (folder != null) return "folder:${searchable(folder)}"
+        if (folder != null) return "folder:${item.folderId ?: searchable(folder)}"
         if (artist != null) return "artist:${searchable(artist)}"
         return "untagged"
     }
@@ -74,13 +104,17 @@ object LibraryOrganizer {
         seconds.isFinite() && seconds in 1.0..MAX_EPOCH_SECONDS
 
     internal fun searchKey(value: String): String = Normalizer
-        .normalize(value.trim(), Normalizer.Form.NFD)
+        .normalize(value.trim(), Normalizer.Form.NFKD)
         .replace(COMBINING_MARKS, "")
         .lowercase(Locale.ROOT)
+        .replace("ß", "ss")
+        .replace('ς', 'σ')
 
     private fun searchable(value: String): String = searchKey(value)
 
     private val COMBINING_MARKS = Regex("\\p{M}+")
+    private val WHITESPACE = Regex("\\s+")
+    private val TRACK_PREFIX = Regex("^([0-9]{1,3})(?:[ ._-]|$)")
     private const val MAX_EPOCH_SECONDS = 4_102_444_800.0 // 2100-01-01 UTC
     private const val UNKNOWN_DATE_KEY = "date:unknown"
 }

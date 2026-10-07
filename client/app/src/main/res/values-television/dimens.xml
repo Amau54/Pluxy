@@ -3,7 +3,7 @@
     <dimen name="screen_pad">48dp</dimen>
     <dimen name="btn_text_size">16sp</dimen>
     <dimen name="library_card_width">124dp</dimen>
-    <dimen name="library_grid_card_width">124dp</dimen>
+    <dimen name="library_grid_card_width">108dp</dimen>
     <dimen name="library_shelf_height">268dp</dimen>
     <dimen name="library_section_size">18sp</dimen>
     <dimen name="card_title_size">16sp</dimen>

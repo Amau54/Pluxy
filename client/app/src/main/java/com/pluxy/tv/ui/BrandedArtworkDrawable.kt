@@ -33,10 +33,8 @@ class BrandedArtworkDrawable(
     private val lowerDecoration = Path()
     private var gradient: LinearGradient? = null
     private var labelText = ""
-    private var displayTitle = ""
     private var labelSize = 0f
     private var monogramSize = 0f
-    private var titleSize = 0f
     private var drawableAlpha = 255
 
     override fun onBoundsChange(bounds: Rect) {
@@ -79,13 +77,6 @@ class BrandedArtworkDrawable(
             maximum = height * 0.15f,
         )
         monogramSize = min(width * 0.3f, height * 0.42f)
-        titleSize = readableSize(
-            desired = width * 0.075f,
-            minimumSp = 16f,
-            maximum = height * 0.2f,
-        )
-        configureTitlePaint()
-        displayTitle = ellipsize(title.ifBlank { "Pluxy" }, width * 0.84f)
     }
 
     override fun draw(canvas: Canvas) {
@@ -105,7 +96,6 @@ class BrandedArtworkDrawable(
         canvas.clipRect(area)
         drawLabel(canvas, area)
         drawMonogram(canvas, area)
-        drawTitle(canvas, area)
         canvas.restore()
     }
 
@@ -139,26 +129,6 @@ class BrandedArtworkDrawable(
         canvas.drawText(symbol, x, y, textPaint)
     }
 
-    private fun drawTitle(canvas: Canvas, area: Rect) {
-        configureTitlePaint()
-        canvas.drawText(
-            displayTitle,
-            area.left + area.width() * 0.08f,
-            area.bottom - area.height() * 0.09f,
-            textPaint,
-        )
-    }
-
-    private fun configureTitlePaint() {
-        textPaint.apply {
-            color = Color.argb(drawableAlpha, 255, 255, 255)
-            typeface = BOLD_TYPEFACE
-            textSize = titleSize
-            letterSpacing = 0f
-            textAlign = Paint.Align.LEFT
-        }
-    }
-
     private fun readableSize(desired: Float, minimumSp: Float, maximum: Float): Float {
         val minimum = minimumSp * spToPx.coerceAtLeast(1f)
         return desired.coerceAtLeast(minimum).coerceAtMost(maximum.coerceAtLeast(minimum))
@@ -166,15 +136,6 @@ class BrandedArtworkDrawable(
 
     private fun effectiveAlpha(sourceAlpha: Int): Int =
         sourceAlpha * drawableAlpha / 255
-
-    private fun ellipsize(value: String, maxWidth: Float): String {
-        if (textPaint.measureText(value) <= maxWidth) return value
-        var shortened = value
-        while (shortened.length > 1 && textPaint.measureText("$shortened…") > maxWidth) {
-            shortened = shortened.dropLast(1)
-        }
-        return "$shortened…"
-    }
 
     override fun setAlpha(alpha: Int) {
         drawableAlpha = alpha.coerceIn(0, 255)

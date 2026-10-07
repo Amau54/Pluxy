@@ -127,7 +127,8 @@ class PluxyApplication : Application() {
             .apply()
 
         fun libraryTab(ctx: Context): String {
-            val stored = prefs(ctx).getString(KEY_LIBRARY_TAB, null)
+            val scopedKey = "$KEY_LIBRARY_TAB:${serverBaseUrl(ctx)}"
+            val stored = prefs(ctx).getString(scopedKey, null) ?: prefs(ctx).getString(KEY_LIBRARY_TAB, null)
             if (stored in setOf("home", "movie", "series", "photo", "audio")) return stored!!
             // Migration douce : respecte l'ancien filtre Film/Série au premier lancement.
             return libraryType(ctx).takeIf { it == "movie" || it == "series" } ?: "home"
@@ -135,7 +136,7 @@ class PluxyApplication : Application() {
 
         fun setLibraryTab(ctx: Context, value: String) {
             if (value !in setOf("home", "movie", "series", "photo", "audio")) return
-            prefs(ctx).edit().putString(KEY_LIBRARY_TAB, value).apply()
+            prefs(ctx).edit().putString("$KEY_LIBRARY_TAB:${serverBaseUrl(ctx)}", value).apply()
         }
 
         /** Préférences propres à chaque TV/profil Android, sans modifier la bibliothèque familiale. */

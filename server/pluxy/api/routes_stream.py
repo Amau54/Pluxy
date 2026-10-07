@@ -467,6 +467,12 @@ def _mime_for(container: str) -> str:
         "ts": "video/mp2t",
         "mov": "video/quicktime",
         "avi": "video/x-msvideo",
+        "jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",
+        "webp": "image/webp", "gif": "image/gif", "bmp": "image/bmp",
+        "tif": "image/tiff", "tiff": "image/tiff",
+        "mp3": "audio/mpeg", "flac": "audio/flac", "m4a": "audio/mp4", "m4b": "audio/mp4",
+        "aac": "audio/aac", "ogg": "audio/ogg", "oga": "audio/ogg", "opus": "audio/ogg",
+        "wav": "audio/wav", "wma": "audio/x-ms-wma",
     }.get(container.lower(), "application/octet-stream")
 
 

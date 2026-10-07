@@ -20,6 +20,7 @@ class WatchStateStoreTest {
         val second = store.update("a", 400, 1000, "session_B", 0)
         assertEquals(second, store.update("a", 900, 1000, "session_A", 99))
         assertEquals(2, writes)
+        assertEquals(2L, store.revision)
         assertEquals(second, store().get("a")) // Ordering survives process reconstruction.
     }
 
@@ -47,8 +48,10 @@ class WatchStateStoreTest {
         assertThrows(IOException::class.java) { store.update("a", 300, 1000, "session_A", 2) }
         assertEquals(old, store.get("a"))
         assertEquals(old, records["a"])
+        assertEquals(1L, store.revision)
         fail = false
         assertEquals(300L, store.update("a", 300, 1000, "session_A", 2).state.positionMs)
+        assertEquals(2L, store.revision)
     }
 
     @Test fun `protocol validates pair token and nonnegative integer`() {

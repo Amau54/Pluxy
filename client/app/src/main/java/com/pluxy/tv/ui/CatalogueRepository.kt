@@ -32,8 +32,8 @@ internal class CatalogueStore(
     private var revision = 0L
 
     /** Rendering an existing snapshot must not wait for validation or extend its freshness. */
-    suspend fun cached(serverUrl: String): Snapshot? = mutex.withLock {
-        val key = catalogueServerKey(serverUrl)
+    suspend fun cached(serverUrl: String, mediaKind: String = "all"): Snapshot? = mutex.withLock {
+        val key = scopedCatalogueKey(serverUrl, mediaKind)
         val entry = entries.remove(key) ?: return@withLock null
         entries[key] = entry
         entry.snapshot
@@ -42,9 +42,10 @@ internal class CatalogueStore(
     suspend fun load(
         serverUrl: String,
         forceRefresh: Boolean = false,
+        mediaKind: String = "all",
         loader: suspend () -> List<MediaItem>,
     ): Snapshot {
-        val key = catalogueServerKey(serverUrl)
+        val key = scopedCatalogueKey(serverUrl, mediaKind)
         val result = mutex.withLock {
             val previous = entries[key]
             if (!forceRefresh && previous != null && clockMs() - previous.validatedAtMs < freshnessMs) {
@@ -62,7 +63,7 @@ internal class CatalogueStore(
                     mutex.withLock {
                         if (inFlight[key] !== pending) throw CancellationException("Catalogue invalidated")
                         val old = entries[key]?.snapshot
-                        val fresh = if (old?.items == items) old else Snapshot(key, ++revision, items)
+                        val fresh = if (old?.items == items) old else Snapshot(catalogueServerKey(serverUrl), ++revision, items)
                         entries.remove(key)
                         entries[key] = Entry(fresh, clockMs())
                         while (entries.size > capacity.coerceAtLeast(1)) entries.remove(entries.keys.first())
@@ -83,14 +84,23 @@ internal class CatalogueStore(
     }
 
     suspend fun invalidate(serverUrl: String) = mutex.withLock {
-        val key = catalogueServerKey(serverUrl)
-        entries.remove(key)
-        inFlight.remove(key)?.let {
-            it.result.cancel(CancellationException("Catalogue invalidated"))
-            it.job?.cancel()
+        val server = catalogueServerKey(serverUrl)
+        val keys = (entries.keys + inFlight.keys).filter { it == server || it.startsWith("$server#") }
+        keys.forEach { key ->
+            entries.remove(key)
+            inFlight.remove(key)?.let {
+                it.result.cancel(CancellationException("Catalogue invalidated"))
+                it.job?.cancel()
+            }
         }
         Unit
     }
+}
+
+private fun scopedCatalogueKey(serverUrl: String, mediaKind: String): String {
+    require(mediaKind in setOf("all", "movie", "series", "photo", "audio")) { "Invalid catalogue kind" }
+    val server = catalogueServerKey(serverUrl)
+    return if (mediaKind == "all") server else "$server#$mediaKind"
 }
 
 internal fun catalogueServerKey(value: String): String {
@@ -104,13 +114,14 @@ internal fun catalogueServerKey(value: String): String {
 internal object CatalogueRepository {
     private val store = CatalogueStore()
 
-    suspend fun cached(serverUrl: String): CatalogueStore.Snapshot? = store.cached(serverUrl)
+    suspend fun cached(serverUrl: String, mediaKind: String = "all"): CatalogueStore.Snapshot? = store.cached(serverUrl, mediaKind)
 
     suspend fun load(
         serverUrl: String,
         forceRefresh: Boolean = false,
+        mediaKind: String = "all",
         loader: suspend () -> List<MediaItem>,
-    ): CatalogueStore.Snapshot = store.load(serverUrl, forceRefresh, loader)
+    ): CatalogueStore.Snapshot = store.load(serverUrl, forceRefresh, mediaKind, loader)
 
     suspend fun invalidate(serverUrl: String) = store.invalidate(serverUrl)
 }

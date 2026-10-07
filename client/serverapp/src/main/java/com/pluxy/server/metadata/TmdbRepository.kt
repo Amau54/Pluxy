@@ -1,9 +1,13 @@
 package com.pluxy.server.metadata
 
 import android.content.Context
+import android.util.AtomicFile
 import com.pluxy.server.ServerPreferences
 import com.pluxy.server.library.MediaEntry
 import com.pluxy.server.library.putNullable
+import com.pluxy.server.library.BrowseMetadata
+import com.pluxy.server.library.metadataGenres
+import com.pluxy.server.library.optStringOrNull
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
@@ -17,8 +21,10 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.IOException
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 
 /** Enrichissement facultatif TMDB, mis en cache localement et jamais requis pour lire. */
 class TmdbRepository(
@@ -28,23 +34,41 @@ class TmdbRepository(
     private val cacheDir = File(context.filesDir, "metadata").apply { mkdirs() }
     private val requestMutex = Mutex()
     private val enriching = AtomicBoolean(false)
+    private val browseFacts = mutableMapOf<String, BrowseMetadata>()
+    private val publication = AtomicLong()
+    internal val revision: Long get() = publication.get()
     private val http = OkHttpClient.Builder()
         .connectTimeout(8, TimeUnit.SECONDS)
         .readTimeout(15, TimeUnit.SECONDS)
         .retryOnConnectionFailure(true)
         .build()
 
+    @Synchronized
     fun cached(itemId: String): JSONObject? {
         val file = cacheFile(itemId)
-        if (!file.exists()) return null
-        return runCatching { JSONObject(file.readText(Charsets.UTF_8)) }.getOrNull()
+        if (!file.exists() && !File(file.path + ".bak").exists()) return null
+        return runCatching { JSONObject(AtomicFile(file).openRead().bufferedReader(Charsets.UTF_8).use { it.readText() }) }.getOrNull()
     }
 
+    /** Filter only stored metadata; no network calls and no repeated full JSON reads across pages. */
+    @Synchronized
+    internal fun facts(itemId: String): BrowseMetadata = browseFacts.getOrPut(itemId) {
+        factsFromJson(cached(itemId))
+    }
+
+    private fun factsFromJson(json: JSONObject?): BrowseMetadata = BrowseMetadata(
+        year = json?.optInt("year", 0)?.takeIf { it > 0 }, genres = metadataGenres(json),
+        title = json?.takeIf { it.optBoolean("matched", false) }?.optStringOrNull("title"),
+    )
+
+    @Synchronized
     fun prune(validIds: Set<String>) {
+        var changed = false
         cacheDir.listFiles()?.forEach { file ->
             val id = file.name.substringBeforeLast('.')
-            if (id !in validIds) runCatching { file.delete() }
+            if (id !in validIds && runCatching { file.delete() }.getOrDefault(false)) changed = true
         }
+        synchronized(this) { browseFacts.keys.retainAll(validIds); if (changed) publication.incrementAndGet() }
     }
 
     suspend fun get(item: MediaEntry, force: Boolean = false): JSONObject = withContext(Dispatchers.IO) {
@@ -271,15 +295,22 @@ class TmdbRepository(
         }
     }
 
+    @Synchronized
     private fun save(itemId: String, json: JSONObject) {
-        val file = cacheFile(itemId)
-        val temp = File(cacheDir, "$itemId.tmp")
-        val payload = json.toString()
-        temp.writeText(payload, Charsets.UTF_8)
-        if (!temp.renameTo(file)) {
-            file.writeText(payload, Charsets.UTF_8)
-            temp.delete()
+        val file = AtomicFile(cacheFile(itemId))
+        val payload = json.toString().toByteArray(Charsets.UTF_8)
+        val output = file.startWrite()
+        try {
+            output.write(payload)
+            output.fd.sync()
+            file.finishWrite(output)
+            // AtomicFile may log a rename failure without throwing: publish facts only after verification.
+            if (!file.openRead().use { it.readBytes() }.contentEquals(payload)) throw IOException("Publication des métadonnées échouée")
+        } catch (error: Exception) {
+            file.failWrite(output)
+            throw error
         }
+        synchronized(this) { browseFacts[itemId] = factsFromJson(json); publication.incrementAndGet() }
     }
 
     private fun cacheFile(itemId: String) = File(cacheDir, "$itemId.json")

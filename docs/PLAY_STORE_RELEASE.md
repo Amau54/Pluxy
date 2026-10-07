@@ -70,7 +70,7 @@ Les APK debug et les applications installées depuis Play peuvent porter des
 certificats différents. Pour changer de canal, sauvegarder les réglages disponibles
 avant une désinstallation : elle efface les données privées de l'application.
 
-La version 1.5.5 cible le SDK 36. Avant de cibler le SDK 37, prévoir l'autorisation
+La version 1.6.0 cible le SDK 36. Avant de cibler le SDK 37, prévoir l'autorisation
 runtime `ACCESS_LOCAL_NETWORK` ou les sélecteurs système adaptés, avec gestion du
 refus. Serveur, découverte et DLNA utilisent le réseau local. Voir la
 [documentation Android](https://developer.android.com/privacy-and-security/local-network-permission).

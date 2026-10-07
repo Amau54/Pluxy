@@ -48,6 +48,16 @@
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:textColorHint">?attr/pluxyTextTertiary</item>
         <item name="android:fontFamily">sans-serif</item>
+        <item name="alertDialogTheme">@style/ThemeOverlay.Pluxy.Dialog</item>
+    </style>
+
+    <style name="ThemeOverlay.Pluxy.Dialog" parent="ThemeOverlay.AppCompat.Dialog.Alert">
+        <item name="android:windowBackground">@drawable/bg_glass_dialog</item>
+        <item name="android:colorBackground">@android:color/transparent</item>
+        <item name="android:textColorPrimary">?attr/pluxyTextPrimary</item>
+        <item name="android:textColorSecondary">?attr/pluxyTextSecondary</item>
+        <item name="colorAccent">?attr/pluxyAccent</item>
+        <item name="android:backgroundDimAmount">0.65</item>
     </style>
 
     <!-- ===================== Typographie ===================== -->

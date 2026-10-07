@@ -25,6 +25,7 @@ import coil.load
 import com.pluxy.tv.R
 import com.pluxy.tv.api.LanMediaImages
 import com.pluxy.tv.api.MediaItem
+import com.pluxy.tv.api.LibraryRequest
 import com.pluxy.tv.api.PluxyApi
 import com.pluxy.tv.api.networkOrNull
 import com.squareup.moshi.Moshi
@@ -64,6 +65,8 @@ class PhotoActivity : ThemedActivity() {
     private var slideshowRunning = false
     private var chromeVisible = true
     private var selectedFolder = ""
+    private var selectedAlbumKey = ""
+    private var collectionId = ""
     private var activityStarted = false
     private var imageDisplayed = false
     private var imageRequestVersion = 0L
@@ -109,6 +112,8 @@ class PhotoActivity : ThemedActivity() {
         errorView = findViewById(R.id.photoError)
         photos = listOf(initial)
         selectedFolder = savedInstanceState?.getString(STATE_FOLDER) ?: intent.getStringExtra(EXTRA_FOLDER).orEmpty()
+        selectedAlbumKey = savedInstanceState?.getString(STATE_ALBUM_KEY) ?: intent.getStringExtra(EXTRA_ALBUM_KEY).orEmpty()
+        collectionId = savedInstanceState?.getString(STATE_COLLECTION_ID) ?: intent.getStringExtra(EXTRA_COLLECTION_ID).orEmpty()
         slideshowRunning = savedInstanceState?.getBoolean(STATE_SLIDESHOW) ?: false
 
         bindPhotoGestures()
@@ -149,14 +154,23 @@ class PhotoActivity : ThemedActivity() {
         if (chromeVisible) scheduleChromeHide()
 
         lifecycleScope.launch {
-            val snapshot = networkOrNull { CatalogueRepository.load(api.abs("/")) { api.listItems() } }
+            val snapshot = networkOrNull { CatalogueRepository.load(api.abs("/"), mediaKind = "photo") {
+                val reader = PluxyApi(api.baseUrl)
+                try { reader.listItems(LibraryRequest(kind = "photo")) } finally { reader.close() }
+            } }
                 ?: return@launch
             val folder = selectedFolder
             val (fresh, validFolder) = withContext(Dispatchers.Default) {
                 val valid = validPhotoFolder(snapshot.items, folder)
-                snapshot.items.filter { it.kind == "photo" }
-                    .filter { valid.isBlank() || TvLibraryContent.photoFolderLabel(it) == valid }
-                    .sortedByDescending { it.addedAt } to valid
+                val allowed = if (collectionId.isBlank()) snapshot.items else {
+                    LibraryPreferences.collections(this@PhotoActivity, api.baseUrl).firstOrNull { it.id == collectionId }
+                        ?.let { TvLibraryContent.collectionItems(snapshot.items, it) }.orEmpty()
+                }
+                allowed.filter { it.kind == "photo" }
+                    .filter { if (selectedAlbumKey.isNotBlank()) LibraryOrganizer.photoAlbumKey(it) == selectedAlbumKey
+                        else valid.isBlank() || TvLibraryContent.photoFolderLabel(it) == valid }
+                    .sortedWith(compareByDescending<MediaItem> { LibraryOrganizer.captureTime(it) ?: -1.0 }
+                        .thenByDescending { it.addedAt }) to valid
             }
             selectedFolder = validFolder
             if (fresh.isNotEmpty()) {
@@ -422,6 +436,8 @@ class PhotoActivity : ThemedActivity() {
     override fun onSaveInstanceState(outState: Bundle) {
         photos.getOrNull(index)?.let { outState.putString(STATE_ITEM, moshi.adapter(MediaItem::class.java).toJson(it)) }
         outState.putString(STATE_FOLDER, selectedFolder)
+        outState.putString(STATE_ALBUM_KEY, selectedAlbumKey)
+        outState.putString(STATE_COLLECTION_ID, collectionId)
         outState.putBoolean(STATE_SLIDESHOW, slideshowRunning)
         outState.putBoolean(STATE_CHROME, chromeVisible)
         outState.putInt(STATE_FOCUSED_CONTROL, currentFocus?.takeIf { it !== photoView }?.id ?: View.NO_ID)
@@ -432,14 +448,19 @@ class PhotoActivity : ThemedActivity() {
         imageRequestVersion++
         handler.removeCallbacksAndMessages(null)
         if (::photoView.isInitialized) photoView.dispose()
+        api.close()
         super.onDestroy()
     }
 
     companion object {
         const val EXTRA_ITEM = "extra_photo_item_json"
         const val EXTRA_FOLDER = "extra_photo_folder"
+        const val EXTRA_ALBUM_KEY = "extra_photo_album_key"
+        const val EXTRA_COLLECTION_ID = "extra_photo_collection_id"
         private const val STATE_ITEM = "photo_current_item"
         private const val STATE_FOLDER = "photo_current_folder"
+        private const val STATE_ALBUM_KEY = "photo_current_album_key"
+        private const val STATE_COLLECTION_ID = "photo_current_collection_id"
         private const val STATE_SLIDESHOW = "photo_slideshow_requested"
         private const val STATE_CHROME = "photo_chrome_visible"
         private const val STATE_FOCUSED_CONTROL = "photo_focused_control"

@@ -30,6 +30,7 @@ import com.pluxy.tv.R
 import com.pluxy.tv.api.LanMediaImages
 import com.pluxy.tv.api.LanUrlPolicy
 import com.pluxy.tv.api.MediaItem
+import com.pluxy.tv.api.LibraryRequest
 import com.pluxy.tv.api.PluxyApi
 import com.pluxy.tv.api.RatingItem
 import com.pluxy.tv.player.PlayerActivity
@@ -139,8 +140,9 @@ class SeriesActivity : ThemedActivity() {
         showLoading(allEpisodes.isEmpty())
         loadJob = lifecycleScope.launch {
             val eps = try {
-                val snapshot = CatalogueRepository.load(api.abs("/"), forceRefresh = allEpisodes.isNotEmpty()) {
-                    api.listItems()
+                val snapshot = CatalogueRepository.load(api.abs("/"), forceRefresh = allEpisodes.isNotEmpty(), mediaKind = "series") {
+                    val reader = PluxyApi(api.baseUrl)
+                    try { reader.listItems(LibraryRequest(kind = "series")) } finally { reader.close() }
                 }
                 withContext(Dispatchers.Default) { TvLibraryContent.seriesEpisodes(snapshot.items, key, name) }
             } catch (cancelled: CancellationException) {

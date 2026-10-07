@@ -16,6 +16,7 @@ import json
 import re
 import threading
 import time
+import uuid
 from collections import OrderedDict
 from weakref import WeakValueDictionary
 from pathlib import Path
@@ -71,6 +72,37 @@ class MetadataProvider:
         self._tv_cache: dict[str, MovieMetadata] = {}
         self._memory: OrderedDict[str, tuple[int, dict]] = OrderedDict()
         self._key_locks = WeakValueDictionary()
+        self._catalogue: dict[str, MovieMetadata] | None = None
+        self._catalogue_ids: frozenset[str] | None = None
+        self._revision = 0
+        self._epoch = uuid.uuid4().hex
+
+    @staticmethod
+    def _summary(meta: dict | MovieMetadata) -> MovieMetadata:
+        value = meta.model_dump() if isinstance(meta, MovieMetadata) else meta
+        return MovieMetadata.model_validate({key: value[key] for key in
+                                            ("title", "year", "poster_url", "matched", "genres", "source")
+                                            if key in value})
+
+    def snapshot(self, item_ids: frozenset[str] | None = None) -> tuple[str, dict[str, MovieMetadata]]:
+        """Chargement groupé initial, puis zéro accès disque pour les listes."""
+        with self._lock:
+            if self._catalogue is None or (item_ids is not None and item_ids != self._catalogue_ids):
+                values = {item_id: meta for item_id, meta in (self._catalogue or {}).items()
+                          if item_ids is None or item_id in item_ids}
+                for path in self.meta_dir.glob("*.json"):
+                    if len(values) >= 10_000:
+                        break
+                    if path.stem in values or (item_ids is not None and path.stem not in item_ids):
+                        continue
+                    try:
+                        record = json.loads(path.read_text(encoding="utf-8"))
+                        values[path.stem] = self._summary(record.get("metadata", record))
+                    except (OSError, ValueError, TypeError, AttributeError):
+                        continue
+                self._catalogue = values
+                self._catalogue_ids = item_ids
+            return f"{self._epoch}-{self._revision}", self._catalogue
 
     # -- Cache ------------------------------------------------------------- #
     def _cache_path(self, item_id: str) -> Path:
@@ -115,6 +147,12 @@ class MetadataProvider:
         record = {"metadata": meta.model_dump(), "fingerprint": fingerprint,
                   "retry_at": time.time() + 60 if not meta.matched else 0}
         atomic_write_text(self._cache_path(item_id), json.dumps(record, ensure_ascii=False))
+        with self._lock:
+            # Copier permet aux lecteurs de terminer sur un instantané cohérent.
+            if self._catalogue is not None:
+                self._catalogue = {**self._catalogue, item_id: self._summary(meta)}
+            self._memory.pop(item_id, None)
+            self._revision += 1
 
     # -- API publique ------------------------------------------------------ #
     def get(self, item: MediaItem, force: bool = False, share_series: bool = False) -> MovieMetadata:
@@ -126,7 +164,7 @@ class MetadataProvider:
     def _get(self, item: MediaItem, force: bool = False, share_series: bool = False) -> MovieMetadata:
         cfg = self.cfgm.cfg.metadata
         fingerprint = hashlib.sha256(json.dumps([
-            cfg.model_dump(), item.title, item.series_key, item.added_at, item.size,
+            cfg.model_dump(), item.title, item.series_key, item.modified_at, item.size,
         ], sort_keys=True).encode()).hexdigest()
         is_series = item.kind == "series" and bool(item.series_name)
 

@@ -1,6 +1,7 @@
 package com.pluxy.server
 
 import java.io.IOException
+import java.util.concurrent.atomic.AtomicLong
 
 internal fun verifyWatchPublication(expected: ByteArray, readPublished: () -> ByteArray) {
     if (!readPublished().contentEquals(expected)) throw IOException("Publication de l'historique échouée")
@@ -27,6 +28,8 @@ internal class WatchStateStore(
     private val now: () -> Long = System::currentTimeMillis,
 ) {
     private val records = mutableMapOf<String, WatchRecord>()
+    private val publication = AtomicLong()
+    val revision: Long get() = publication.get()
 
     @Synchronized
     fun get(id: String): WatchRecord = records.getOrPut(id) { load(id) }
@@ -55,12 +58,14 @@ internal class WatchStateStore(
         )
         persist(id, next)
         records[id] = next
+        publication.incrementAndGet()
         return next
     }
 
     @Synchronized
     fun forget(ids: Set<String>, delete: (String) -> Unit = {}) {
         ids.forEach { delete(it); records.remove(it) }
+        if (ids.isNotEmpty()) publication.incrementAndGet()
     }
 
     companion object { private val SESSION = Regex("[A-Za-z0-9_-]{8,64}") }

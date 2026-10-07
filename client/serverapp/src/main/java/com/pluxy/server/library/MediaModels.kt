@@ -3,6 +3,7 @@ package com.pluxy.server.library
 import com.pluxy.server.WatchState
 import org.json.JSONArray
 import org.json.JSONObject
+import java.security.MessageDigest
 
 data class SubtitleEntry(
     val uri: String,
@@ -37,11 +38,15 @@ data class MediaEntry(
     val album: String?,
     val folder: String?,
     val subtitles: List<SubtitleEntry>,
-    val probeRevision: Int = 3,
+    val probeRevision: Int = 4,
     val sourceKey: String? = null,
     val available: Boolean = true,
     val discNumber: Int? = null,
     val trackNumber: Int? = null,
+    val addedAtMs: Long = modifiedAtMs,
+    val capturedAtMs: Long? = null,
+    val folderId: String? = null,
+    val relativePath: String? = null,
 ) {
     fun publicJson(metadata: JSONObject?, watch: WatchState): JSONObject {
         val videoMetadata = metadata.takeIf { kind == "movie" || kind == "series" }
@@ -57,6 +62,7 @@ data class MediaEntry(
         return JSONObject().apply {
             put("id", id)
             put("title", title)
+            putNullable("metadata_title", videoMetadata?.takeIf { metadataMatched }?.optStringOrNull("title"))
             put("path", "")
             put("container", container)
             put("size", size)
@@ -71,7 +77,10 @@ data class MediaEntry(
             put("available", available)
             putNullable("disc_number", discNumber)
             putNullable("track_number", trackNumber)
-            put("added_at", modifiedAtMs / 1000.0)
+            put("added_at", addedAtMs / 1000.0)
+            put("modified_at", modifiedAtMs / 1000.0)
+            putNullable("captured_at", capturedAtMs?.let { it / 1000.0 })
+            put("genres", JSONArray(metadataGenres(videoMetadata)))
             putNullable("series_name", seriesName)
             putNullable("series_key", seriesKey)
             putNullable("season", season)
@@ -79,6 +88,8 @@ data class MediaEntry(
             putNullable("artist", artist)
             putNullable("album", album)
             putNullable("folder", folder)
+            putNullable("folder_id", folderId ?: folderIdentity(sourceKey ?: "", folder.orEmpty()))
+            putNullable("relative_path", relativePath)
             putNullable("thumbnail_url", localThumbnailUrl(kind, id))
             put("external_subs", JSONArray().apply {
                 subtitles.forEach { put("") }
@@ -116,6 +127,8 @@ data class MediaEntry(
         putNullable("mime_type", mimeType)
         put("size", size)
         put("modified_at_ms", modifiedAtMs)
+        put("added_at_ms", addedAtMs)
+        putNullable("captured_at_ms", capturedAtMs)
         put("duration_seconds", durationSeconds)
         putNullable("width", width)
         putNullable("height", height)
@@ -131,6 +144,8 @@ data class MediaEntry(
         putNullable("artist", artist)
         putNullable("album", album)
         putNullable("folder", folder)
+        putNullable("folder_id", folderId)
+        putNullable("relative_path", relativePath)
         put("subtitles", JSONArray().apply {
             subtitles.forEach { sub ->
                 put(JSONObject().apply {
@@ -192,9 +207,30 @@ data class MediaEntry(
             available = json.optBoolean("available", true),
             discNumber = json.optIntOrNull("disc_number"),
             trackNumber = json.optIntOrNull("track_number"),
+            addedAtMs = migratedAddedAt(if (json.has("added_at_ms") && !json.isNull("added_at_ms")) json.optLong("added_at_ms", 0) else null,
+                json.optLong("modified_at_ms", 0)),
+            capturedAtMs = json.optLong("captured_at_ms", 0).takeIf { it > 0 },
+            folderId = json.optStringOrNull("folder_id"),
+            relativePath = json.optStringOrNull("relative_path"),
         )
     }
 }
+
+/** Old indexes only recorded modification: retain their ordering without inventing a date. */
+internal fun migratedAddedAt(addedAtMs: Long?, modifiedAtMs: Long): Long =
+    addedAtMs?.coerceAtLeast(0) ?: modifiedAtMs.coerceAtLeast(0)
+
+internal fun metadataGenres(metadata: JSONObject?): List<String> = buildList {
+    val values = metadata?.optJSONArray("genres") ?: return@buildList
+    for (index in 0 until values.length()) {
+        val name = values.opt(index) as? String ?: continue
+        name.trim().takeIf { it.isNotEmpty() && it !in this }?.let(::add)
+    }
+}
+
+/** Distinguish identically named folders without sending content URIs to a client. */
+internal fun folderIdentity(source: String, folder: String): String = MessageDigest.getInstance("SHA-256")
+    .digest("$source\u0000$folder".toByteArray(Charsets.UTF_8)).take(12).joinToString("") { "%02x".format(it.toInt() and 0xff) }
 
 internal fun localThumbnailUrl(kind: String, id: String): String? =
     if (kind in setOf("photo", "audio", "movie", "series")) {

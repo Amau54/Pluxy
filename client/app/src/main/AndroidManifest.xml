@@ -65,6 +65,10 @@
             android:exported="false" />
 
         <activity
+            android:name=".ui.AlbumActivity"
+            android:exported="false" />
+
+        <activity
             android:name=".ui.AudioPlayerActivity"
             android:exported="false" />
 

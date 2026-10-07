@@ -43,6 +43,7 @@ class MediaInfo(BaseModel):
     size: int = 0                           # octets
     overall_bitrate: int = 0                # bits/s
     streams: List[MediaStream] = Field(default_factory=list)
+    tags: dict[str, str] = Field(default_factory=dict)
 
     # Helpers ----------------------------------------------------------------
     @property
@@ -78,9 +79,10 @@ class MediaItem(BaseModel):
     height: Optional[int] = None
     video_codec: Optional[str] = None
     is_hdr: bool = False
-    # Type (film/série) déduit du nom/chemin, et date d'ajout (mtime) pour le tri.
-    kind: str = "movie"                # movie | series
-    added_at: float = 0.0              # mtime du fichier (tri « récemment ajouté »)
+    kind: str = "movie"                # movie | series | photo | audio
+    added_at: float = 0.0              # Première découverte par Pluxy
+    modified_at: float = 0.0           # mtime technique : invalidation de l'analyse
+    captured_at: Optional[float] = None  # Date EXIF, absente si inconnue
     # Regroupement des séries : nom (affichage) + CLÉ CANONIQUE de regroupement
     # (insensible casse/accents/tags/saison -> les épisodes d'une même série fusionnent
     # même répartis sur plusieurs dossiers/orthographes) + saison/épisode.
@@ -93,9 +95,13 @@ class MediaItem(BaseModel):
     subtitles: List[SubtitleTrack] = Field(default_factory=list)
     # Renseignés depuis le cache de métadonnées s'il existe (affichage grille).
     year: Optional[int] = None
+    metadata_title: Optional[str] = None
+    genres: List[str] = Field(default_factory=list)
     poster_url: Optional[str] = None
     thumbnail_url: Optional[str] = None
     folder: Optional[str] = None
+    folder_id: Optional[str] = None
+    relative_path: Optional[str] = None
     has_metadata: bool = False
     # État de visionnage, fusionné À LA VOLÉE depuis le suivi de lecture (persistant).
     watched: bool = False             # vu (lecture > 95 %)
@@ -106,6 +112,8 @@ class MediaItem(BaseModel):
     probe_retry_at: float = 0.0
     track_number: Optional[int] = None
     disc_number: Optional[int] = None
+    artist: Optional[str] = None
+    album: Optional[str] = None
 
 
 class CastMember(BaseModel):

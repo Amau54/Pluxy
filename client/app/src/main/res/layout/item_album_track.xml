@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="64dp"
+    android:layout_marginBottom="4dp" android:padding="12dp" android:gravity="center_vertical"
+    android:orientation="horizontal" android:background="@drawable/bg_section_header"
+    android:focusable="true" android:clickable="true" android:stateListAnimator="@animator/focus_lift_btn">
+    <TextView android:id="@+id/trackNumber" android:layout_width="36dp" android:layout_height="wrap_content"
+        android:gravity="center" android:textColor="?attr/pluxyTextSecondary" android:textSize="@dimen/auxiliary_meta_size"
+        android:importantForAccessibility="no" />
+    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+        android:layout_marginStart="8dp" android:orientation="vertical">
+        <TextView android:id="@+id/trackTitle" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:textColor="?attr/pluxyTextPrimary" android:textSize="@dimen/card_title_size"
+            android:fontFamily="sans-serif-medium" android:maxLines="2" android:ellipsize="end" />
+        <TextView android:id="@+id/trackSubtitle" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="3dp" android:textColor="?attr/pluxyTextSecondary"
+            android:textSize="@dimen/card_meta_size" android:maxLines="1" android:ellipsize="end" />
+    </LinearLayout>
+    <TextView android:id="@+id/trackDuration" android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:layout_marginStart="12dp" android:textColor="?attr/pluxyTextSecondary"
+        android:textSize="@dimen/auxiliary_meta_size" android:importantForAccessibility="no" />
+</LinearLayout>

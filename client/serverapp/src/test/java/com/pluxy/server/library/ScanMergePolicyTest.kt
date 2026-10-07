@@ -13,6 +13,21 @@ internal fun testEntry(id: String, source: LibrarySource, available: Boolean = t
 class ScanMergePolicyTest {
     private val one = LibrarySource(LibrarySourceKind.AUDIO, "content://docs/tree/one")
     private val two = LibrarySource(LibrarySourceKind.AUDIO, "content://docs/tree/two")
+    @Test fun `rescanning a modified file retains first discovery and identity`() {
+        val old = testEntry("a", one).copy(addedAtMs = 10, modifiedAtMs = 5)
+        val fresh = old.copy(addedAtMs = 500, modifiedAtMs = 400, size = 40)
+        val result = ScanMergePolicy.merge(listOf(old), listOf(fresh), listOf(one), emptySet(), 100).single()
+        assertEquals(10L, result.addedAtMs)
+        assertEquals(400L, result.modifiedAtMs)
+        assertEquals(40L, result.size)
+        assertEquals(old.id, result.id)
+    }
+    @Test fun `old indexes retain their only known date and do not fabricate discovery`() {
+        assertEquals(25L, migratedAddedAt(null, 25))
+        assertEquals(10L, migratedAddedAt(10, 500))
+        assertEquals(0L, migratedAddedAt(0, 500))
+        assertEquals(0L, migratedAddedAt(null, -1))
+    }
     @Test fun `partial source preserves missing entries and successful source deletes absent media`() {
         val old = listOf(testEntry("a", one), testEntry("b", two))
         val result = ScanMergePolicy.merge(old, emptyList(), listOf(one, two), setOf(one.identity()), 100)

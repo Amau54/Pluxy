@@ -8,6 +8,9 @@ import com.pluxy.server.NetworkUtils
 import com.pluxy.server.ServerPreferences
 import com.pluxy.server.WatchState
 import com.pluxy.server.library.CatalogRevisionChanged
+import com.pluxy.server.library.BrowseEntry
+import com.pluxy.server.library.LibraryBrowseCatalog
+import com.pluxy.server.library.LibraryQuery
 import com.pluxy.server.library.MediaEntry
 import com.pluxy.server.library.MediaLibrary
 import com.pluxy.server.library.MediaSupport
@@ -56,6 +59,7 @@ class PluxyHttpServer(
     private var workers: HttpWorkScheduler? = null
     private var inactivityMonitor: ScheduledExecutorService? = null
     private val activeClients = ConcurrentHashMap<Socket, ConnectionActivity>()
+    @Volatile private var browseSnapshot: LibraryBrowseCatalog? = null
 
     @Volatile
     private var running = false
@@ -230,13 +234,33 @@ class PluxyHttpServer(
             request.path == "/api/library/items/page" && request.method in setOf("GET", "HEAD") -> {
                 val limit = request.query["limit"]?.toIntOrNull() ?: if ("limit" in request.query) throw HttpFailure(400, "limit invalide") else 500
                 val offset = request.query["offset"]?.toIntOrNull() ?: if ("offset" in request.query) throw HttpFailure(400, "offset invalide") else 0
-                val page = try { library.page(limit, offset, request.query["revision"]) }
+                val page = try { browseCatalog().page(limit, offset, request.query["revision"],
+                    LibraryQuery.fromParameters(request.query, request.queryValues)) }
                 catch (error: CatalogRevisionChanged) { throw HttpFailure(409, error.message ?: "Bibliothèque modifiée") }
                 catch (error: IllegalArgumentException) { throw HttpFailure(400, error.message ?: "Pagination invalide") }
                 sendJson(output, 200, JSONObject().apply {
-                    put("items", JSONArray().apply { page.items.forEach { put(it.publicJson(metadata.cached(it.id), watchState(it.id))) } })
+                    put("items", JSONArray().apply { page.items.forEach { put(browseJson(it)) } })
                     put("total", page.total); put("revision", page.revision)
                     put("next_offset", page.nextOffset ?: JSONObject.NULL)
+                }, headOnly)
+            }
+            request.path == "/api/library/facets" && request.method in setOf("GET", "HEAD") -> {
+                val query = try { LibraryQuery.fromParameters(request.query, request.queryValues) }
+                catch (error: IllegalArgumentException) { throw HttpFailure(400, error.message ?: "Filtre invalide") }
+                val catalog = browseCatalog()
+                val facets = catalog.facets(query.kind)
+                sendJson(output, 200, JSONObject().apply {
+                    put("genres", JSONArray(facets.genres)); put("years", JSONArray(facets.years))
+                    put("resolutions", JSONArray(facets.resolutions)); put("total", facets.total)
+                    put("revision", catalog.revision); put("query_supported", true)
+                    put("counts", JSONObject(catalog.counts))
+                }, headOnly)
+            }
+            request.path == "/api/library/home" && request.method in setOf("GET", "HEAD") -> {
+                val catalog = browseCatalog()
+                sendJson(output, 200, JSONObject().apply {
+                    put("items", JSONArray().apply { catalog.home().forEach { put(browseJson(it)) } })
+                    put("counts", JSONObject(catalog.counts)); put("revision", catalog.revision)
                 }, headOnly)
             }
             request.path == "/api/library/scan-status" && request.method in setOf("GET", "HEAD") ->
@@ -453,7 +477,36 @@ class PluxyHttpServer(
             put("transcoding_available", false)
             put("scanning", library.isScanning)
             put("media_count", library.all().size)
+            put("library_query_supported", true)
         }
+    }
+
+    @Synchronized
+    private fun browseCatalog(): LibraryBrowseCatalog {
+        repeat(3) {
+            val scan = library.snapshot()
+            val metadataRevision = metadata.revision
+            val watchRevision = preferences.watchRevision
+            val revision = "${scan.revision}:$metadataRevision:$watchRevision"
+            browseSnapshot?.takeIf { it.revision == revision }?.let { return it }
+            val next = LibraryBrowseCatalog(revision, scan.items.map { item ->
+                BrowseEntry(item,
+                    if (item.kind in setOf("movie", "series")) metadata.facts(item.id) else com.pluxy.server.library.BrowseMetadata(),
+                    watchState(item.id))
+            })
+            if (scan.revision == library.snapshot().revision && metadataRevision == metadata.revision &&
+                watchRevision == preferences.watchRevision) {
+                browseSnapshot = next
+                return next
+            }
+        }
+        throw HttpFailure(503, "La bibliothèque est en cours de mise à jour. Réessayez.")
+    }
+
+    private fun browseJson(entry: BrowseEntry): JSONObject = entry.media.publicJson(metadata.cached(entry.media.id), entry.watch).apply {
+        put("year", entry.year ?: JSONObject.NULL)
+        put("genres", JSONArray(entry.metadata.genres))
+        put("metadata_title", entry.metadata.title ?: JSONObject.NULL)
     }
 
     private fun clientSettings(): JSONObject = JSONObject().apply {

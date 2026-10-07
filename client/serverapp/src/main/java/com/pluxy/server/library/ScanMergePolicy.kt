@@ -10,7 +10,7 @@ internal object ScanMergePolicy {
         val result = linkedMapOf<String, MediaEntry>()
         for (old in previous) {
             val replacement = fresh[old.id]
-            if (replacement != null) result[old.id] = replacement else {
+            if (replacement != null) result[old.id] = replacement.copy(addedAtMs = old.addedAtMs) else {
                 val source = old.sourceKey?.let(selected::get) ?: sources.firstOrNull {
                     val kindMatches = when (it.kind) {
                         LibrarySourceKind.VIDEO -> old.kind == "movie" || old.kind == "series"

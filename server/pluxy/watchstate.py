@@ -7,6 +7,7 @@ import re
 import shutil
 import threading
 import time
+import uuid
 from pathlib import Path
 from typing import Dict
 
@@ -20,7 +21,14 @@ class WatchStore:
         self.path = base_dir / ".pluxy_watch.json"
         self._lock = threading.RLock()
         self._data: Dict[str, dict] = {}
+        self._revision = 0
+        self._epoch = uuid.uuid4().hex
         self._load()
+
+    def snapshot(self) -> tuple[str, dict[str, dict]]:
+        # set/prune publient un nouveau dictionnaire ; aucun fichier par média.
+        with self._lock:
+            return f"{self._epoch}-{self._revision}", self._data
 
     def _load(self) -> None:
         from .config import _read_config_text
@@ -122,6 +130,7 @@ class WatchStore:
             }
             self._save(candidate)
             self._data = candidate
+            self._revision += 1
             return True
 
     def prune(self, valid_ids: set[str]) -> None:
@@ -132,3 +141,4 @@ class WatchStore:
             candidate = {key: value for key, value in self._data.items() if key in valid_ids}
             self._save(candidate)
             self._data = candidate
+            self._revision += 1

@@ -90,6 +90,7 @@ def probe(ffprobe_path: str, file_path: str) -> MediaInfo:
         size=size,
         overall_bitrate=overall,
         streams=streams,
+        tags={str(key).lower(): str(value) for key, value in (fmt.get("tags") or {}).items()},
     )
 
 
