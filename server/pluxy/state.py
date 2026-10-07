@@ -135,7 +135,7 @@ class AppState:
             return value
 
     def _enrich(self, force: bool = False) -> None:
-        self.enrich_status = {"status": "running", "processed": 0, "errors": 0, "finished_at": None}
+        self.enrich_status = {"status": "running", "processed": 0, "matched": 0, "unmatched": 0, "errors": 0, "finished_at": None}
         if force:                       # repart d'un cache série propre (1 appel TV/série)
             self.metadata.clear_tv_cache()
         for item in self.library.all():
@@ -144,7 +144,9 @@ class AppState:
             if item.kind not in {"movie", "series"}:
                 continue
             try:
-                self.metadata.get(item, force=force, share_series=True)
+                meta = self.metadata.get(item, force=force, share_series=True)
+                outcome = "errors" if meta.lookup_error else "matched" if meta.matched else "unmatched"
+                self.enrich_status = {**self.enrich_status, outcome: self.enrich_status[outcome] + 1}
             except Exception:
                 self.enrich_status = {**self.enrich_status, "errors": self.enrich_status["errors"] + 1}
             self.enrich_status = {**self.enrich_status, "processed": self.enrich_status["processed"] + 1}

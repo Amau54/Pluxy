@@ -5,7 +5,7 @@ import asyncio
 from fastapi import APIRouter, HTTPException, Request
 
 from ..state import get_state
-from ..tools import ffmpeg_available
+from ..tools import ffmpeg_available, ffprobe_available
 from ..folder_picker import FolderPickerBusy, choose_media_folder
 from ..security import (
     filtered_remote_settings,
@@ -15,6 +15,20 @@ from ..security import (
 )
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
+
+
+@router.get("/diagnostics")
+def diagnostics(request: Request) -> dict:
+    require_local_admin(request)
+    from ..tmdb_auth import tmdb_status
+    state = get_state(request)
+    cfg = state.cfgm.cfg
+    videos = [item for item in state.library.all() if item.kind in {"movie", "series"}]
+    posters = sum(bool((meta := state.metadata.cached(item.id)) and meta.poster_url) for item in videos)
+    return {"ffmpeg": ffmpeg_available(cfg), "ffprobe": ffprobe_available(cfg),
+            "tmdb": tmdb_status(cfg.metadata.tmdb_api_key) if cfg.metadata.enabled else "disabled",
+            "videos_to_match": len(videos), "posters": posters,
+            "metadata": getattr(state, "enrich_status", {})}
 
 
 @router.post("/pick-folder")
@@ -78,12 +92,15 @@ async def patch_settings(request: Request) -> dict:
         if isinstance(srv, dict):
             srv.pop("transcode_temp_dir", None)
     st = get_state(request)
+    previous_sources = (list(st.cfgm.cfg.server.media_dirs), dict(st.cfgm.cfg.server.media_dir_types))
     try:
         cfg = await asyncio.to_thread(st.cfgm.update, patch)
     except (TypeError, ValueError) as exc:
         raise HTTPException(422, "Valeur de configuration invalide.") from exc
     except OSError as exc:
         raise HTTPException(503, "Impossible de sauvegarder la configuration sur le disque.") from exc
+    if previous_sources != (cfg.server.media_dirs, cfg.server.media_dir_types):
+        st.scan_async()
     # Redémarre le répondeur de découverte si ses réglages ont changé.
     if discovery_changed:
         try:

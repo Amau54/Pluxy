@@ -98,7 +98,7 @@ internal class CatalogueStore(
 }
 
 private fun scopedCatalogueKey(serverUrl: String, mediaKind: String): String {
-    require(mediaKind in setOf("all", "movie", "series", "photo", "audio")) { "Invalid catalogue kind" }
+    require(mediaKind in setOf("all", "movie", "series", "clip", "photo", "audio")) { "Invalid catalogue kind" }
     val server = catalogueServerKey(serverUrl)
     return if (mediaKind == "all") server else "$server#$mediaKind"
 }

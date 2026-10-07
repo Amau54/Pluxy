@@ -191,7 +191,8 @@ def test_thumbnail_single_flight_uses_unique_temp_and_releases_slot(state, tmp_p
         calls.append(command[-1])
         entered.set()
         assert release.wait(2)
-        Path(command[-1]).write_bytes(b"jpeg")
+        from PIL import Image
+        Image.new("RGB", (24, 24), (120, 150, 180)).save(command[-1], format="JPEG")
         return SimpleNamespace(returncode=0)
     monkeypatch.setattr("pluxy.thumbnails.subprocess.run", generate)
     with ThreadPoolExecutor(max_workers=2) as pool:
@@ -201,7 +202,7 @@ def test_thumbnail_single_flight_uses_unique_temp_and_releases_slot(state, tmp_p
             thumbs.jpeg(state.item)
         release.set()
         result = first.result(timeout=2)
-    assert thumbs.jpeg(state.item) == result and len(calls) == 1
+    assert result is not None and thumbs.jpeg(state.item) == result and len(calls) == 3
     assert Path(calls[0]).name != result.with_suffix(".part").name
     assert not list(thumbs.cache_dir.glob("*.part"))
 

@@ -35,6 +35,8 @@ data class MediaItem(
     val folder: String? = null,
     @Json(name = "folder_id") val folderId: String? = null,
     @Json(name = "relative_path") val relativePath: String? = null,
+    @Json(name = "source_id") val sourceId: String? = null,
+    @Json(name = "source_name") val sourceName: String? = null,
     @Json(name = "thumbnail_url") val thumbnailUrl: String? = null,
     @Json(name = "external_subs") val externalSubs: List<String> = emptyList(),
     val subtitles: List<SubtitleTrack> = emptyList(),

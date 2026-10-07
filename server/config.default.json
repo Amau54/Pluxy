@@ -8,6 +8,7 @@
       "D:/Films",
       "E:/Series"
     ],
+    "media_dir_types": {},
     "transcode_temp_dir": "./.pluxy_cache",
     "autostart": false,
     "scan_extensions": [".mkv", ".mp4", ".m4v", ".mov", ".avi", ".ts", ".webm", ".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".tif", ".tiff", ".mp3", ".flac", ".m4a", ".m4b", ".aac", ".ogg", ".oga", ".opus", ".wav", ".wma"]

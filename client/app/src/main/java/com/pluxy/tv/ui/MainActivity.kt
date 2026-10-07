@@ -544,6 +544,7 @@ class MainActivity : ThemedActivity() {
         R.id.tabHome to "home",
         R.id.tabMovies to "movie",
         R.id.tabSeries to "series",
+        R.id.tabVideos to "clip",
         R.id.tabPhotos to "photo",
         R.id.tabAudio to "audio",
     ).filter { (_, kind) -> kind == "home" || kind in discoveredKinds }
@@ -552,6 +553,7 @@ class MainActivity : ThemedActivity() {
         R.id.tabHome to "home",
         R.id.tabMovies to "movie",
         R.id.tabSeries to "series",
+        R.id.tabVideos to "clip",
         R.id.tabPhotos to "photo",
         R.id.tabAudio to "audio",
     )
@@ -693,8 +695,8 @@ class MainActivity : ThemedActivity() {
                 val items = api.listItems(LibraryRequest(kind = kind))
                 return BrowserSnapshot(items, items.size, facets = available)
             }
-            if (query.destination == "movie" && (query.search.isBlank() || query.searchScope == "movie")) {
-                val request = serverQuery(query).copy(kind = "movie")
+            if (query.destination in setOf("movie", "clip") && (query.search.isBlank() || query.searchScope == query.destination)) {
+                val request = serverQuery(query)
                 if (view == "discover" && query.search.isBlank()) {
                     val recent = api.libraryPage(request.copy(sort = "added", descending = true))
                     val resume = api.libraryPage(request.copy(watched = "in_progress", sort = "added", descending = true))
@@ -781,7 +783,7 @@ class MainActivity : ThemedActivity() {
         if (pageJob?.isActive == true || loadJob?.isActive == true) return
         val key = catalogueQueryKey
         val server = catalogueServerUrl ?: return
-        val request = serverQuery().copy(kind = "movie")
+        val request = serverQuery()
         val revision = pageRevision
         pageJob = lifecycleScope.launch {
             val api = PluxyApi(server)
@@ -828,7 +830,7 @@ class MainActivity : ThemedActivity() {
         val view = viewMode()
         val collection = selectedCollection
         contentJob = lifecycleScope.launch {
-            if ((destination == "home" || (destination in setOf("movie", "series") && view == "discover")) && query.search.isBlank() && collection == null) {
+            if ((destination == "home" || (destination in setOf("movie", "series", "clip") && view == "discover")) && query.search.isBlank() && collection == null) {
                 val shelves = withContext(Dispatchers.Default) {
                     if (destination == "home") TvLibraryContent.homeShelves(items, homeOrder, hiddenShelves)
                     else TvLibraryContent.destinationShelves(items, query)
@@ -838,13 +840,13 @@ class MainActivity : ThemedActivity() {
                     val focusAction = shouldFocusLibraryEmptyAction(restoreFocus, focusFirst,
                         navigationRevision != focusNavigationRevision, grid.hasFocus(), currentFocus != null)
                     if (destination == "home" && hiddenShelves.isNotEmpty() &&
-                        items.any { it.kind == "movie" || it.kind == "series" }
+                        items.any { it.kind in setOf("movie", "series", "clip") }
                     ) {
                         showEmpty("Les rubriques de l’accueil sont masquées.", "Restaurer les rubriques", focusAction) {
                             PluxyApplication.saveHomeShelves(this@MainActivity, homeOrder, emptySet())
                             applyAndShow(focusFirst = true)
                         }
-                    } else if (query.watchedFilter != "all" && destination in setOf("movie", "series")) {
+                    } else if (query.watchedFilter != "all" && destination in setOf("movie", "series", "clip")) {
                         showEmpty(emptyMessage(), "Afficher tous les contenus", focusAction) {
                             saveBrowserQuery(currentQuery().copy(watchedFilter = "all"))
                         }
@@ -1135,6 +1137,7 @@ class MainActivity : ThemedActivity() {
             "all" to "Tous les médias",
             "movie" to "Films",
             "series" to "Séries",
+            "clip" to "Vidéos",
             "photo" to "Photos",
             "audio" to "Musique",
         )
@@ -1301,7 +1304,7 @@ class MainActivity : ThemedActivity() {
             actions = listOf(
                 CompactChoiceMenu.Action(getString(R.string.photo_collapse_all)) {
                     collapsedPhotoFolders.clear()
-                    collapsedPhotoFolders += folders.keys
+                    collapsedPhotoFolders += PhotoFolderTree.rows(photos).filterIsInstance<LibRow.Header>().map { it.id }
                     applyAndShow(restoreFocus = false)
                 },
                 CompactChoiceMenu.Action(getString(R.string.photo_expand_all)) {
@@ -1326,6 +1329,7 @@ class MainActivity : ThemedActivity() {
     private fun searchScopeLabel(): String = when (searchScope) {
         "movie" -> "films"
         "series" -> "séries"
+        "clip" -> "vidéos"
         "photo" -> "photos"
         "audio" -> "musique"
         else -> "tous les médias"
@@ -1361,7 +1365,7 @@ class MainActivity : ThemedActivity() {
     private fun effectiveSort(): String = currentQuery().sort
 
     private fun openLibraryDestinations() {
-        val kinds = listOf("Films" to "movie", "Séries" to "series", "Photos" to "photo", "Musique" to "audio")
+        val kinds = listOf("Films" to "movie", "Séries" to "series", "Vidéos" to "clip", "Photos" to "photo", "Musique" to "audio")
             .filter { discoveredKinds.isEmpty() || it.second in discoveredKinds }
         CompactChoiceMenu.show(this, findViewById(R.id.brand), "Bibliothèque",
             kinds.map { CompactChoiceMenu.Choice(it.first, it.second) }, selectedKind,
@@ -1371,22 +1375,26 @@ class MainActivity : ThemedActivity() {
     private fun openLastLibrary() {
         val previous = LibraryPreferences.lastLibrary(this)
         selectDestination(if (previous in discoveredKinds || discoveredKinds.isEmpty()) previous
-            else listOf("movie", "series", "photo", "audio").firstOrNull { it in discoveredKinds } ?: "movie")
+            else listOf("movie", "series", "clip", "photo", "audio").firstOrNull { it in discoveredKinds } ?: "movie")
     }
 
     private fun openLibraryViews(anchor: View) {
         val query = currentQuery()
         val choices = when (selectedKind) {
-            "photo" -> listOf(CompactChoiceMenu.Choice("Albums", "albums"), CompactChoiceMenu.Choice("Chronologie", "timeline"))
+            "photo" -> listOf(CompactChoiceMenu.Choice("Dossiers", "folders"), CompactChoiceMenu.Choice("Albums", "albums"), CompactChoiceMenu.Choice("Chronologie", "timeline"))
             "audio" -> listOf(CompactChoiceMenu.Choice("Albums", "library"), CompactChoiceMenu.Choice("Collections", "collections"))
             else -> listOf(CompactChoiceMenu.Choice("Découvrir", "discover"), CompactChoiceMenu.Choice("Bibliothèque", "library"), CompactChoiceMenu.Choice("Collections", "collections"))
         }
         CompactChoiceMenu.show(this, anchor, "Affichage", choices,
             if (selectedKind == "photo") query.photoView else viewMode(),
             onSelect = { value ->
+                focusByDestination.remove(focusStateKey())
                 selectedCollection = null
                 if (selectedKind == "photo") LibraryPreferences.saveQuery(this, query.copy(photoView = value))
                 else LibraryPreferences.saveView(this, selectedKind, value)
+                focusByDestination.remove(focusStateKey())
+                restoreSavedFocusOnNextContent = false
+                grid.scrollToPosition(0)
                 loadItems()
             })
     }

@@ -20,7 +20,7 @@ object TvLibraryContent {
         val durationMaxMinutes: Int? = null,
         val resolution: String = "all",
         val hdrOnly: Boolean = false,
-        val photoView: String = "albums",
+        val photoView: String = "folders",
         /** null : titres croissants, dates et nombres décroissants. */
         val descending: Boolean? = null,
         val collectionId: String = "",
@@ -62,7 +62,7 @@ object TvLibraryContent {
     fun destinationShelves(items: List<MediaItem>, query: Query): List<HomeShelf> {
         val all = rows(items, query.copy(search = ""))
         return when (query.destination) {
-            "movie" -> {
+            "movie", "clip" -> {
                 val movies = all.filterIsInstance<LibRow.MediaRow>().map { it.item }
                 val resume = movies.filter { it.inProgress && !it.watched }.sortedByDescending { it.lastPlayedAt }
                 distinctShelves(buildList {
@@ -96,6 +96,7 @@ object TvLibraryContent {
         if (query.search.isNotBlank()) return searchRows(items, query)
         return when (query.destination) {
             "movie" -> sortMedia(filterItems(items.filter { it.kind == "movie" }, query), query).map { LibRow.MediaRow(it) }
+            "clip" -> sortMedia(filterItems(items.filter { it.kind == "clip" }, query), query).map { LibRow.MediaRow(it) }
             "series" -> matchingSeries(items, query).let { sortSeries(it, query) }
             "photo" -> photoRows(filterItems(items.filter { it.kind == "photo" }, query), query)
             "audio" -> albumRows(filterItems(items.filter { it.kind == "audio" }, query), "audio", query)
@@ -124,7 +125,7 @@ object TvLibraryContent {
         val selected = collectionItems(items, collection)
         val order = collection.smartQuery ?: Query("all", sort = "title")
         return buildList {
-            for ((kind, label) in listOf("movie" to "Films", "series" to "Séries", "audio" to "Musique", "photo" to "Photos")) {
+            for ((kind, label) in listOf("movie" to "Films", "series" to "Séries", "clip" to "Vidéos", "audio" to "Musique", "photo" to "Photos")) {
                 val media = selected.filter { it.kind == kind }
                 val rows: List<LibRow> = when (kind) {
                     "series" -> sortSeries(seriesRows(media), order)
@@ -183,7 +184,7 @@ object TvLibraryContent {
         ) }
 
     private fun searchRows(items: List<MediaItem>, query: Query): List<LibRow> = buildList {
-        for ((kind, label) in listOf("movie" to "Films", "series" to "Séries", "photo" to "Photos", "audio" to "Musique")) {
+        for ((kind, label) in listOf("movie" to "Films", "series" to "Séries", "clip" to "Vidéos", "photo" to "Photos", "audio" to "Musique")) {
             if (query.searchScope != "all" && query.searchScope != kind) continue
             val matching: List<LibRow> = if (kind == "series") matchingSeries(items, query).let { sortSeries(it, query) }
                 else sortMedia(filterItems(items.filter { it.kind == kind }, query), query).map { LibRow.MediaRow(it) }
@@ -196,6 +197,7 @@ object TvLibraryContent {
 
     private fun photoRows(items: List<MediaItem>, query: Query): List<LibRow> {
         val selected = items.filter { query.photoFolder.isBlank() || photoFolderLabel(it) == query.photoFolder }
+        if (query.photoView == "folders") return PhotoFolderTree.rows(selected, query.collapsedPhotoFolders)
         if (query.photoView != "timeline") return albumRows(selected, "photo", query)
         val grouped = selected.groupBy(LibraryOrganizer::photoMonthKey).entries
         val dated = grouped.filter { entry -> entry.value.any { LibraryOrganizer.captureTime(it) != null } }.sortedWith(
@@ -306,6 +308,6 @@ object TvLibraryContent {
     }
 
     private val DEFAULT_HOME_SHELF_ORDER = listOf("continue", "up_next", "recent", "movies", "series")
-    private val VIDEO_KINDS = setOf("movie", "series")
+    private val VIDEO_KINDS = setOf("movie", "series", "clip")
     private val MEDIA_KINDS = VIDEO_KINDS + setOf("photo", "audio")
 }

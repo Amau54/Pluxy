@@ -7,7 +7,7 @@ import java.util.Locale
 internal data class BrowseMetadata(val year: Int? = null, val genres: List<String> = emptyList(), val title: String? = null)
 internal data class BrowseEntry(val media: MediaEntry, val metadata: BrowseMetadata, val watch: WatchState) {
     val year: Int? get() = metadata.year ?: media.parsedYear
-    val resolution: String? = if (media.kind == "movie" || media.kind == "series") mediaResolution(media.width, media.height) else null
+    val resolution: String? = if (media.kind in setOf("movie", "series", "clip")) mediaResolution(media.width, media.height) else null
     val sortTitle: String = normalizeLibraryText(metadata.title?.takeIf(String::isNotBlank) ?: media.title)
     val searchText: String = normalizeLibraryText(listOfNotNull(media.title, metadata.title, media.seriesName, media.artist, media.album, media.folder).joinToString(" "))
     val normalizedGenres: Set<String> = metadata.genres.map(::normalizeLibraryText).toSet()
@@ -53,7 +53,7 @@ internal data class LibraryQuery(
             val prefix = parameters["title_prefix"].orEmpty().lowercase(Locale.ROOT)
             require(prefix.isEmpty() || prefix.length == 1 && prefix[0] in 'a'..'z') { "title_prefix invalide" }
             return LibraryQuery(
-                kind = option("kind", "all", setOf("all", "video", "movie", "series", "photo", "audio")),
+                kind = option("kind", "all", setOf("all", "video", "movie", "series", "clip", "photo", "audio")),
                 query = normalizeLibraryText(query),
                 watched = option("watched", "all", setOf("all", "unwatched", "watched", "in_progress")),
                 genres = genres.map(::normalizeLibraryText).toSet(), year = year, durationMaxMinutes = duration,
@@ -72,7 +72,7 @@ internal data class LibraryFacets(val genres: List<String>, val years: List<Int>
 /** One publication includes scan, metadata and watch state so filters stay stable across pages. */
 internal class LibraryBrowseCatalog(val revision: String, entries: List<BrowseEntry>) {
     val entries = entries.toList()
-    val counts: Map<String, Int> = listOf("movie", "series", "photo", "audio").associateWith { kind -> entries.count { it.media.kind == kind } }
+    val counts: Map<String, Int> = listOf("movie", "series", "clip", "photo", "audio").associateWith { kind -> entries.count { it.media.kind == kind } }
     private val queryCache = linkedMapOf<LibraryQuery, List<BrowseEntry>>()
 
     @Synchronized
@@ -101,7 +101,7 @@ internal class LibraryBrowseCatalog(val revision: String, entries: List<BrowseEn
     }
 
     fun home(): List<BrowseEntry> {
-        val videos = entries.filter { it.media.kind == "movie" || it.media.kind == "series" }
+        val videos = entries.filter { it.media.kind in setOf("movie", "series", "clip") }
         val ids = linkedSetOf<String>()
         videos.filter { it.media.kind == "movie" }.sortedByDescending { it.media.addedAtMs }.take(20).forEach { ids += it.media.id }
         videos.filter { !it.watch.watched && it.watch.positionMs > 0 }.sortedByDescending { it.watch.lastPlayedAtMs }
@@ -147,7 +147,7 @@ internal class LibraryBrowseCatalog(val revision: String, entries: List<BrowseEn
 }
 
 internal fun kindMatches(actual: String, selected: String): Boolean =
-    selected == "all" || selected == actual || selected == "video" && (actual == "movie" || actual == "series")
+    selected == "all" || selected == actual || selected == "video" && actual in setOf("movie", "series", "clip")
 
 internal fun normalizeLibraryText(value: String): String =
     Normalizer.normalize(value, Normalizer.Form.NFKD).replace(diacritics, "").lowercase(Locale.ROOT).replace("ß", "ss").replace('ς', 'σ')

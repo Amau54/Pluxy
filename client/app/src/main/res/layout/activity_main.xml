@@ -180,6 +180,18 @@
                     android:text="@string/destination_series" />
 
                 <Button
+                    android:id="@+id/tabVideos"
+                    style="@style/Btn.Tab"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:minHeight="48dp"
+                    android:layout_marginStart="2dp"
+                    android:minWidth="64dp"
+                    android:paddingStart="10dp"
+                    android:paddingEnd="10dp"
+                    android:text="@string/destination_videos" />
+
+                <Button
                     android:id="@+id/tabPhotos"
                     style="@style/Btn.Tab"
                     android:layout_width="wrap_content"

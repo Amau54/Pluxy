@@ -22,6 +22,7 @@ from .config import ConfigManager
 from . import filename as _fn
 from .models import MediaItem, SubtitleTrack
 from .probe import probe
+from .video_kind import classify_video
 
 # Motif d'épisode de SÉRIE dans un nom de fichier : S01E02, 1x02, "saison 1", "episode 3"…
 _SERIES_RE = re.compile(
@@ -205,7 +206,10 @@ class Library:
                             continue
                         if not _stat.S_ISREG(stat.st_mode):
                             continue
-                        kind = _detect_kind(f)
+                        existing = previous.get(item_id)
+                        category = cfg.server.media_dir_types.get(root, "auto")
+                        kind = _detect_kind(f, category, existing.duration if existing else 0,
+                                            existing.embedded_title or "" if existing else "")
                         if kind == "photo" and has_audio and name.casefold() in AUDIO_ARTWORK_NAMES:
                             continue
                         existing = previous.get(item_id)
@@ -219,6 +223,8 @@ class Library:
                             "folder": folder,
                             "folder_id": self.make_id(str(f.parent)),
                             "relative_path": relative,
+                            "source_id": self.make_id(str(base.resolve())),
+                            "source_name": base.name or "Médias",
                             "year": _fn.parse(f.stem).year if kind in {"movie", "series"} else None,
                         }
                         sname, skey, season, episode = (
@@ -267,6 +273,9 @@ class Library:
                             continue
 
                         v = info.video
+                        kind = _detect_kind(f, category, info.duration, info.tags.get("title", ""))
+                        sname, skey, season, episode = _parse_series(f) if kind == "series" else (None, None, None, None)
+                        album_fields["year"] = _fn.parse(f.stem).year if kind in {"movie", "series"} else None
                         found[item_id] = MediaItem(
                             id=item_id, title=f.stem, path=str(f),
                             container=info.container, size=stat.st_size, duration=info.duration,
@@ -275,6 +284,7 @@ class Library:
                             kind=kind, added_at=added_at, modified_at=modified_at, **album_fields,
                             artist=info.tags.get("album_artist") or info.tags.get("artist"),
                             album=info.tags.get("album"),
+                            embedded_title=info.tags.get("title"),
                             track_number=_tag_number(info.tags.get("track")),
                             disc_number=_tag_number(info.tags.get("disc")),
                             series_name=sname, series_key=skey, season=season, episode=episode,
@@ -375,21 +385,14 @@ def _safe_mtime(p: Path) -> float:
         return 0.0
 
 
-def _detect_kind(p: Path) -> str:
+def _detect_kind(p: Path, category: str = "auto", duration: float = 0, embedded_title: str = "") -> str:
     """Déduit film vs série : motif d'épisode (nom OU sous-dossier « Saison 2 »…),
     ou dossier racine « Séries/TV »."""
     if p.suffix.lower() in PHOTO_EXTENSIONS:
         return "photo"
     if p.suffix.lower() in AUDIO_EXTENSIONS:
         return "audio"
-    if _SERIES_RE.search(p.name):
-        return "series"
-    if {part.lower() for part in p.parts} & _SERIES_DIRS:
-        return "series"
-    # Motif saison/épisode ailleurs dans le chemin (sous-dossier "Season 2", "Saison 1"…).
-    if _SERIES_RE.search(str(p)):
-        return "series"
-    return "movie"
+    return classify_video(p.stem, list(p.parent.parts), category, duration, embedded_title)
 
 
 def _tag_number(value: str | None) -> int | None:

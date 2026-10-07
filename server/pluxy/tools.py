@@ -18,9 +18,9 @@ def _which(path: str) -> bool:
         return True
     # Chemin absolu ou commande directe : test rapide -version.
     try:
-        subprocess.run([path, "-version"], capture_output=True, timeout=5,
-                       creationflags=NO_WINDOW)
-        return True
+        result = subprocess.run([path, "-version"], capture_output=True, timeout=5,
+                                creationflags=NO_WINDOW)
+        return result.returncode == 0
     except Exception:
         return False
 

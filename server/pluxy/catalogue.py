@@ -16,7 +16,7 @@ def folded(value: str | None) -> str:
 
 
 def resolution(item: MediaItem) -> str | None:
-    if item.kind not in {"movie", "series"}:
+    if item.kind not in {"movie", "series", "clip"}:
         return None
     height, width = item.height or 0, item.width or 0
     if height >= 2160 or width >= 3840:
@@ -32,12 +32,12 @@ def public_item(item: MediaItem, meta: MovieMetadata | None, watch: dict) -> Med
     pub = item.model_copy()
     pub.path = ""
     pub.external_subs = []
-    if meta:
+    if meta and item.kind in {"movie", "series"}:
         pub.year, pub.poster_url = meta.year or item.year, meta.poster_url
         pub.has_metadata, pub.genres = meta.matched, list(meta.genres)
         pub.metadata_title = meta.title if meta.matched else None
-    if pub.kind in {"movie", "series", "photo", "audio"}:
-        pub.thumbnail_url = f"/api/library/items/{item.id}/thumbnail"
+    if pub.kind in {"movie", "series", "clip", "photo", "audio"}:
+        pub.thumbnail_url = f"/api/library/items/{item.id}/thumbnail?v=2"
     position = int(watch.get("position_ms", 0) or 0)
     duration = int(watch.get("duration_ms", 0) or 0)
     pub.watched = bool(watch.get("watched"))
@@ -113,7 +113,7 @@ class Catalogue:
         if query.title_prefix and not row.title.startswith(query.title_prefix):
             return False
         if query.kind != "all" and (
-            (query.kind == "video" and item.kind not in {"movie", "series"})
+            (query.kind == "video" and item.kind not in {"movie", "series", "clip"})
             or (query.kind != "video" and item.kind != query.kind)
         ):
             return False
@@ -175,12 +175,12 @@ class Catalogue:
             "resolutions": [value for value in ("4k", "1080p", "720p", "sd")
                             if any(row.resolution == value for row in selected)],
             "total": len(selected), "revision": current, "query_supported": True,
-            "counts": {kind: counts[kind] for kind in ("movie", "series", "photo", "audio")},
+            "counts": {kind: counts[kind] for kind in ("movie", "series", "clip", "photo", "audio")},
         }
 
     def home(self) -> dict:
         current, rows = self._snapshot()
-        videos = [row.item for row in rows if row.item.kind in {"movie", "series"}]
+        videos = [row.item for row in rows if row.item.kind in {"movie", "series", "clip"}]
         movies = [item for item in videos if item.kind == "movie"]
         selected = {item.id for item in sorted(movies, key=lambda item: (-item.added_at, item.id))[:20]}
         selected.update(item.id for item in sorted((item for item in movies if item.in_progress),
@@ -197,4 +197,4 @@ class Catalogue:
         selected.update(item.id for key in set(recent + started) for item in series[key])
         counts = Counter(row.item.kind for row in rows)
         return {"items": [item for item in videos if item.id in selected], "revision": current,
-                "counts": {kind: counts[kind] for kind in ("movie", "series", "photo", "audio")}}
+                "counts": {kind: counts[kind] for kind in ("movie", "series", "clip", "photo", "audio")}}

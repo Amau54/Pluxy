@@ -16,17 +16,24 @@ object LibraryPreferences {
     private fun prefs(context: Context) = context.getSharedPreferences("library_browser", Context.MODE_PRIVATE)
     private fun key(context: Context, suffix: String, serverUrl: String = PluxyApplication.serverBaseUrl(context)) = "${serverUrl.trimEnd('/')}:$suffix"
 
-    fun query(context: Context, destination: String): TvLibraryContent.Query =
-        runCatching { prefs(context).getString(key(context, "query:$destination"), null)?.let(queryAdapter::fromJson) }
+    fun query(context: Context, destination: String): TvLibraryContent.Query {
+        var query = runCatching { prefs(context).getString(key(context, "query:$destination"), null)?.let(queryAdapter::fromJson) }
             .getOrNull()?.copy(destination = destination, search = "", searchScope = "all")
             ?: initialQuery(context, destination)
+        val migration = key(context, "photo-tree-default")
+        if (destination == "photo" && !prefs(context).getBoolean(migration, false)) {
+            if (query.photoView == "albums") { query = query.copy(photoView = "folders"); saveQuery(context, query) }
+            prefs(context).edit().putBoolean(migration, true).apply()
+        }
+        return query
+    }
 
     private fun initialQuery(context: Context, destination: String): TvLibraryContent.Query {
         val legacy = context.getSharedPreferences("pluxy_prefs", Context.MODE_PRIVATE)
         val selected = PluxyApplication.libraryTab(context)
         val query = TvLibraryContent.Query(destination = destination,
             sort = if (selected == destination) legacy.getString("lib_sort", "title").orEmpty() else "title",
-            watchedFilter = if (selected == destination && destination in setOf("movie", "series")) legacy.getString("lib_watched", "all").orEmpty() else "all")
+            watchedFilter = if (selected == destination && destination in setOf("movie", "series", "clip")) legacy.getString("lib_watched", "all").orEmpty() else "all")
         saveQuery(context, query)
         return query
     }
@@ -57,7 +64,7 @@ object LibraryPreferences {
 
     fun lastLibrary(context: Context): String = prefs(context)
         .getString(key(context, "last-library"), "movie").orEmpty()
-        .takeIf { it in setOf("movie", "series", "photo", "audio") } ?: "movie"
+        .takeIf { it in setOf("movie", "series", "clip", "photo", "audio") } ?: "movie"
 
     fun rememberLibrary(context: Context, kind: String) {
         if (kind != "home") prefs(context).edit().putString(key(context, "last-library"), kind).apply()

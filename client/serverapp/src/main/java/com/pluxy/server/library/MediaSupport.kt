@@ -14,6 +14,7 @@ data class LibrarySource(
     val treeUri: String,
     /** Titre de collection choisi sur le téléphone, préfixe les dossiers vus sur la TV. */
     val title: String = "",
+    val category: String = "auto",
 ) {
     val isAutomatic: Boolean get() = treeUri == AUTOMATIC_MEDIASTORE_URI
 

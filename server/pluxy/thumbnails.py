@@ -40,7 +40,7 @@ class VideoThumbnailer:
         self._negative: OrderedDict[str, float] = OrderedDict()
 
     def jpeg(self, item: MediaItem) -> Path | None:
-        if item.kind not in {"movie", "series", "photo", "audio"}:
+        if item.kind not in {"movie", "series", "clip", "photo", "audio"}:
             return None
         try:
             source = Path(item.path)
@@ -50,7 +50,7 @@ class VideoThumbnailer:
             stamp = info.st_mtime_ns
         except OSError:
             return None
-        target = self.cache_dir / f"{item.id}-{stamp:x}-{info.st_size:x}.jpg"
+        target = self.cache_dir / f"{item.id}-v2-{stamp:x}-{info.st_size:x}.jpg"
         if target.is_file() and 0 < target.stat().st_size <= MAX_THUMBNAIL_BYTES:
             return target
         with self._lock:
@@ -100,6 +100,12 @@ class VideoThumbnailer:
                 os.replace(tmp, target)
                 self._prune()
                 return target
+            if item.kind != "audio":
+                if not self._video(source, tmp, item.duration):
+                    return None
+                os.replace(tmp, target)
+                self._prune()
+                return target
             cmd = [
                 self.cfg.ffmpeg.ffmpeg_path,
                 "-hide_banner", "-loglevel", "error", "-nostdin",
@@ -137,6 +143,35 @@ class VideoThumbnailer:
             if "tmp" in locals():
                 tmp.unlink(missing_ok=True)
             self._slots.release()
+
+    def _video(self, source: Path, target: Path, duration: float) -> bool:
+        from PIL import Image
+        candidates = [max(0, min(duration * fraction, duration - 0.1)) for fraction in (0.12, 0.35, 0.65)] if duration > 0 else [1, 5, 15]
+        best, score = None, -1.0
+        deadline = time.monotonic() + 15
+        for second in dict.fromkeys(candidates):
+            remaining = deadline - time.monotonic()
+            if remaining < 0.5:
+                break
+            cmd = [self.cfg.ffmpeg.ffmpeg_path, "-hide_banner", "-loglevel", "error", "-nostdin",
+                   "-ss", f"{second:.3f}", "-i", str(source), "-map", "0:v:0", "-frames:v", "1",
+                   "-vf", "scale=512:-2:force_original_aspect_ratio=decrease", "-threads", "1",
+                   "-c:v", "mjpeg", "-q:v", "4", "-f", "image2", "-y", str(target)]
+            try:
+                result = subprocess.run(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL, timeout=remaining, creationflags=NO_WINDOW)
+                if result.returncode != 0 or not 0 < target.stat().st_size <= MAX_THUMBNAIL_BYTES:
+                    continue
+                with Image.open(target) as frame:
+                    value = frame_score(frame)
+                if value > score:
+                    best, score = target.read_bytes(), value
+            except (OSError, ValueError, subprocess.TimeoutExpired):
+                continue
+        if best is None:
+            return False
+        target.write_bytes(best)
+        return True
 
     @staticmethod
     def _photo(source: Path, target: Path) -> bool:
@@ -180,3 +215,14 @@ class VideoThumbnailer:
 
 class ThumbnailBusy(RuntimeError):
     pass
+
+
+def frame_score(image) -> float:
+    """Écarte les fondus noirs/blancs, puis préfère une image lisible et détaillée."""
+    from PIL import ImageStat
+    sample = image.convert("L")
+    sample.thumbnail((64, 64))
+    stats = ImageStat.Stat(sample)
+    light = stats.mean[0]
+    visible = min(1.0, light / 32, (255 - light) / 32)
+    return visible * (stats.stddev[0] + sample.entropy() * 8 + 1)

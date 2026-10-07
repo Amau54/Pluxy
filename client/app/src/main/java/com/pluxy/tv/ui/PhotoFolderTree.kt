@@ -1,0 +1,45 @@
+package com.pluxy.tv.ui
+
+import com.pluxy.tv.api.MediaItem
+
+/** Racines distinctes, sous-dossiers à la suite, photos visibles sans ouvrir un album. */
+object PhotoFolderTree {
+    private class Node(val id: String, val name: String, val depth: Int) {
+        val children = linkedMapOf<String, Node>()
+        val photos = mutableListOf<MediaItem>()
+        var count = 0
+    }
+
+    fun rows(items: List<MediaItem>, collapsed: Set<String> = emptySet()): List<LibRow> {
+        val roots = linkedMapOf<String, Node>()
+        items.forEach { item ->
+            val relative = item.relativePath?.replace('\\', '/')
+            val legacy = item.folder.orEmpty().replace(" / ", "/").replace('\\', '/')
+            val source = item.sourceId ?: "legacy:${item.folderId ?: legacy.ifBlank { "photos" }}"
+            val name = item.sourceName?.takeIf(String::isNotBlank)
+                ?: legacy.ifBlank { "Photos" }
+            var node = roots.getOrPut(source) { Node("photo-tree:$source", name, 0) }
+            node.count++
+            // Un ancien serveur n'expose pas l'identité de la racine : garder ses
+            // dossiers séparés évite de fusionner deux albums homonymes.
+            val folder = if (item.sourceId == null) "" else relative?.substringBeforeLast('/', "") ?: ""
+            folder.split('/').filter { it.isNotBlank() && it != "." && it != ".." }.forEach { part ->
+                val parent = node
+                node = parent.children.getOrPut(part) { Node("${parent.id}/$part", part, parent.depth + 1) }
+                node.count++
+            }
+            node.photos += item
+        }
+        return buildList {
+            fun visit(node: Node) {
+                val expanded = node.id !in collapsed
+                add(LibRow.Header(node.id, "${node.name}  ·  ${node.count} ${if (node.count == 1) "photo" else "photos"}",
+                    collapsible = true, expanded = expanded, depth = node.depth))
+                if (!expanded) return
+                addAll(LibraryOrganizer.sortedBySearchKey(node.photos) { it.title }.map { LibRow.MediaRow(it) })
+                node.children.values.sortedBy { LibraryOrganizer.searchKey(it.name) }.forEach(::visit)
+            }
+            roots.values.sortedBy { LibraryOrganizer.searchKey(it.name) }.forEach(::visit)
+        }
+    }
+}

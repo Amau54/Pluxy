@@ -1,26 +1,15 @@
-# Pluxy 1.6.0
+# Pluxy 1.6.1
 
-Lecteur et serveur Android : **version 1.6.0, versionCode 51**.
+Lecteur et serveur Android : **version 1.6.1, versionCode 52**.
 
-- Bibliothèques en grille et vue Découvrir, sans répéter les mêmes médias dans les rangées.
-- Filtres par genre, année, lecture, durée, résolution et HDR ; tri indépendant et filtres actifs faciles à retirer.
-- Accès alphabétique aux films depuis le menu de tri, avec filtrage sur le serveur.
-- Collections manuelles ou automatiques, mémorisées par serveur sur le lecteur.
-- Albums photo, chronologie utilisant la date de prise de vue et albums musicaux avec pistes ordonnées.
-- Navigation mobile en bas, commandes TV compactes et densités Compact/Confort.
-- Chargement progressif des films, filtres et cache en mémoire sur les deux serveurs.
-- Date d'ajout conservée lors des rescans ; recherche sur les titres affichés, sans tenir compte des accents.
-- Serveur PC compatible avec les photos et la musique ; miniatures et pochettes locales réparées.
-- Reprise du premier épisode commencé et conservation de la collection pendant la lecture.
+- Photos en arborescence : racines distinctes, sous-dossiers en cascade et images visibles par défaut. Albums et chronologie restent disponibles.
+- Films, séries et vidéos personnelles séparés. Chaque dossier du serveur PC ou Android peut être classé automatiquement ou recevoir un type choisi.
+- La détection utilise les dossiers, noms de caméra, épisodes, durée et titre intégré. Sans indice fiable, le fichier reste dans Vidéos.
+- Miniatures vidéo choisies parmi plusieurs captures, avec préférence pour une image visible plutôt qu’un fondu noir ou blanc. Cache réutilisé et chargements réessayés lorsque le serveur est occupé.
+- Installation automatique de FFmpeg et ffprobe sur Windows, dans le compte utilisateur.
+- TMDB accepte les clés API et les jetons de lecture. Les titres sont vérifiés avant d’attribuer une affiche ; le serveur PC distingue les recherches sans résultat des erreurs de connexion ou de clé.
+- Bouton de diagnostic TMDB et miniatures dans les réglages du serveur PC.
 
-## Mise à jour des APK de test
+Le classement ne déplace aucun fichier. Pour corriger une détection, changez la catégorie du dossier puis relancez l’analyse.
 
-Le canal GitHub utilise deux clés stables depuis le 4 octobre 2026, une par
-application. Si votre APK porte une autre signature, sauvegardez les réglages
-possibles, désinstallez-la puis installez la version actuelle.
-La désinstallation efface les données privées de l'application. Les médias
-stockés ailleurs restent sur leur support. Les mises à jour suivantes avec
-la même signature conservent normalement les données.
-
-[Téléchargements](https://github.com/Amau54/Pluxy/releases/tag/dev-latest)
-· [Signature des APK](docs/DEBUG_SIGNING.md).
+[Téléchargements](https://github.com/Amau54/Pluxy/releases/tag/dev-latest) · [Signature des APK](docs/DEBUG_SIGNING.md).

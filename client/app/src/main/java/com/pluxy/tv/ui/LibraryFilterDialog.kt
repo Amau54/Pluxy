@@ -34,7 +34,7 @@ object LibraryFilterDialog {
             setOnClickListener { click(this) }
             rows.addView(this, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = (4 * density).toInt() })
         }
-        if (original.destination in setOf("movie", "series", "home", "all")) {
+        if (original.destination in setOf("movie", "series", "clip", "home", "all")) {
             val watched = listOf("Tous" to "all", "Non vus" to "unwatched", "Déjà vus" to "watched", "En cours" to "in_progress")
             row("Lecture", { watched.firstOrNull { it.second == draft.watchedFilter }?.first ?: "Tous" }) { button ->
                 choose("Lecture", watched, draft.watchedFilter) {

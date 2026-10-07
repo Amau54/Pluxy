@@ -102,6 +102,9 @@ class MediaItem(BaseModel):
     folder: Optional[str] = None
     folder_id: Optional[str] = None
     relative_path: Optional[str] = None
+    source_id: Optional[str] = None
+    source_name: Optional[str] = None
+    embedded_title: Optional[str] = None
     has_metadata: bool = False
     # État de visionnage, fusionné À LA VOLÉE depuis le suivi de lecture (persistant).
     watched: bool = False             # vu (lecture > 95 %)
@@ -131,6 +134,7 @@ class Rating(BaseModel):
 class MovieMetadata(BaseModel):
     """Métadonnées enrichies façon Plex (source TMDB)."""
     tmdb_id: Optional[int] = None
+    lookup_error: Optional[str] = None
     title: str
     original_title: Optional[str] = None
     year: Optional[int] = None

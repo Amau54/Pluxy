@@ -92,15 +92,15 @@ class LibraryBrowserChrome(
     }
 
     fun render(kind: String, query: TvLibraryContent.Query, view: String, total: Int, more: Boolean, searchText: String, collectionName: String? = null) {
-        val video = if (searchText.isNotBlank()) query.searchScope in setOf("all", "movie", "series")
-            else kind in setOf("movie", "series")
+        val video = if (searchText.isNotBlank()) query.searchScope in setOf("all", "movie", "series", "clip")
+            else kind in setOf("movie", "series", "clip")
         rows.visibility = if (kind == "home" && searchText.isBlank()) View.GONE else View.VISIBLE
         destination.visibility = if (kind == "home" || searchText.isNotBlank()) View.GONE else View.VISIBLE
-        destination.text = when (kind) { "movie" -> "Films"; "series" -> "Séries"; "photo" -> "Photos"; "audio" -> "Musique"; else -> "Médias" }
+        destination.text = when (kind) { "movie" -> "Films"; "series" -> "Séries"; "clip" -> "Vidéos"; "photo" -> "Photos"; "audio" -> "Musique"; else -> "Médias" }
         destination.setCompoundDrawablesRelativeWithIntrinsicBounds(0, 0, R.drawable.ic_library_dropdown, 0)
         mode.text = when {
             collectionName != null -> "Collections"
-            kind == "photo" -> if (query.photoView == "timeline") "Chronologie" else "Albums"
+            kind == "photo" -> when (query.photoView) { "timeline" -> "Chronologie"; "albums" -> "Albums"; else -> "Dossiers" }
             kind == "audio" && view != "collections" -> "Albums"
             view == "discover" -> "Découvrir"
             view == "collections" -> "Collections"
@@ -133,6 +133,7 @@ class LibraryBrowserChrome(
             kind == "photo" -> "$total ${if (total == 1) "photo" else "photos"}"
             kind == "audio" -> "$total ${if (total == 1) "titre" else "titres"}"
             kind == "series" -> "$total ${if (total == 1) "série" else "séries"}"
+            kind == "clip" -> "$total ${if (total == 1) "vidéo" else "vidéos"}"
             else -> "$total ${if (total == 1) "film" else "films"}"
         } + if (more) " · chargement au défilement" else ""
         count.visibility = if (landscape) View.GONE else View.VISIBLE

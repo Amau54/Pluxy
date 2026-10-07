@@ -113,7 +113,7 @@ class TvLibraryContentTest {
     @Test fun `photo albums groupent sans fusionner sources homonymes`() {
         val items = listOf(media("p1", "photo").copy(folder = "Vacances", folderId = "diskA"),
             media("p2", "photo").copy(folder = "Vacances", folderId = "diskB"))
-        val rows = TvLibraryContent.rows(items, TvLibraryContent.Query("photo")).filterIsInstance<LibRow.AlbumRow>()
+        val rows = TvLibraryContent.rows(items, TvLibraryContent.Query("photo", photoView = "albums")).filterIsInstance<LibRow.AlbumRow>()
         assertEquals(2, rows.size)
         assertEquals(setOf("source:diskA", "source:diskB"), rows.map { it.key }.toSet())
         assertEquals(setOf("p1", "p2"), rows.flatMap { it.items }.map { it.id }.toSet())
@@ -121,7 +121,7 @@ class TvLibraryContentTest {
 
     @Test fun `photo albums legacy accents proches gardent identites distinctes`() {
         val items = listOf(media("accent", "photo").copy(folder = "Café"), media("plain", "photo").copy(folder = "Cafe"))
-        assertEquals(2, TvLibraryContent.rows(items, TvLibraryContent.Query("photo")).size)
+        assertEquals(2, TvLibraryContent.rows(items, TvLibraryContent.Query("photo", photoView = "albums")).size)
     }
 
     @Test fun `chronologie utilise capture et laisse date inconnue explicite`() {

@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <dimen name="section_header_tree_height">48dp</dimen>
+    <dimen name="section_header_tree_title_size">15sp</dimen>
     <dimen name="section_header_title_size">16sp</dimen>
     <dimen name="section_header_touch_height">48dp</dimen>
     <dimen name="section_header_plain_height">30dp</dimen>

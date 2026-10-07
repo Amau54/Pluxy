@@ -25,7 +25,7 @@ def _enrich(item: MediaItem, st: AppState) -> MediaItem:
     return public_item(item, st.metadata.cached(item.id), st.watch.get(item.id))
 
 
-Kind = Literal["all", "video", "movie", "series", "photo", "audio"]
+Kind = Literal["all", "video", "movie", "series", "clip", "photo", "audio"]
 
 
 def _catalogue(st: AppState) -> Catalogue:
@@ -111,7 +111,7 @@ def item_thumbnail(item_id: str, request: Request):
     """Capture locale disponible même lorsqu'une affiche distante est référencée."""
     st = get_state(request)
     it = st.library.get(item_id)
-    if not it or it.kind not in {"movie", "series", "photo", "audio"}:
+    if not it or it.kind not in {"movie", "series", "clip", "photo", "audio"}:
         raise HTTPException(404, "Miniature introuvable")
     try:
         path = st.thumbnails.jpeg(it)

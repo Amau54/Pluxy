@@ -17,6 +17,7 @@ import re
 import threading
 import time
 import uuid
+import unicodedata
 from collections import OrderedDict
 from weakref import WeakValueDictionary
 from pathlib import Path
@@ -26,6 +27,7 @@ import httpx
 
 from .config import ConfigManager
 from .filename import parse as parse_name
+from .tmdb_auth import tmdb_client
 from .models import CastMember, MediaItem, MovieMetadata, Rating
 
 TMDB_API = "https://api.themoviedb.org/3"
@@ -40,7 +42,8 @@ _OMDB_SOURCES = {
 
 
 def _norm(s: Optional[str]) -> str:
-    return re.sub(r"[^a-z0-9]+", "", (s or "").lower())
+    folded = "".join(c for c in unicodedata.normalize("NFKD", s or "") if not unicodedata.combining(c))
+    return re.sub(r"[^a-z0-9]+", "", folded.casefold())
 
 
 def _confident(query: str, *candidates: Optional[str]) -> bool:
@@ -54,9 +57,9 @@ def _confident(query: str, *candidates: Optional[str]) -> bool:
         cn = _norm(c)
         if not cn:
             continue
-        if q in cn or cn in q:
+        if q == cn:
             return True
-        if difflib.SequenceMatcher(None, q, cn).ratio() >= 0.55:
+        if min(len(q), len(cn)) >= 4 and difflib.SequenceMatcher(None, q, cn).ratio() >= 0.78:
             return True
     return False
 
@@ -164,7 +167,7 @@ class MetadataProvider:
     def _get(self, item: MediaItem, force: bool = False, share_series: bool = False) -> MovieMetadata:
         cfg = self.cfgm.cfg.metadata
         fingerprint = hashlib.sha256(json.dumps([
-            cfg.model_dump(), item.title, item.series_key, item.modified_at, item.size,
+            cfg.model_dump(), item.kind, item.title, item.series_key, item.modified_at, item.size,
         ], sort_keys=True).encode()).hexdigest()
         is_series = item.kind == "series" and bool(item.series_name)
 
@@ -185,7 +188,8 @@ class MetadataProvider:
             title, year = parsed.title, parsed.year
 
         meta: Optional[MovieMetadata] = None
-        if cfg.enabled and cfg.tmdb_api_key:
+        lookup_error = None
+        if cfg.enabled and cfg.tmdb_api_key and item.kind in {"movie", "series"}:
             try:
                 if is_series:
                     # Une seule recherche TV par SÉRIE (clé canonique) -> partagée.
@@ -207,11 +211,15 @@ class MetadataProvider:
                                         self._tv_cache.pop(next(iter(self._tv_cache)))
                 else:
                     meta = self._fetch_tmdb(title, year, cfg.tmdb_api_key, cfg.language, cfg.omdb_api_key)
+            except httpx.HTTPStatusError as exc:
+                lookup_error = "auth" if exc.response.status_code in {401, 403} else "rate_limit" if exc.response.status_code == 429 else "service"
+                meta = None
             except Exception:
+                lookup_error = "network"
                 meta = None
 
         if meta is None:                       # repli : titre/année déduits
-            meta = MovieMetadata(title=title, year=year, matched=False, source="filename")
+            meta = MovieMetadata(title=title, year=year, matched=False, source="filename", lookup_error=lookup_error)
 
         self._save(item.id, meta, fingerprint)
         return meta
@@ -241,18 +249,19 @@ class MetadataProvider:
     def _fetch_tmdb_tv(self, name: str, key: str, lang: str,
                        omdb_key: str = "") -> Optional[MovieMetadata]:
         """Recherche une SÉRIE sur TMDB (/search/tv) et renvoie l'affiche + infos show."""
-        with httpx.Client(timeout=12.0) as cli:
+        with tmdb_client(key) as cli:
             r = cli.get(f"{TMDB_API}/search/tv",
-                        params={"api_key": key, "query": name, "language": lang})
+                        params={"query": name, "language": lang})
             r.raise_for_status()
             results = r.json().get("results", [])
+            results = [result for result in results[:20] if _confident(name, result.get("name"), result.get("original_name"))]
             if not results or not _confident(
                 name, results[0].get("name"), results[0].get("original_name")
             ):
                 return MovieMetadata(title=name, matched=False)   # pas d'affiche arbitraire
             tid = results[0]["id"]
             d = cli.get(f"{TMDB_API}/tv/{tid}",
-                        params={"api_key": key, "language": lang,
+                        params={"language": lang,
                                 "append_to_response": "credits,videos,external_ids"})
             d.raise_for_status()
             j = d.json()
@@ -297,9 +306,9 @@ class MetadataProvider:
     # -- TMDB films -------------------------------------------------------- #
     def _fetch_tmdb(self, title: str, year: Optional[int],
                     key: str, lang: str, omdb_key: str = "") -> Optional[MovieMetadata]:
-        with httpx.Client(timeout=12.0) as cli:
+        with tmdb_client(key) as cli:
             def _search(with_year: bool):
-                params = {"api_key": key, "query": title, "language": lang}
+                params = {"query": title, "language": lang}
                 if with_year and year:
                     params["primary_release_year"] = year
                 r = cli.get(f"{TMDB_API}/search/movie", params=params)
@@ -310,6 +319,10 @@ class MetadataProvider:
             results = _search(with_year=True)
             if not results:
                 results = _search(with_year=False)
+            if not results:
+                return MovieMetadata(title=title, year=year, matched=False)
+
+            results = [result for result in results[:20] if _confident(title, result.get("title"), result.get("original_title"))]
             if not results:
                 return MovieMetadata(title=title, year=year, matched=False)
 
@@ -327,7 +340,7 @@ class MetadataProvider:
             mid = best["id"]
             d = cli.get(
                 f"{TMDB_API}/movie/{mid}",
-                params={"api_key": key, "language": lang,
+                params={"language": lang,
                         "append_to_response": "credits,videos"},
             )
             d.raise_for_status()

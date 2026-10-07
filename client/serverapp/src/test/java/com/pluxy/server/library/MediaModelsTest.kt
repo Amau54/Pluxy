@@ -13,7 +13,7 @@ class MediaModelsTest {
     @Test
     fun `every visual media kind exposes a local thumbnail fallback`() {
         listOf("movie", "series", "photo", "audio").forEach { kind ->
-            assertEquals("/image/thumbnail/media-id", localThumbnailUrl(kind, "media-id"))
+            assertEquals("/image/thumbnail/media-id?v=2", localThumbnailUrl(kind, "media-id"))
         }
     }
 

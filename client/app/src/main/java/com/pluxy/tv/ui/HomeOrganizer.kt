@@ -68,5 +68,5 @@ object HomeOrganizer {
         { it.title.lowercase() },
     )
 
-    private val VIDEO_KINDS = setOf("movie", "series")
+    private val VIDEO_KINDS = setOf("movie", "series", "clip")
 }

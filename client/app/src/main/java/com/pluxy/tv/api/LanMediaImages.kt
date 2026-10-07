@@ -30,11 +30,12 @@ object LanMediaImages {
         }
         // Une rafale de cartes peut arriver pendant qu'Android décode déjà deux images.
         // Le serveur répond alors 503 + Retry-After au lieu de saturer sa RAM : on retente
-        // uniquement les miniatures LAN, avec deux délais courts et bornés.
+        // uniquement les miniatures LAN, avec des délais progressifs et bornés.
         val thumbnailRetry = Interceptor { chain ->
             val request = chain.request()
             var response = chain.proceed(request)
-            if (request.url.encodedPath.startsWith("/image/thumbnail/")) {
+            if ((request.url.encodedPath.startsWith("/image/thumbnail/") ||
+                    request.url.encodedPath.matches(Regex("/api/library/items/[^/]+/thumbnail")))) {
                 for (delayMs in THUMBNAIL_RETRY_DELAYS_MS) {
                     if (response.code != 503) break
                     response.close()
@@ -72,5 +73,5 @@ object LanMediaImages {
             .also { cached = baseUrl to it }
     }
 
-    private val THUMBNAIL_RETRY_DELAYS_MS = longArrayOf(250L, 750L)
+    private val THUMBNAIL_RETRY_DELAYS_MS = longArrayOf(250L, 750L, 1500L, 3000L)
 }

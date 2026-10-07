@@ -35,8 +35,8 @@ android {
         applicationId = "com.pluxy.server"
         minSdk = 23
         targetSdk = 36
-        versionCode = 51
-        versionName = "1.6.0"
+        versionCode = 52
+        versionName = "1.6.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

@@ -1,5 +1,14 @@
 # Composants tiers et crédits
 
+## FFmpeg sur Windows
+
+Le lanceur télécharge séparément FFmpeg et ffprobe 9.0.2 depuis
+[Gyan.dev](https://www.gyan.dev/ffmpeg/builds/), un fournisseur de binaires référencé
+par [FFmpeg](https://ffmpeg.org/download.html). Le build Essentials est sous GPLv3 ;
+sa licence et sa documentation restent dans le dossier installé. Son
+[code source correspondant](https://github.com/FFmpeg/FFmpeg/commit/946fcce07b)
+est disponible publiquement. Les exécutables sont lancés comme processus séparés.
+
 ## AndroidX, Media3 et Google Cast
 
 Les applications utilisent AndroidX et Media3, sous licence

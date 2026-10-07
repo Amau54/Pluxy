@@ -13,10 +13,11 @@ data class MediaFolder(
     val uri: String,
     val title: String = "",
     val visible: Boolean = true,
+    val category: String = "auto",
 )
 
 enum class MediaTheme(val label: String) {
-    VIDEO("Films & séries"),
+    VIDEO("Films, séries et vidéos"),
     PHOTO("Images"),
     AUDIO("Musique"),
 }
@@ -97,6 +98,7 @@ class ServerPreferences(context: Context) {
                                     uri = uri,
                                     title = raw.optString("title").trim().take(60),
                                     visible = raw.optBoolean("visible", true),
+                                    category = raw.optString("category", "auto").takeIf { it in setOf("movie", "series", "clip") } ?: "auto",
                                 ))
                             }
                             is String -> raw.trim().takeIf(String::isNotBlank)?.let(::MediaFolder)?.let(::add)
@@ -112,7 +114,7 @@ class ServerPreferences(context: Context) {
     private fun saveFolders(collectionKey: String, legacyKey: String, values: List<MediaFolder>) {
         val normalized = values.mapNotNull { folder ->
             folder.uri.trim().takeIf(String::isNotBlank)?.let { uri ->
-                MediaFolder(uri, folder.title.trim().take(60), folder.visible)
+                MediaFolder(uri, folder.title.trim().take(60), folder.visible, folder.category.takeIf { it in setOf("movie", "series", "clip") } ?: "auto")
             }
         }.distinctBy { it.uri }
         prefs.edit()
@@ -121,6 +123,7 @@ class ServerPreferences(context: Context) {
                     put("uri", folder.uri)
                     put("title", folder.title)
                     put("visible", folder.visible)
+                    put("category", folder.category)
                 }) }
             }.toString())
             .remove(legacyKey)

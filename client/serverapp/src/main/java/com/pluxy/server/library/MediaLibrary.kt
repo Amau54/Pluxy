@@ -203,15 +203,15 @@ class MediaLibrary(
                     val fileName = child.name ?: "Média.$ext"
                     val size = child.length().takeIf { it > 0 } ?: querySize(child.uri)
                     val modified = child.lastModified().coerceAtLeast(0)
-                    val parsed = if (source.kind == LibrarySourceKind.VIDEO) {
-                        FilenameParser.parse(fileName, node.ancestors)
+                    val old = previous[uriValue]
+                    var parsed = if (source.kind == LibrarySourceKind.VIDEO) {
+                        VideoClassifier.parse(fileName, listOf(root.name.orEmpty(), source.title) + node.ancestors, source.category, old?.durationSeconds ?: 0.0, old?.embeddedTitle)
                     } else null
                     val subs = if (source.kind == LibrarySourceKind.VIDEO) {
                         matchingSubtitles(fileName, sidecars)
                     } else emptyList()
-                    val old = previous[uriValue]
                     val oldMatchesSource = when (source.kind) {
-                        LibrarySourceKind.VIDEO -> old?.kind == "movie" || old?.kind == "series"
+                        LibrarySourceKind.VIDEO -> old?.kind in setOf("movie", "series", "clip")
                         else -> old?.kind == source.kind.publicKind
                     }
 
@@ -233,12 +233,15 @@ class MediaLibrary(
                             folder = displayFolder(source, node.ancestors),
                             folderId = folderIdentity(source.identity(), node.directory.uri.toString()),
                             relativePath = (node.ancestors + fileName).joinToString("/"),
+                            sourceName = source.title.ifBlank { root.name ?: "Photos" },
                             subtitles = subs,
                         )
                         continue
                     }
 
                     val probe = probe(child.uri, fileName, source.kind)
+                    if (source.kind == LibrarySourceKind.VIDEO) parsed = VideoClassifier.parse(fileName,
+                        listOf(root.name.orEmpty(), source.title) + node.ancestors, source.category, probe.durationSeconds, probe.title)
                     found += MediaEntry(
                         id = stableId(uriValue),
                         uri = uriValue,
@@ -251,6 +254,7 @@ class MediaLibrary(
                         modifiedAtMs = modified,
                         addedAtMs = old?.addedAtMs ?: discoveredAt,
                         capturedAtMs = probe.capturedAtMs,
+                        embeddedTitle = probe.title,
                         durationSeconds = probe.durationSeconds,
                         width = probe.width,
                         height = probe.height,
@@ -268,6 +272,7 @@ class MediaLibrary(
                         folder = displayFolder(source, node.ancestors),
                         folderId = folderIdentity(source.identity(), node.directory.uri.toString()),
                         relativePath = (node.ancestors + fileName).joinToString("/"),
+                            sourceName = source.title.ifBlank { root.name ?: "Photos" },
                         subtitles = subs,
                         sourceKey = source.identity(),
                         discNumber = probe.discNumber, trackNumber = probe.trackNumber,
@@ -364,12 +369,12 @@ class MediaLibrary(
                 } else null
                 val volume = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) cursor.string(MediaStore.MediaColumns.VOLUME_NAME).orEmpty() else ""
                 val folderId = folderIdentity("${source.identity()}:$volume", folder.orEmpty())
-                val parsed = if (source.kind == LibrarySourceKind.VIDEO) {
-                    FilenameParser.parse(fileName, folder?.split('/')?.filter(String::isNotBlank).orEmpty())
-                } else null
                 val old = previous[uriValue]
+                var parsed = if (source.kind == LibrarySourceKind.VIDEO) {
+                    VideoClassifier.parse(fileName, folder?.split('/')?.filter(String::isNotBlank).orEmpty(), source.category, old?.durationSeconds ?: 0.0, old?.embeddedTitle)
+                } else null
                 val oldMatchesSource = when (source.kind) {
-                    LibrarySourceKind.VIDEO -> old?.kind == "movie" || old?.kind == "series"
+                    LibrarySourceKind.VIDEO -> old?.kind in setOf("movie", "series", "clip")
                     else -> old?.kind == source.kind.publicKind
                 }
                 if (old != null && oldMatchesSource && old.size == size &&
@@ -390,11 +395,15 @@ class MediaLibrary(
                         folder = folder,
                         folderId = folderId,
                         relativePath = listOfNotNull(folder, fileName).joinToString("/"),
+                        sourceName = if (volume.isBlank() || volume == "external_primary") "Téléphone" else "Stockage $volume",
+                        sourceId = folderIdentity("${source.identity()}:$volume", ""),
                     )
                     continue
                 }
                 val probe = probe(uri, fileName, source.kind,
                     cursor.long(MediaStore.Images.ImageColumns.DATE_TAKEN)?.takeIf { it > 0 })
+                if (source.kind == LibrarySourceKind.VIDEO) parsed = VideoClassifier.parse(fileName,
+                    folder?.split('/')?.filter(String::isNotBlank).orEmpty(), source.category, probe.durationSeconds, probe.title)
                 found += MediaEntry(
                     id = stableId(uriValue),
                     uri = uriValue,
@@ -407,6 +416,7 @@ class MediaLibrary(
                     modifiedAtMs = modified,
                     addedAtMs = old?.addedAtMs ?: discoveredAt,
                     capturedAtMs = probe.capturedAtMs,
+                        embeddedTitle = probe.title,
                     durationSeconds = probe.durationSeconds,
                     width = probe.width,
                     height = probe.height,
@@ -424,6 +434,8 @@ class MediaLibrary(
                     folder = folder,
                     folderId = folderId,
                     relativePath = listOfNotNull(folder, fileName).joinToString("/"),
+                        sourceName = if (volume.isBlank() || volume == "external_primary") "Téléphone" else "Stockage $volume",
+                        sourceId = folderIdentity("${source.identity()}:$volume", ""),
                     subtitles = emptyList(),
                     sourceKey = source.identity(),
                     discNumber = probe.discNumber, trackNumber = probe.trackNumber,

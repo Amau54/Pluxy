@@ -197,7 +197,7 @@ class ServerService : Service() {
             add(LibrarySource.automatic(LibrarySourceKind.AUDIO))
         }
         preferences.videoFolders.filter { it.visible }.forEach {
-            add(LibrarySource(LibrarySourceKind.VIDEO, it.uri, it.title))
+            add(LibrarySource(LibrarySourceKind.VIDEO, it.uri, it.title, it.category))
         }
         preferences.photoFolders.filter { it.visible }.forEach {
             add(LibrarySource(LibrarySourceKind.PHOTO, it.uri, it.title))

@@ -46,6 +46,7 @@ object ArtworkPolicy {
         localThumbnailUrl: String? = null,
     ): Plan {
         val posterAspect = when (kind) {
+            "clip" -> Aspect.LANDSCAPE
             "photo", "audio" -> Aspect.SQUARE
             else -> Aspect.POSTER
         }
@@ -73,6 +74,7 @@ object ArtworkPolicy {
             fallbackAspect = posterAspect,
             typeLabel = when (kind) {
                 "series" -> "SÉRIE"
+                "clip" -> "VIDÉO"
                 "photo" -> "PHOTO"
                 "audio" -> "MUSIQUE"
                 else -> "FILM"

@@ -44,7 +44,7 @@ function folders() {
 
 function readPatch() {
   return {
-    server: {name: $('serverName').value.trim() || 'Pluxy', port: Number($('port').value), media_dirs: folders(), autostart: $('autostart').checked},
+    server: {name: $('serverName').value.trim() || 'Pluxy', port: Number($('port').value), media_dirs: folders(), media_dir_types: Object.fromEntries(folders().map(path => [path, CFG.server.media_dir_types?.[path] || 'auto'])), autostart: $('autostart').checked},
     discovery: {enabled: $('discovery').checked},
     transcoding: {prefer_direct_play: $('preferDirect').checked, hardware_acceleration: $('hw').checked, force_transcode: $('force').checked, preset: $('preset').value, max_bitrate_mbps: Number($('bitrate').value), hdr_tone_mapping: $('tonemap').value},
     audio: {force_audio_passthrough: $('passthrough').checked, target_codec: $('acodec').value},
@@ -101,7 +101,21 @@ function renderFolders() {
       renderFolders();
       updateControls();
     };
-    chip.append(label, remove);
+    const category = document.createElement('select');
+    category.setAttribute('aria-label', 'Catégorie du dossier ' + path);
+    [['auto', 'Détection automatique'], ['movie', 'Films'], ['series', 'Séries'], ['clip', 'Vidéos personnelles / autres']].forEach(([value, text]) => {
+      const option = document.createElement('option');
+      option.value = value;
+      option.textContent = text;
+      category.append(option);
+    });
+    category.value = CFG.server.media_dir_types?.[path] || 'auto';
+    category.onchange = () => {
+      CFG.server.media_dir_types ||= {};
+      CFG.server.media_dir_types[path] = category.value;
+      updateControls();
+    };
+    chip.append(label, category, remove);
     list.append(chip);
   });
 }
@@ -307,3 +321,17 @@ window.addEventListener('beforeunload', event => {
 });
 updateControls();
 load();
+
+async function checkDiagnostics() {
+  const result = $('diagnosticsResult');
+  result.textContent = 'Vérification en cours…';
+  $('diagnosticsButton').disabled = true;
+  try {
+    const response = await fetch('/api/settings/diagnostics');
+    if (!response.ok) throw new Error('Diagnostic indisponible.');
+    const info = await response.json();
+    const labels = {ok: 'Connexion TMDB fonctionnelle', missing_key: 'Clé TMDB absente', invalid_key: 'Clé TMDB refusée', disabled: 'TMDB désactivé', rate_limit: 'TMDB demande de patienter', network_error: 'TMDB inaccessible sur ce réseau', service_error: 'TMDB indisponible'};
+    result.textContent = `${labels[info.tmdb] || 'TMDB indisponible'}. ${info.posters} affiches pour ${info.videos_to_match} films / épisodes. Miniatures vidéo : ${info.ffmpeg && info.ffprobe ? 'outils disponibles' : 'FFmpeg / ffprobe manquants : relancez Pluxy.bat'}. Les vidéos personnelles utilisent une capture locale, sans TMDB.`;
+  } catch (error) { result.textContent = error.message; }
+  finally { $('diagnosticsButton').disabled = false; }
+}

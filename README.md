@@ -6,7 +6,7 @@
 
 Vos films, séries, photos et musique sur la TV.
 
-**1.6.0 · Android TV et Android 6.0+**
+**1.6.1 · Android TV et Android 6.0+**
 
 [Lecteur Android](https://github.com/Amau54/Pluxy/releases/download/dev-latest/Pluxy-debug.apk)
 · [Serveur Android](https://github.com/Amau54/Pluxy/releases/download/dev-latest/Pluxy-Server-Android-debug.apk)
@@ -30,7 +30,7 @@ est conservé sur cet appareil et s'applique aussi aux commandes vidéo.
 3. Choisissez vos dossiers dans la fenêtre qui s'ouvre.
 4. Ouvrez Pluxy sur la TV et sélectionnez le serveur détecté.
 
-Python est installé automatiquement s'il manque. Le premier lancement nécessite
+Python, FFmpeg et ffprobe sont installés automatiquement s'ils manquent. Le premier lancement nécessite
 Internet pour préparer les composants. Les lancements suivants réutilisent
 l'installation. Aucun droit administrateur n'est demandé.
 
@@ -38,9 +38,9 @@ L'icône Pluxy dans la zone de notification permet de rouvrir la fenêtre ou
 d'arrêter le serveur. L'adresse de configuration est `http://localhost:8420/`
 par défaut. Si vous changez le port, la fenêtre utilise la nouvelle adresse.
 
-Le PC peut convertir les vidéos avec FFmpeg et ffprobe, à installer séparément.
-Ajoutez-les au `PATH`, ou renseignez `ffmpeg.ffmpeg_path` et `ffmpeg.ffprobe_path`
-dans le fichier de configuration local (`%LOCALAPPDATA%\Pluxy\config.json` par défaut).
+Le lanceur prépare FFmpeg dans votre compte Windows. Pour utiliser votre propre
+installation, ajoutez-la au `PATH` ou renseignez `ffmpeg.ffmpeg_path` et
+`ffmpeg.ffprobe_path` dans `%LOCALAPPDATA%\Pluxy\config.json`.
 L'accélération NVENC nécessite un GPU NVIDIA compatible et ses pilotes.
 La conversion logicielle utilise le processeur et peut être plus lente.
 La lecture du fichier original fonctionne sans FFmpeg.
@@ -63,11 +63,11 @@ en charge en DLNA. Google Cast nécessite les services Google sur le téléphone
 ## Lecture et bibliothèque
 
 - Reprise des vidéos, épisode suivant et recherche dans toute la bibliothèque.
-- Films et séries en grille ; vue Découvrir pour les nouveautés et les reprises.
+- Films, séries et vidéos dans trois rubriques distinctes ; vue Découvrir pour les nouveautés et les reprises.
 - Filtres par genre, année, état de lecture, durée, résolution et HDR ; tri séparé.
 - Accès aux films par première lettre depuis le menu de tri.
 - Collections de votre choix ou collections alimentées par vos filtres.
-- Photos par album ou date de prise de vue, galerie et diaporama.
+- Photos par dossiers dépliés, albums ou date de prise de vue, galerie et diaporama.
 - Musique par album, avec les pistes dans l'ordre des disques et des numéros.
 - Navigation mobile en bas de l'écran ; densité Compact ou Confort dans les réglages.
 - Audio, sous-titres et déplacement dans la vidéo depuis la télécommande.
@@ -79,6 +79,13 @@ Les services externes utilisés sont décrits dans la [politique de confidential
 
 Les filtres et la vue sont mémorisés pour chaque bibliothèque et chaque serveur.
 Les collections sont conservées sur le lecteur qui les a créées.
+
+Pour chaque dossier vidéo, choisissez **Automatique**, **Films**, **Séries** ou
+**Vidéos** dans le serveur. Le choix explicite prime sur la détection. En automatique,
+Pluxy utilise les dossiers, noms d'épisodes, noms de caméra, durée et titre intégré.
+Les fichiers sans indice fiable restent dans Vidéos. Aucun fichier n'est déplacé.
+Les miniatures manquantes sont calculées à la demande à partir de plusieurs images
+de la vidéo ; les fondus noirs ou blancs sont défavorisés, puis le résultat est gardé en cache.
 
 ## Installer une APK sur la TV
 

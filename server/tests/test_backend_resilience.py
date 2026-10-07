@@ -281,7 +281,7 @@ def test_config_read_retries_windows_locks_without_loading_defaults(tmp_path, mo
                 raise error
         return original_read(path, *args, **kwargs)
 
-    monkeypatch.setattr(config, "os", SimpleNamespace(name="nt"))
+    monkeypatch.setattr(config, "os", SimpleNamespace(name="nt", environ={}))
     monkeypatch.setattr(config.time, "sleep", sleeps.append)
     monkeypatch.setattr(Path, "read_text", briefly_locked)
     manager = config.ConfigManager(tmp_path, tmp_path / "missing-default.json")
@@ -317,7 +317,7 @@ def test_inaccessible_persisted_config_never_replaced_by_defaults(tmp_path, monk
             raise error
         return original_read(path, *args, **kwargs)
 
-    monkeypatch.setattr(config, "os", SimpleNamespace(name="nt"))
+    monkeypatch.setattr(config, "os", SimpleNamespace(name="nt", environ={}))
     monkeypatch.setattr(config.time, "sleep", sleeps.append)
     monkeypatch.setattr(Path, "read_text", inaccessible)
     with pytest.raises(PermissionError) as raised:

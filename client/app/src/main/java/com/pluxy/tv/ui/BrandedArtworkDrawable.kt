@@ -107,8 +107,13 @@ class BrandedArtworkDrawable(
             letterSpacing = 0.12f
             textAlign = Paint.Align.LEFT
         }
+        val available = area.width() * 0.84f
+        val text = if (textPaint.measureText(labelText) <= available) labelText else typeLabel
+        while (textPaint.measureText(text) > available && textPaint.textSize > 8f * spToPx) {
+            textPaint.textSize *= 0.9f
+        }
         canvas.drawText(
-            labelText,
+            text,
             area.left + area.width() * 0.08f,
             area.top + area.height() * 0.07f + labelSize,
             textPaint,

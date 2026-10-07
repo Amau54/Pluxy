@@ -201,7 +201,8 @@ def test_video_thumbnail_is_generated_once_then_cached(tmp_path, monkeypatch):
     calls = []
 
     def fake_run(command, **_kwargs):
-        Path(command[-1]).write_bytes(b"jpeg")
+        from PIL import Image
+        Image.new("RGB", (24, 24), (120, 150, 180)).save(command[-1], format="JPEG")
         calls.append(command)
         return type("Result", (), {"returncode": 0})()
 
@@ -210,9 +211,9 @@ def test_video_thumbnail_is_generated_once_then_cached(tmp_path, monkeypatch):
     first = thumbnailer.jpeg(item)
     second = thumbnailer.jpeg(item)
 
-    assert first == second and first.read_bytes() == b"jpeg"
-    assert len(calls) == 1
-    assert calls[0][calls[0].index("-ss") + 1] == "10.000"
+    assert first == second and first.read_bytes().startswith(b"\xff\xd8")
+    assert len(calls) == 3
+    assert calls[0][calls[0].index("-ss") + 1] == "12.000"
 
 
 def test_video_keeps_local_thumbnail_fallback_with_remote_poster():
@@ -242,7 +243,7 @@ def test_video_keeps_local_thumbnail_fallback_with_remote_poster():
     public = _enrich(item, state)
 
     assert public.poster_url == metadata.poster_url
-    assert public.thumbnail_url == f"/api/library/items/{item.id}/thumbnail"
+    assert public.thumbnail_url == f"/api/library/items/{item.id}/thumbnail?v=2"
     assert public.path == ""
 
 

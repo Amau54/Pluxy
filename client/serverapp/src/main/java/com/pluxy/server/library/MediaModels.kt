@@ -47,6 +47,9 @@ data class MediaEntry(
     val capturedAtMs: Long? = null,
     val folderId: String? = null,
     val relativePath: String? = null,
+    val sourceName: String? = null,
+    val sourceId: String? = null,
+    val embeddedTitle: String? = null,
 ) {
     fun publicJson(metadata: JSONObject?, watch: WatchState): JSONObject {
         val videoMetadata = metadata.takeIf { kind == "movie" || kind == "series" }
@@ -90,6 +93,8 @@ data class MediaEntry(
             putNullable("folder", folder)
             putNullable("folder_id", folderId ?: folderIdentity(sourceKey ?: "", folder.orEmpty()))
             putNullable("relative_path", relativePath)
+            putNullable("source_id", sourceId ?: sourceKey?.let { folderIdentity(it, "") })
+            putNullable("source_name", sourceName)
             putNullable("thumbnail_url", localThumbnailUrl(kind, id))
             put("external_subs", JSONArray().apply {
                 subtitles.forEach { put("") }
@@ -146,6 +151,9 @@ data class MediaEntry(
         putNullable("folder", folder)
         putNullable("folder_id", folderId)
         putNullable("relative_path", relativePath)
+        putNullable("source_name", sourceName)
+        putNullable("source_id", sourceId)
+        putNullable("embedded_title", embeddedTitle)
         put("subtitles", JSONArray().apply {
             subtitles.forEach { sub ->
                 put(JSONObject().apply {
@@ -212,6 +220,9 @@ data class MediaEntry(
             capturedAtMs = json.optLong("captured_at_ms", 0).takeIf { it > 0 },
             folderId = json.optStringOrNull("folder_id"),
             relativePath = json.optStringOrNull("relative_path"),
+            sourceName = json.optStringOrNull("source_name"),
+            sourceId = json.optStringOrNull("source_id"),
+            embeddedTitle = json.optStringOrNull("embedded_title"),
         )
     }
 }
@@ -233,8 +244,8 @@ internal fun folderIdentity(source: String, folder: String): String = MessageDig
     .digest("$source\u0000$folder".toByteArray(Charsets.UTF_8)).take(12).joinToString("") { "%02x".format(it.toInt() and 0xff) }
 
 internal fun localThumbnailUrl(kind: String, id: String): String? =
-    if (kind in setOf("photo", "audio", "movie", "series")) {
-        "/image/thumbnail/$id"
+    if (kind in setOf("photo", "audio", "movie", "series", "clip")) {
+        "/image/thumbnail/$id?v=2"
     } else {
         null
     }

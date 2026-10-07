@@ -75,13 +75,24 @@ internal class LibraryAdapter(
         val row = getItem(position)
         if (holder is HeaderViewHolder && row is LibRow.Header) {
             holder.title.text = row.title
+            val tree = row.id.startsWith("photo-tree:")
+            holder.title.setTextSize(TypedValue.COMPLEX_UNIT_PX, holder.itemView.resources.getDimension(
+                if (tree) R.dimen.section_header_tree_title_size else R.dimen.section_header_title_size))
+            (holder.itemView.layoutParams as? ViewGroup.MarginLayoutParams)?.let { margins ->
+                val density = holder.itemView.resources.displayMetrics.density
+                margins.topMargin = ((if (tree && row.depth > 0) 0 else 6) * density).toInt()
+                margins.bottomMargin = ((if (tree) 0 else 4) * density).toInt()
+            }
+            val inset = (12 + row.depth.coerceAtMost(5) * 14) * holder.itemView.resources.displayMetrics.density
+            holder.itemView.setPaddingRelative(inset.toInt(), holder.itemView.paddingTop,
+                (12 * holder.itemView.resources.displayMetrics.density).toInt(), holder.itemView.paddingBottom)
             holder.title.maxLines = if (row.collapsible) 2 else 1
             holder.chevron.visibility = if (row.collapsible) View.VISIBLE else View.GONE
             holder.chevron.rotation = if (row.expanded) 90f else 0f
             holder.itemView.isFocusable = row.collapsible
             holder.itemView.isClickable = row.collapsible
             holder.itemView.minimumHeight = holder.itemView.resources.getDimensionPixelSize(
-                if (row.collapsible) R.dimen.section_header_touch_height else R.dimen.section_header_plain_height,
+                if (tree) R.dimen.section_header_tree_height else if (row.collapsible) R.dimen.section_header_touch_height else R.dimen.section_header_plain_height,
             )
             holder.itemView.background = if (row.collapsible) {
                 holder.itemView.context.getDrawable(R.drawable.bg_section_header)
@@ -530,7 +541,7 @@ private fun bindMediaCard(
     } else details
     holder.meta.visibility = if (holder.meta.text.isBlank()) View.GONE else View.VISIBLE
 
-    val isVideo = media.kind == "movie" || media.kind == "series"
+    val isVideo = media.kind in setOf("movie", "series", "clip")
     holder.hdr.visibility = if (isVideo && media.isHdr) View.VISIBLE else View.GONE
     holder.watched.visibility = if (isVideo && media.watched) View.VISIBLE else View.GONE
     holder.resume.visibility =

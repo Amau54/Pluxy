@@ -613,6 +613,7 @@ def _entry_fixture(tmp_path: Path) -> Path:
     (server / "requirements.txt").write_text("", encoding="utf-8")
     (server / "pluxy_tray.pyw").write_text("# entry-point fixture only\n", encoding="utf-8")
     shutil.copyfile(ENTRY, tools / ENTRY.name)
+    (tools / "Media-Runtime.ps1").write_text("function Initialize-PCMediaRuntime { return 'media-runtime-fixture' }", encoding="utf-8")
     (tools / HELPERS.name).write_text(
         """
 function Initialize-PCEnvironment {

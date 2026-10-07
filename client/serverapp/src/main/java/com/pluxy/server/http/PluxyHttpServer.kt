@@ -344,7 +344,7 @@ class PluxyHttpServer(
             request.path.matches(Regex("^/image/thumbnail/[0-9a-f]+$")) &&
                 request.method in setOf("GET", "HEAD") -> {
                 val item = requireItem(request.path.substringAfterLast('/'))
-                if (item.kind !in setOf("photo", "movie", "series", "audio")) {
+                if (item.kind !in setOf("photo", "movie", "series", "clip", "audio")) {
                     throw HttpFailure(404, "Miniature introuvable")
                 }
                 val bytes = when (val thumbnail = thumbnails.jpeg(item)) {

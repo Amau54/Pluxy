@@ -12,6 +12,7 @@ sealed class LibRow {
         /** Les dossiers Photos, eux seuls, se replient depuis leur titre. */
         val collapsible: Boolean = false,
         val expanded: Boolean = true,
+        val depth: Int = 0,
     ) : LibRow() {
         override val stableKey: String = "header:$id"
     }

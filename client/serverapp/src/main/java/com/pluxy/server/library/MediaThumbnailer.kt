@@ -30,11 +30,11 @@ class MediaThumbnailer(context: Context) {
     }
 
     fun jpeg(item: MediaEntry): Result {
-        if (item.kind !in setOf("photo", "movie", "series", "audio")) return Result.Unsupported
-        val key = "${item.id}:${item.modifiedAtMs}:${item.size}"
+        if (item.kind !in setOf("photo", "movie", "series", "clip", "audio")) return Result.Unsupported
+        val key = "v2:${item.id}:${item.modifiedAtMs}:${item.size}"
         cache.get(key)?.let { return Result.Ready(it) }
         if (!decodeSlots.tryAcquire(DECODE_WAIT_MS, TimeUnit.MILLISECONDS)) return Result.Busy
-        val videoLocked = item.kind in setOf("movie", "series")
+        val videoLocked = item.kind in setOf("movie", "series", "clip")
         if (videoLocked && !videoSlot.tryAcquire(DECODE_WAIT_MS, TimeUnit.MILLISECONDS)) {
             decodeSlots.release()
             return Result.Busy
@@ -95,12 +95,13 @@ class MediaThumbnailer(context: Context) {
         return try {
             resolver.openFileDescriptor(uri, "r")?.use { descriptor ->
                 retriever.setDataSource(descriptor.fileDescriptor)
-                val second = when {
-                    item.durationSeconds <= 0.0 -> 10.0
-                    item.durationSeconds < 20.0 -> item.durationSeconds * 0.5
-                    else -> (item.durationSeconds * 0.1).coerceIn(5.0, 120.0)
-                }
-                val timeUs = (second * 1_000_000.0).toLong()
+                val times = if (item.durationSeconds > 0) listOf(0.12, 0.35, 0.65).map { item.durationSeconds * it } else listOf(1.0, 5.0, 15.0)
+                var best: ByteArray? = null
+                var bestScore = -1.0
+                val deadline = android.os.SystemClock.elapsedRealtime() + 15_000
+                for (second in times.distinct()) {
+                    if (android.os.SystemClock.elapsedRealtime() > deadline) break
+                    val timeUs = (second * 1_000_000.0).toLong()
                 val source = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
                     val sourceWidth = item.width?.coerceAtLeast(1) ?: THUMB_EDGE
                     val sourceHeight = item.height?.coerceAtLeast(1) ?: THUMB_EDGE
@@ -111,14 +112,22 @@ class MediaThumbnailer(context: Context) {
                     )
                     retriever.getScaledFrameAtTime(
                         timeUs,
-                        MediaMetadataRetriever.OPTION_CLOSEST_SYNC,
+                        MediaMetadataRetriever.OPTION_CLOSEST,
                         (sourceWidth * ratio).toInt().coerceAtLeast(1),
                         (sourceHeight * ratio).toInt().coerceAtLeast(1),
                     )
                 } else {
-                    retriever.getFrameAtTime(timeUs, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
-                } ?: return@use null
-                encodeScaled(source)
+                    retriever.getFrameAtTime(timeUs, MediaMetadataRetriever.OPTION_CLOSEST)
+                } ?: continue
+                val sample = Bitmap.createScaledBitmap(source, 32, 32, false)
+                val pixels = IntArray(32 * 32)
+                sample.getPixels(pixels, 0, 32, 0, 0, 32, 32)
+                if (sample !== source) sample.recycle()
+                val score = VideoFrameScore.score(pixels)
+                val bytes = encodeScaled(source)
+                if (bytes != null && score > bestScore) { best = bytes; bestScore = score }
+                }
+                best
             }
         } catch (_: Exception) {
             null

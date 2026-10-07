@@ -21,6 +21,8 @@ try {
     }
     Write-Host '[Pluxy] Verification du serveur PC...'
     $python = Initialize-PCEnvironment -ServerDirectory $server -RuntimeDirectory $runtime
+    . (Join-Path $PSScriptRoot 'Media-Runtime.ps1')
+    Initialize-PCMediaRuntime | Out-Null
     if ($PrepareOnly) { [pscustomobject]@{ Ready = $true; Python = $python } | ConvertTo-Json -Compress }
     else {
         Write-Host '[Pluxy] Ouverture de Pluxy. Son icone apparait dans la zone de notification.'

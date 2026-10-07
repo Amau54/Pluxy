@@ -1,4 +1,4 @@
-# APK de test — Pluxy 1.6.0 (51)
+# APK de test — Pluxy 1.6.1 (52)
 
 Lecteur Android TV/mobile et serveur Android, hors Google Play.
 

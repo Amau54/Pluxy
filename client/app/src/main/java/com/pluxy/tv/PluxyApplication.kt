@@ -129,13 +129,13 @@ class PluxyApplication : Application() {
         fun libraryTab(ctx: Context): String {
             val scopedKey = "$KEY_LIBRARY_TAB:${serverBaseUrl(ctx)}"
             val stored = prefs(ctx).getString(scopedKey, null) ?: prefs(ctx).getString(KEY_LIBRARY_TAB, null)
-            if (stored in setOf("home", "movie", "series", "photo", "audio")) return stored!!
+            if (stored in setOf("home", "movie", "series", "clip", "photo", "audio")) return stored!!
             // Migration douce : respecte l'ancien filtre Film/Série au premier lancement.
             return libraryType(ctx).takeIf { it == "movie" || it == "series" } ?: "home"
         }
 
         fun setLibraryTab(ctx: Context, value: String) {
-            if (value !in setOf("home", "movie", "series", "photo", "audio")) return
+            if (value !in setOf("home", "movie", "series", "clip", "photo", "audio")) return
             prefs(ctx).edit().putString("$KEY_LIBRARY_TAB:${serverBaseUrl(ctx)}", value).apply()
         }
 

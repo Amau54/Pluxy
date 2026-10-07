@@ -193,7 +193,7 @@ def test_audio_folder_cover_is_cached_and_not_added_to_the_photo_library(tmp_pat
     monkeypatch.setattr(thumbnailer, "_photo", no_ffmpeg)
     assert thumbnailer.jpeg(item) == target
     public = Catalogue(state.library, state.metadata, state.watch).page(Query(kind="audio"), 0, 100)[0][0]
-    assert public.thumbnail_url == f"/api/library/items/{item.id}/thumbnail"
+    assert public.thumbnail_url == f"/api/library/items/{item.id}/thumbnail?v=2"
 
 
 def test_audio_cover_outside_the_authorized_folder_is_ignored(tmp_path, monkeypatch):
@@ -377,7 +377,7 @@ def test_facets_and_home_include_first_episode_resume_without_photos_audio(tmp_p
     catalogue = Catalogue(state.library, state.metadata, state.watch)
     facets = catalogue.facets("movie")
     assert facets["query_supported"] and facets["total"] == 4
-    assert facets["counts"] == {"movie": 4, "series": 1, "photo": 1, "audio": 1}
+    assert facets["counts"] == {"movie": 4, "series": 1, "clip": 0, "photo": 1, "audio": 1}
     assert facets["genres"] == ["Action", "Comédie", "Drame"] and facets["years"] == [2021, 2020]
     assert facets["resolutions"] == ["4k", "1080p", "720p"]
     home = catalogue.home()

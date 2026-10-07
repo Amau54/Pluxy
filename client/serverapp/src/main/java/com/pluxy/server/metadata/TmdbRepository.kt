@@ -74,11 +74,14 @@ class TmdbRepository(
     suspend fun get(item: MediaEntry, force: Boolean = false): JSONObject = withContext(Dispatchers.IO) {
         if (item.kind !in setOf("movie", "series")) return@withContext fallback(item)
         requestMutex.withLock {
-            if (!force) cached(item.id)?.let { return@withLock it }
+            if (!force) cached(item.id)?.takeIf { it.optInt("lookup_revision") == 2 && it.optString("lookup_kind") == item.kind }
+                ?.let { return@withLock it }
             val key = preferences.tmdbApiKey
             if (key.isBlank()) return@withLock fallback(item)
             val remote = runCatching { fetch(item, key) }.getOrNull()
             if (remote != null) {
+                remote.put("lookup_revision", 2)
+                remote.put("lookup_kind", item.kind)
                 save(item.id, remote)
                 remote
             } else {
@@ -132,7 +135,11 @@ class TmdbRepository(
                 if (type == "movie") item.parsedYear?.let { addQueryParameter("year", it.toString()) }
             }
             .build()
-        val result = getJson(search, key)?.optJSONArray("results")?.optJSONObject(0) ?: return null
+        val results = getJson(search, key)?.optJSONArray("results") ?: return null
+        val result = (0 until minOf(results.length(), 20)).mapNotNull { results.optJSONObject(it) }.firstOrNull {
+            TitleMatch.matches(query, it.optString(if (type == "tv") "name" else "title"),
+                it.optString(if (type == "tv") "original_name" else "original_title"))
+        } ?: return null
         val id = result.optInt("id", 0).takeIf { it > 0 } ?: return null
         val detailsUrl = apiUrl("$type/$id", key).newBuilder()
             .addQueryParameter("language", "fr-FR")

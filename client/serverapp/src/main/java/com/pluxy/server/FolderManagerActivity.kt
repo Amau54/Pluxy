@@ -38,6 +38,7 @@ class FolderManagerActivity : AppCompatActivity() {
             if (folders.any { it.uri == uri.toString() }) return@runCatching
             folders += MediaFolder(uri.toString(), defaultName(uri))
             save()
+            if (theme == MediaTheme.VIDEO) chooseCategory(folders.lastIndex)
         }.onFailure { Toast.makeText(this, "Impossible d'ajouter ce dossier. Sélectionnez un dossier accessible.", Toast.LENGTH_LONG).show() }
     }
 
@@ -81,6 +82,8 @@ class FolderManagerActivity : AppCompatActivity() {
             override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) = Unit
         })
         adapter = FolderAdapter(
+            video = theme == MediaTheme.VIDEO,
+            onCategory = ::chooseCategory,
             folderName = ::displayName,
             onVisibility = { index, visible -> folders[index] = folders[index].copy(visible = visible); save() },
             onRename = ::rename,
@@ -143,6 +146,18 @@ class FolderManagerActivity : AppCompatActivity() {
             .show()
     }
 
+    private fun chooseCategory(index: Int) {
+        if (index !in folders.indices) return
+        val values = listOf("auto", "movie", "series", "clip")
+        AlertDialog.Builder(this).setTitle("Contenu de ${displayName(folders[index])}")
+            .setSingleChoiceItems(arrayOf("Détection automatique", "Films", "Séries", "Vidéos personnelles / autres"),
+                values.indexOf(folders[index].category).coerceAtLeast(0)) { dialog, choice ->
+                folders[index] = folders[index].copy(category = values[choice])
+                save()
+                dialog.dismiss()
+            }.setNegativeButton("Fermer", null).show()
+    }
+
     private fun delete(index: Int) {
         val name = displayName(folders[index])
         AlertDialog.Builder(this)
@@ -176,6 +191,8 @@ class FolderManagerActivity : AppCompatActivity() {
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
     private class FolderAdapter(
+        private val video: Boolean,
+        private val onCategory: (Int) -> Unit,
         private val folderName: (MediaFolder) -> String,
         private val onVisibility: (Int, Boolean) -> Unit,
         private val onRename: (Int) -> Unit,
@@ -260,7 +277,9 @@ class FolderManagerActivity : AppCompatActivity() {
             row.addView(actions, LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT,
             ))
-            return Holder(row, title, visible, rename, delete, handle).also { holder ->
+            val category = smallButton(context, "Catégorie").apply { visibility = if (video) android.view.View.VISIBLE else android.view.View.GONE }
+            row.addView(category, LinearLayout.LayoutParams(-1, -2))
+            return Holder(row, title, visible, rename, delete, handle, category).also { holder ->
                 handle.setOnLongClickListener {
                     onStartDrag(holder)
                     true
@@ -272,6 +291,9 @@ class FolderManagerActivity : AppCompatActivity() {
             val folder = values[position]
             val name = folderName(folder)
             holder.title.text = name
+            holder.category.text = "Catégorie : " + when (folder.category) { "movie" -> "Films"; "series" -> "Séries"; "clip" -> "Vidéos"; else -> "Automatique" }
+            holder.category.contentDescription = "Changer la catégorie de $name"
+            holder.category.setOnClickListener { holder.bindingAdapterPosition.takeIf { it in values.indices }?.let(onCategory) }
             holder.handle.contentDescription = "Déplacer $name"
             holder.visible.contentDescription = "Afficher $name dans la bibliothèque"
             holder.rename.contentDescription = "Renommer $name"
@@ -312,6 +334,7 @@ class FolderManagerActivity : AppCompatActivity() {
             val rename: Button,
             val delete: Button,
             val handle: TextView,
+            val category: Button,
         ) : RecyclerView.ViewHolder(view)
 
         companion object {
