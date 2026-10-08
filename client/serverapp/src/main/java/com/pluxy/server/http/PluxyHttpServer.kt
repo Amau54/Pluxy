@@ -2,7 +2,7 @@ package com.pluxy.server.http
 
 import android.content.Context
 import android.net.Uri
-import com.pluxy.server.BuildConfig
+import com.pluxy.server.serverApplicationVersion
 import com.pluxy.server.LanAddressPolicy
 import com.pluxy.server.NetworkUtils
 import com.pluxy.server.ServerPreferences
@@ -53,6 +53,7 @@ class PluxyHttpServer(
     private val scope: CoroutineScope,
     private val requestScan: () -> Unit,
 ) {
+    private val version = serverApplicationVersion(context)
     private val thumbnails = MediaThumbnailer(context)
     private var serverSocket: ServerSocket? = null
     private var acceptThread: Thread? = null
@@ -466,7 +467,7 @@ class PluxyHttpServer(
             put("name", preferences.serverName)
             put("ip", ip)
             put("port", preferences.httpPort)
-            put("version", BuildConfig.VERSION_NAME)
+            put("version", version)
             put("platform", "android")
             put("primary_ip", ip)
             put("ips", JSONArray(NetworkUtils.allLanIps()))
@@ -702,7 +703,7 @@ class PluxyHttpServer(
         val safeHeaders = linkedMapOf(
             "Content-Type" to contentType,
             "Connection" to "close",
-            "Server" to "Pluxy-Android/${BuildConfig.VERSION_NAME}",
+            "Server" to "Pluxy-Android/$version",
             "X-Content-Type-Options" to "nosniff",
             "X-Frame-Options" to "DENY",
             "Referrer-Policy" to "no-referrer",

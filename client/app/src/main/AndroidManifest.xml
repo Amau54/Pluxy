@@ -31,7 +31,7 @@
 
         <!-- Lanceur : LAUNCHER (mobile) + LEANBACK_LAUNCHER (Android TV) -->
         <activity
-            android:name=".ui.MainActivity"
+            android:name=".ui.ModeActivity"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -39,6 +39,8 @@
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <activity android:name=".ui.MainActivity" android:exported="false" />
 
         <activity
             android:name=".ui.ServerSetupActivity"

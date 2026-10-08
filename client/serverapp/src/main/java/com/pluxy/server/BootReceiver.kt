@@ -6,6 +6,7 @@ import android.content.Intent
 
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        if (ApplicationMode.read(context) != ApplicationMode.SERVER) return
         val preferences = ServerPreferences(context)
         val shouldStart = when (intent.action) {
             Intent.ACTION_BOOT_COMPLETED -> preferences.autoStart

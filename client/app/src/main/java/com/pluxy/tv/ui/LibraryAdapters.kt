@@ -4,6 +4,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.ViewTreeObserver
+import android.os.SystemClock
 import android.util.TypedValue
 import android.graphics.Paint
 import android.widget.ImageView
@@ -211,6 +212,7 @@ internal class HomeShelfAdapter(
             LinearLayoutManager(parent.context, LinearLayoutManager.HORIZONTAL, false)
         holder.cards.setRecycledViewPool(recycledCards)
         holder.cards.setHasFixedSize(false)
+        holder.cards.itemAnimator = null
         holder.adapter = ShelfCardAdapter(
             environment = environment,
             onMedia = onMedia,
@@ -415,7 +417,7 @@ internal class ShelfCardAdapter(
         val density = parent.resources.displayMetrics.density
         val width = (parent.resources.getDimensionPixelSize(R.dimen.library_card_width) *
             if (environment.compact) 1f else 1.1f).toInt()
-        val margin = ((if (environment.compact) 6 else 8) * density).toInt()
+        val margin = ((if (environment.compact) 4 else 6) * density).toInt()
         view.layoutParams = RecyclerView.LayoutParams(
             width,
             ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -786,7 +788,7 @@ internal class RecyclerFocusRequester {
     ) : ViewTreeObserver.OnPreDrawListener, View.OnAttachStateChangeListener {
         private val itemId = adapter.getItemId(scrolledPosition)
         private var active = true
-        private var layoutPasses = 0
+        private val deadline = SystemClock.uptimeMillis() + 600L
         private var observer: ViewTreeObserver? = null
         private var scrollRequested = false
 
@@ -826,8 +828,8 @@ internal class RecyclerFocusRequester {
         }
 
         override fun onPreDraw(): Boolean {
-            layoutPasses++
-            if (!valid() || focusIfReady() || layoutPasses >= 3) dispose()
+            if (!valid() || focusIfReady() || SystemClock.uptimeMillis() >= deadline) dispose()
+            else recycler.postInvalidateOnAnimation()
             return true
         }
 

@@ -4,9 +4,9 @@
         <shape android:shape="rectangle">
             <gradient
                 android:angle="270"
-                android:endColor="@color/pluxy_bg"
-                android:centerColor="@color/pluxy_ambient_center"
-                android:startColor="@color/pluxy_ambient_top" />
+                android:endColor="@color/server_pluxy_bg"
+                android:centerColor="@color/server_pluxy_ambient_center"
+                android:startColor="@color/server_pluxy_ambient_top" />
         </shape>
     </item>
     <item android:gravity="top|right" android:right="-120dp" android:top="-180dp">
@@ -15,8 +15,8 @@
             <gradient
                 android:type="radial"
                 android:gradientRadius="210dp"
-                android:startColor="@color/pluxy_glow_coral"
-                android:endColor="@color/pluxy_glow_coral_end" />
+                android:startColor="@color/server_pluxy_glow_coral"
+                android:endColor="@color/server_pluxy_glow_coral_end" />
         </shape>
     </item>
     <item android:gravity="bottom|left" android:left="-160dp" android:bottom="-200dp">
@@ -25,8 +25,8 @@
             <gradient
                 android:type="radial"
                 android:gradientRadius="250dp"
-                android:startColor="@color/pluxy_glow_blue"
-                android:endColor="@color/pluxy_glow_blue_end" />
+                android:startColor="@color/server_pluxy_glow_blue"
+                android:endColor="@color/server_pluxy_glow_blue_end" />
         </shape>
     </item>
 </layer-list>

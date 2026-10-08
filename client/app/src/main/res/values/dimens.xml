@@ -2,7 +2,7 @@
 <!-- Jetons d'espacement / rayons / tailles. Échelle 4 dp cohérente. -->
 <resources>
     <!-- Marges du téléphone ; adaptées dans les variantes grand écran. -->
-    <dimen name="screen_pad">20dp</dimen>
+    <dimen name="screen_pad">16dp</dimen>
 
     <!-- Rayons -->
     <dimen name="radius_sm">8dp</dimen>

@@ -15,16 +15,16 @@
         android:layout_height="match_parent"
         android:padding="5dp"
         android:scaleType="centerInside"
-        android:src="@drawable/ic_chevron_down"
-        app:tint="@color/pluxy_accent"
+        android:src="@drawable/server_ic_chevron_down"
+        app:tint="@color/server_pluxy_accent"
         android:contentDescription="@null"
         android:importantForAccessibility="no" />
 
     <ImageView
         android:layout_width="20dp"
         android:layout_height="20dp"
-        android:src="@drawable/ic_folder"
-        app:tint="@color/pluxy_accent"
+        android:src="@drawable/server_ic_folder"
+        app:tint="@color/server_pluxy_accent"
         android:contentDescription="@null"
         android:importantForAccessibility="no" />
 
@@ -36,7 +36,7 @@
         android:layout_weight="1"
         android:ellipsize="end"
         android:maxLines="1"
-        android:textColor="@color/pluxy_text"
+        android:textColor="@color/server_pluxy_text"
         android:textSize="13sp"
         android:fontFamily="sans-serif-medium" />
 
@@ -44,6 +44,6 @@
         android:id="@+id/folderCount"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:textColor="@color/pluxy_muted"
+        android:textColor="@color/server_pluxy_muted"
         android:textSize="12sp" />
 </LinearLayout>

@@ -1,6 +1,10 @@
-# APK de test — Pluxy 1.6.2 (53)
+# APK de test — Pluxy 1.7.0 (54)
 
-Lecteur Android TV/mobile et serveur Android, hors Google Play.
+Une seule APK Android TV/mobile avec les modes Lecteur et Serveur, hors Google Play.
+Choisissez le mode au premier lancement ; il se change ensuite dans les options.
+Cette APK conserve l’identité de l’ancien lecteur. Si vous utilisiez Pluxy Serveur,
+arrêtez l’ancien serveur et sélectionnez vos dossiers dans la nouvelle application.
+Android ne transfère pas les autorisations entre les deux packages.
 
 Bibliothèques en grille, filtres, collections, albums photo et musique.
 Navigation TV/mobile compacte et choix de densité dans les réglages.

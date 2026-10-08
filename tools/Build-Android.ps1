@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([ValidateSet('Both', 'Player', 'Server')][string]$Application = 'Both', [ValidateSet('Debug', 'Release')][string]$Configuration = 'Debug', [switch]$Verify)
+param([ValidateSet('Both', 'Player', 'Server')][string]$Application = 'Player', [ValidateSet('Debug', 'Release')][string]$Configuration = 'Debug', [switch]$Verify)
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot/Android-Deployment.ps1"
 $repository = Split-Path $PSScriptRoot
@@ -7,9 +7,8 @@ $timer = [Diagnostics.Stopwatch]::StartNew()
 $localSigningVariables = @()
 try {
     $environment = Find-AndroidEnvironment $repository
-    $modules = @()
-    if ($Application -ne 'Server') { $modules += 'app' }
-    if ($Application -ne 'Player') { $modules += 'serverapp' }
+    $modules = @('app')
+    if ($Application -ne 'Player') { Write-Host '[Pluxy] Le lecteur et le serveur sont maintenant dans une seule APK.' }
     if ($Configuration -eq 'Debug') {
         $localSigningVariables = @(Initialize-AndroidDebugSigning -Modules $modules)
         $needsLocalKey = @($modules | Where-Object {

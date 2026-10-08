@@ -1,7 +1,7 @@
 package com.pluxy.server.discovery
 
 import android.content.Context
-import com.pluxy.server.BuildConfig
+import com.pluxy.server.serverApplicationVersion
 import com.pluxy.server.LanAddressPolicy
 import com.pluxy.server.NetworkUtils
 import com.pluxy.server.ServerPreferences
@@ -16,6 +16,7 @@ class DiscoveryResponder(
     private val context: Context,
     private val preferences: ServerPreferences,
 ) {
+    private val version = serverApplicationVersion(context)
     private var socket: DatagramSocket? = null
     private var thread: Thread? = null
 
@@ -70,7 +71,7 @@ class DiscoveryResponder(
                 put("name", preferences.serverName)
                 put("ip", ip)
                 put("port", preferences.httpPort)
-                put("version", BuildConfig.VERSION_NAME)
+                put("version", version)
                 put("platform", "android")
             }.toString().toByteArray(Charsets.UTF_8)
             runCatching {

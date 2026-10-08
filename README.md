@@ -6,17 +6,17 @@
 
 Vos films, séries, photos et musique sur la TV.
 
-**1.6.2 · Android TV et Android 6.0+**
+**1.7.0 · Android TV et Android 6.0+**
 
-[Lecteur Android](https://github.com/Amau54/Pluxy/releases/download/dev-latest/Pluxy-debug.apk)
-· [Serveur Android](https://github.com/Amau54/Pluxy/releases/download/dev-latest/Pluxy-Server-Android-debug.apk)
+[Application Android](https://github.com/Amau54/Pluxy/releases/download/dev-latest/Pluxy-debug.apk)
 · [Serveur PC](https://github.com/Amau54/Pluxy/archive/refs/heads/main.zip)
 
 </div>
 
 Pluxy lit les fichiers d'un PC, d'un téléphone ou d'une tablette sur votre réseau
-local. Installez le lecteur sur la TV et le serveur sur l'appareil qui contient
-vos médias. Les deux appareils doivent être sur le même réseau.
+local. La même application Android sert de lecteur ou de serveur : choisissez
+son mode au premier lancement, puis dans les options pour le modifier.
+Les appareils doivent être sur le même réseau.
 
 Aucun compte ni abonnement n'est nécessaire. Pluxy ne fournit pas de contenu.
 
@@ -47,10 +47,19 @@ La lecture du fichier original fonctionne sans FFmpeg.
 
 ## Démarrer depuis Android
 
-1. Installez **Pluxy Serveur** sur le téléphone ou la tablette contenant les fichiers.
+1. Installez **Pluxy** sur l’appareil contenant les fichiers et choisissez **Serveur**.
 2. Sélectionnez les dossiers de vidéos, photos et musique à partager.
 3. Démarrez le serveur. Pour lire écran éteint, activez **Rester disponible écran éteint**.
-4. Ouvrez le lecteur **Pluxy** sur la TV et choisissez ce serveur.
+4. Sur la TV, choisissez le mode **Lecteur**, puis sélectionnez ce serveur.
+
+Le passage en mode Lecteur arrête le serveur de cet appareil, tout en conservant
+ses réglages. Si vous utilisiez l’ancienne application Pluxy Serveur, arrêtez-la
+et sélectionnez de nouveau vos dossiers dans Pluxy : Android conserve les
+autorisations et réglages dans le package de chaque application.
+
+Dans les photos, gauche/droite passe aux images et haut/bas change de dossier.
+Les images proches sont préchargées. Les vidéos personnelles se lancent directement ;
+les films et séries conservent leur fiche.
 
 Le serveur Android partage les fichiers tels quels. Si la TV ne sait pas lire
 un format, utilisez un lecteur compatible ou le serveur PC pour le convertir.
@@ -113,17 +122,16 @@ Les scripts vérifient l'APK et refusent une mise à jour incompatible.
 Pour Android : JDK 17, SDK 36, platform-tools et build-tools 36.
 
 ```powershell
-.\Build-APK.bat -Application Player
-.\Build-APK.bat -Application Server
+.\Build-APK.bat
 .\Build-APK.bat -Verify
 ```
 
-Les APK sont placées dans `dist/`. `-Verify` lance aussi les tests, lint et les
-bundles release. Pour mettre à jour une installation du canal GitHub, utilisez
+L’APK est placée dans `dist/`. `-Verify` lance aussi les tests, lint et le
+bundle release. Pour mettre à jour une installation du canal GitHub, utilisez
 ses [clés debug stables](docs/DEBUG_SIGNING.md). Un build avec une autre clé
 nécessite une réinstallation.
 
-Le lecteur est dans `client/app`, le serveur Android dans `client/serverapp`,
+L’application est dans `client/app`, le serveur Android intégré dans la bibliothèque `client/serverapp`,
 les modules Cast/DLNA dans `client/receiver-*` et le serveur PC dans `server/pluxy`.
 Les scripts de construction et d'installation sont dans `tools`.
 

@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_pressed="true">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/server_pluxy_accent_dark" />
+            <corners android:radius="@dimen/server_radius_lg" />
+        </shape>
+    </item>
+    <item android:state_focused="true">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/server_pluxy_accent" />
+            <corners android:radius="@dimen/server_radius_lg" />
+            <stroke android:width="1dp" android:color="@color/server_pluxy_text" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:angle="0"
+                android:startColor="@color/server_pluxy_accent_bright"
+                android:endColor="@color/server_pluxy_accent" />
+            <corners android:radius="@dimen/server_radius_lg" />
+            <stroke android:width="0.5dp" android:color="@color/server_pluxy_accent_bright" />
+        </shape>
+    </item>
+</selector>

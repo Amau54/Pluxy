@@ -51,19 +51,19 @@ class FolderManagerActivity : AppCompatActivity() {
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(getColor(R.color.pluxy_bg))
+            setBackgroundColor(getColor(R.color.server_pluxy_bg))
             setPadding(dp(20), dp(20), dp(20), dp(16))
         }
         root.addView(TextView(this).apply {
             text = theme.label
             textSize = 22f
-            setTextColor(getColor(R.color.pluxy_text))
+            setTextColor(getColor(R.color.server_pluxy_text))
             typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
         })
         root.addView(TextView(this).apply {
             text = "Maintenez la poignée pour changer l’ordre, ou touchez-la pour déplacer un dossier. Masquer conserve les fichiers."
             textSize = 14f
-            setTextColor(getColor(R.color.pluxy_muted))
+            setTextColor(getColor(R.color.server_pluxy_muted))
             setPadding(0, dp(6), 0, dp(12))
         })
         val list = RecyclerView(this).apply {
@@ -102,8 +102,8 @@ class FolderManagerActivity : AppCompatActivity() {
             textSize = 14f
             minHeight = dp(48)
             setPadding(dp(12), dp(6), dp(12), dp(6))
-            setTextColor(getColor(R.color.pluxy_text))
-            setBackgroundResource(R.drawable.bg_button_secondary)
+            setTextColor(getColor(R.color.server_pluxy_text))
+            setBackgroundResource(R.drawable.server_bg_button_secondary)
             setOnClickListener { picker.launch(null) }
         }, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT,
@@ -218,7 +218,7 @@ class FolderManagerActivity : AppCompatActivity() {
                 context.resources.configuration.screenWidthDp < 400
             val row = LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL
-                setBackgroundResource(R.drawable.bg_glass_card)
+                setBackgroundResource(R.drawable.server_bg_glass_card)
                 setPadding(dp(context, 12), dp(context, 6), dp(context, 12), dp(context, 6))
                 layoutParams = RecyclerView.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
@@ -232,16 +232,16 @@ class FolderManagerActivity : AppCompatActivity() {
             val handle = TextView(context).apply {
                 text = "☰"
                 textSize = 17f
-                setTextColor(context.getColor(R.color.pluxy_accent_bright))
+                setTextColor(context.getColor(R.color.server_pluxy_accent_bright))
                 gravity = Gravity.CENTER
                 isFocusable = true
                 isClickable = true
-                setBackgroundResource(R.drawable.bg_button_quiet)
+                setBackgroundResource(R.drawable.server_bg_button_quiet)
             }
             heading.addView(handle, LinearLayout.LayoutParams(dp(context, 48), dp(context, 48)))
             val title = TextView(context).apply {
                 textSize = 15f
-                setTextColor(context.getColor(R.color.pluxy_text))
+                setTextColor(context.getColor(R.color.server_pluxy_text))
                 includeFontPadding = false
             }
             heading.addView(title, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
@@ -256,8 +256,8 @@ class FolderManagerActivity : AppCompatActivity() {
                 minHeight = dp(context, 48)
                 minimumWidth = dp(context, 48)
                 setPadding(dp(context, 4), 0, dp(context, 4), 0)
-                setBackgroundResource(R.drawable.bg_button_quiet)
-                setTextColor(context.getColor(R.color.pluxy_muted))
+                setBackgroundResource(R.drawable.server_bg_button_quiet)
+                setTextColor(context.getColor(R.color.server_pluxy_muted))
             }
             val actions = LinearLayout(context).apply {
                 orientation = LinearLayout.HORIZONTAL
@@ -348,8 +348,8 @@ class FolderManagerActivity : AppCompatActivity() {
                 setPadding(dp(context, 8), dp(context, 4), dp(context, 8), dp(context, 4))
                 minWidth = 0
                 minimumWidth = 0
-                setTextColor(context.getColor(R.color.pluxy_text))
-                setBackgroundResource(R.drawable.bg_button_quiet)
+                setTextColor(context.getColor(R.color.server_pluxy_text))
+                setBackgroundResource(R.drawable.server_bg_button_quiet)
             }
 
             private fun dp(context: android.content.Context, value: Int): Int =

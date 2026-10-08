@@ -18,35 +18,18 @@
         android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
 
-    <uses-feature android:name="android.hardware.touchscreen" android:required="true" />
+    <application>
 
-    <application
-        android:name=".PluxyServerApplication"
-        android:allowBackup="false"
-        android:fullBackupContent="false"
-        android:icon="@drawable/ic_launcher"
-        android:label="Pluxy Serveur"
-        android:roundIcon="@drawable/ic_launcher_round"
-        android:supportsRtl="true"
-        android:usesCleartextTraffic="true"
-        android:theme="@style/Theme.PluxyServer">
+        <activity android:name=".MainActivity" android:exported="false"
+            android:theme="@style/Theme.PluxyServer" />
 
         <activity
-            android:name=".MainActivity"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
-
-        <activity
-            android:name=".ReceiverActivity"
+            android:name=".ReceiverActivity" android:theme="@style/Theme.PluxyServer"
             android:windowSoftInputMode="adjustResize"
             android:exported="false" />
 
         <activity
-            android:name=".FolderManagerActivity"
+            android:name=".FolderManagerActivity" android:theme="@style/Theme.PluxyServer"
             android:exported="false" />
 
         <meta-data

@@ -10,7 +10,8 @@ internal fun libraryFocusIntent(
     navigatedSinceRequest: Boolean,
     gridHasFocus: Boolean,
 ): LibraryFocusIntent = when {
-    navigatedSinceRequest && !gridHasFocus -> LibraryFocusIntent.KEEP
+    navigatedSinceRequest -> LibraryFocusIntent.KEEP
+    gridHasFocus && !firstRequested -> LibraryFocusIntent.KEEP
     restoreRequested && hasSavedTarget -> LibraryFocusIntent.RESTORE
     firstRequested && !navigatedSinceRequest -> LibraryFocusIntent.FIRST
     else -> LibraryFocusIntent.KEEP

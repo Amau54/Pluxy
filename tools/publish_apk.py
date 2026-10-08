@@ -17,6 +17,17 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 PACKAGES = {"com.pluxy.tv": "PLAYER", "com.pluxy.server": "SERVER"}
+
+
+# Historical two-package distributions remain verifiable; new builds contain
+# only the unified com.pluxy.tv application.
+def valid_apk_packages(artifacts: list[dict]) -> bool:
+    packages = [a["package"] for a in artifacts if a["name"].endswith(".apk")]
+    return len(packages) == len(set(packages)) and set(packages) in (
+        {"com.pluxy.tv"}, set(PACKAGES),
+    )
+
+
 IDENTITY_FIELDS = {"version_name", "version_code", "signing_cert_sha256"}
 REINSTALL_NOTICE = (
     "**Changement de clé de signature : une ancienne installation ne peut pas être mise à jour "
@@ -43,6 +54,8 @@ def validate_transition(value: dict, repository: str, info: dict) -> None:
             or not isinstance(value["packages"], dict) or set(value["packages"]) != set(PACKAGES)):
         raise ValueError("Signing transition must identify the repository, releases and both packages")
     artifacts = {a["package"]: a for a in info["artifacts"] if a["name"].endswith(".apk")}
+    if set(artifacts) != set(PACKAGES):
+        raise ValueError("Legacy signing transitions require both historical packages")
     for package, identities in value["packages"].items():
         if not isinstance(identities, dict) or set(identities) != {"from", "to"}:
             raise ValueError("Signing transition needs exact from/to identities")
@@ -104,8 +117,8 @@ def manifest(directory: Path, build_tools: Path, channel: str, commit: str, run_
         raise ValueError("A full source commit SHA is required")
     apks = [inspect_apk(p, build_tools, require_release=channel == "release")
             for p in sorted(directory.glob("*.apk"))]
-    if len(apks) != 2 or {a["package"] for a in apks} != set(PACKAGES):
-        raise ValueError("Both unique Pluxy APKs are required")
+    if not valid_apk_packages(apks):
+        raise ValueError("A unique unified Pluxy APK is required")
     if len({(a["version_name"], a["version_code"]) for a in apks}) != 1:
         raise ValueError("Player and server versions differ")
     for artifact in apks:
@@ -307,9 +320,8 @@ class Publisher:
                 raise ValueError("Build artifact differs from its manifest")
             if path.suffix == ".apk" and inspect_apk(path, build_tools, require_release=not alias) != artifact:
                 raise ValueError("APK identity differs from its manifest")
-        apk_packages = [a["package"] for a in info["artifacts"] if a["name"].endswith(".apk")]
-        if len(apk_packages) != 2 or set(apk_packages) != set(PACKAGES):
-            raise ValueError("Both unique Pluxy APKs are required for publication")
+        if not valid_apk_packages(info["artifacts"]):
+            raise ValueError("A unique unified Pluxy APK is required for publication")
         if not alias and any("v" + a["version_name"] != tag for a in info["artifacts"]):
             raise ValueError("Release tag and APK versions differ")
         if transition is not None:

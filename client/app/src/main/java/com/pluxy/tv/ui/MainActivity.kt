@@ -87,6 +87,8 @@ class MainActivity : ThemedActivity() {
     private var contentRevision = 0L
     private var fetchRevision = 0L
     private var focusNavigationRevision = 0L
+    private val horizontalFocus = RecyclerFocusRequester()
+    private val consumedNavigationKeys = mutableSetOf<Int>()
     private var loadedOnce = false
     private var allItems: List<MediaItem> = emptyList()
     private var catalogueServerUrl: String? = null
@@ -150,8 +152,9 @@ class MainActivity : ThemedActivity() {
         } else screenPaddingDp * 2f
         val contentDp = (screenDp - reservedDp).coerceAtLeast(160f)
         val cardDp = resources.getDimension(R.dimen.library_grid_card_width) / resources.displayMetrics.density
-        gridSpan = (contentDp / (cardDp + 12f)).toInt().coerceIn(2, 6)
+        gridSpan = (contentDp / (cardDp + 8f)).toInt().coerceIn(2, 6)
         grid.setItemViewCacheSize(18)
+        grid.itemAnimator = null
         createAdapters()
         configureCompactNavigation(screenDp)
 
@@ -250,6 +253,8 @@ class MainActivity : ThemedActivity() {
     }
 
     override fun onPause() {
+        horizontalFocus.cancel()
+        consumedNavigationKeys.clear()
         autoRefreshJob?.cancel()
         loadJob?.cancel()
         pageJob?.cancel()
@@ -280,12 +285,22 @@ class MainActivity : ThemedActivity() {
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.action == KeyEvent.ACTION_UP && consumedNavigationKeys.remove(event.keyCode)) return true
         if (event.action == KeyEvent.ACTION_DOWN) {
             if (event.keyCode in setOf(KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN,
                     KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT,
-                    KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER)) focusNavigationRevision++
+                    KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER)) {
+                focusNavigationRevision++
+                horizontalFocus.cancel()
+            }
             val focused = currentFocus
             if (focused != null && isInGrid(focused)) {
+                if (event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT || event.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                    if (moveHorizontally(focused, event.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT)) {
+                        consumedNavigationKeys.add(event.keyCode)
+                        return true
+                    }
+                }
                 if (event.keyCode == KeyEvent.KEYCODE_DPAD_DOWN && grid.adapter === libraryAdapter) {
                     val itemView = grid.findContainingItemView(focused)
                     val position = itemView?.let(grid::getChildAdapterPosition) ?: RecyclerView.NO_POSITION
@@ -305,26 +320,39 @@ class MainActivity : ThemedActivity() {
                     selectedTabView().requestFocus()
                     return true
                 }
-                if (event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
-                    val layout = grid.layoutManager as? GridLayoutManager
-                    val item = grid.findContainingItemView(focused)
-                    val position = item?.let(grid::getChildAdapterPosition) ?: RecyclerView.NO_POSITION
-                    if (layout != null && position >= 0 &&
-                        layout.spanSizeLookup.getSpanIndex(position, layout.spanCount) == 0
-                    ) {
-                        selectedTabView().requestFocus()
-                        return true
-                    }
-                    val next = FocusFinder.getInstance()
-                        .findNextFocus(grid, focused, View.FOCUS_LEFT)
-                    if (next == null || !isInGrid(next)) {
-                        selectedTabView().requestFocus()
-                        return true
-                    }
-                }
             }
         }
         return super.dispatchKeyEvent(event)
+    }
+
+    private fun moveHorizontally(focused: View, right: Boolean): Boolean {
+        var ancestor: ViewParent? = focused.parent
+        while (ancestor != null && ancestor !is RecyclerView) ancestor = ancestor.parent
+        val recycler = ancestor as? RecyclerView ?: return false
+        val item = recycler.findContainingItemView(focused) ?: return false
+        val position = recycler.getChildAdapterPosition(item)
+        val layout = recycler.layoutManager ?: return false
+        val count = recycler.adapter?.itemCount ?: return false
+        if (position !in 0 until count) return true
+        val step = if (right != (recycler.layoutDirection == View.LAYOUT_DIRECTION_RTL)) 1 else -1
+        val target = position + step
+        val gridLayout = layout as? GridLayoutManager
+        val sameRow = target in 0 until count && (gridLayout == null ||
+            gridLayout.spanSizeLookup.getSpanGroupIndex(position, gridLayout.spanCount) ==
+                gridLayout.spanSizeLookup.getSpanGroupIndex(target, gridLayout.spanCount))
+        val horizontalShelf = layout is LinearLayoutManager && layout.orientation == RecyclerView.HORIZONTAL
+        if (gridLayout == null && !horizontalShelf) return false
+        if (sameRow) {
+            val revision = focusNavigationRevision
+            horizontalFocus.request(recycler, position = { target }, isCurrent = { revision == focusNavigationRevision }) {
+                it.requestFocus()
+            }
+        } else if (!right && (gridLayout != null || position == 0)) {
+            selectedTabView().requestFocus()
+        }
+        // At a row's right edge, keep focus in that row. Android's spatial search
+        // can otherwise choose a card above it while the next item is attaching.
+        return true
     }
 
     private fun createAdapters() {
@@ -1562,6 +1590,7 @@ class MainActivity : ThemedActivity() {
     }
 
     private fun openMedia(item: MediaItem) {
+        if (item.kind == "clip") { playNow(item); return }
         val json = moshi.adapter(MediaItem::class.java).toJson(item)
         val intent = when (item.kind) {
             "photo" -> Intent(this, PhotoActivity::class.java)
@@ -1593,7 +1622,7 @@ class MainActivity : ThemedActivity() {
     companion object {
         private const val CATEGORY_SWIPE_DISTANCE_DP = 72
         private const val SWIPE_HINT_DISMISS_MS = 180L
-        private const val TV_CONTENT_TOP_MARGIN_DP = 104
+        private const val TV_CONTENT_TOP_MARGIN_DP = 96
         private const val TV_LIBRARY_HERO_CONTENT_TOP_MARGIN_DP = 324
         private const val COMPACT_NAVIGATION_MAX_WIDTH_DP = 600f
         // Une bibliothèque peut évoluer sans action côté TV : le serveur publie le

@@ -89,7 +89,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
+        setContentView(R.layout.server_activity_main)
         preferences = ServerPreferences(this)
         bindViews()
         loadPreferences()
@@ -161,6 +161,11 @@ class MainActivity : AppCompatActivity() {
                 }
         }
 
+        findViewById<Button>(R.id.changeApplicationMode).setOnClickListener {
+            packageManager.getLaunchIntentForPackage(packageName)?.let {
+                startActivity(it.putExtra(ApplicationMode.EXTRA_CHOOSE_MODE, true))
+            }
+        }
         optionsToggle.setOnClickListener {
             optionsExpanded = !optionsExpanded
             renderOptions()
@@ -265,10 +270,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun renderState(state: ServerSnapshot) {
-        val accent = ContextCompat.getColor(this, R.color.pluxy_accent)
-        val success = ContextCompat.getColor(this, R.color.pluxy_success)
-        val muted = ContextCompat.getColor(this, R.color.pluxy_muted)
-        val error = ContextCompat.getColor(this, R.color.pluxy_error)
+        val accent = ContextCompat.getColor(this, R.color.server_pluxy_accent)
+        val success = ContextCompat.getColor(this, R.color.server_pluxy_success)
+        val muted = ContextCompat.getColor(this, R.color.server_pluxy_muted)
+        val error = ContextCompat.getColor(this, R.color.server_pluxy_error)
 
         statusPill.text = when {
             state.error != null -> "●  Erreur"
@@ -296,11 +301,11 @@ class MainActivity : AppCompatActivity() {
         serverToggle.alpha = 1f
         serverToggle.text = if (state.running) "Arrêter le serveur" else "Démarrer le serveur"
         serverToggle.setBackgroundResource(
-            if (state.running) R.drawable.bg_button_secondary else R.drawable.bg_button_primary,
+            if (state.running) R.drawable.server_bg_button_secondary else R.drawable.server_bg_button_primary,
         )
         serverToggle.setTextColor(ContextCompat.getColor(
             this,
-            if (state.running) R.color.pluxy_text else R.color.pluxy_on_accent,
+            if (state.running) R.color.server_pluxy_text else R.color.server_pluxy_on_accent,
         ))
         rescan.isEnabled = !state.scanning && preferences.hasMediaSource()
         rescan.alpha = if (rescan.isEnabled) 1f else 0.5f

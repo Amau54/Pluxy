@@ -1,8 +1,9 @@
 # Clés des APK de test
 
-Depuis le 4 octobre 2026, chaque application a sa propre clé debug stable :
-`com.pluxy.tv` pour le lecteur et `com.pluxy.server` pour le serveur Android.
-Ces clés servent au canal GitHub `dev-latest`. Les clés Google Play sont séparées.
+Depuis Pluxy 1.7.0, le canal GitHub `dev-latest` distribue une seule APK,
+`com.pluxy.tv`, qui conserve la clé stable de l’ancien lecteur. Le serveur est
+intégré à cette application. La clé historique `com.pluxy.server` reste à
+conserver pour les anciennes versions. Les clés Google Play sont séparées.
 
 ## Changer de signature
 
@@ -19,12 +20,12 @@ ce changement et ne désinstallent rien automatiquement.
 
 Avec la même clé, les mises à jour conservent normalement les données.
 
-## Certificats du canal actuel
+## Certificats actuel et historique
 
 | Application | Certificat SHA-256 |
 |---|---|
 | `com.pluxy.tv` | `871e112ad4dff59554897fc54b105622614c08912972357bbcc0798ac9b936e3` |
-| `com.pluxy.server` | `961050702a4555191209e980c0a04f752981f02bc0d1cd2a8cafa96f43b3a626` |
+| `com.pluxy.server` (ancien serveur séparé) | `961050702a4555191209e980c0a04f752981f02bc0d1cd2a8cafa96f43b3a626` |
 
 Ces empreintes sont publiques. Les clés privées et leurs mots de passe restent hors de Git.
 Les clés debug ne doivent pas servir à la [publication Google Play](PLAY_STORE_RELEASE.md).
@@ -47,14 +48,14 @@ Les alias sont `pluxy-player-debug` et `pluxy-server-debug`.
 puis retire les variables qu'il a créées. Les variables déjà définies restent prioritaires.
 Une configuration partielle est refusée.
 
-Pour une configuration manuelle, définissez les quatre variables de chaque application :
+Pour une configuration manuelle, définissez les quatre variables du lecteur :
 
-| Lecteur | Serveur Android |
-|---|---|
-| `PLUXY_PLAYER_DEBUG_STORE_FILE` | `PLUXY_SERVER_DEBUG_STORE_FILE` |
-| `PLUXY_PLAYER_DEBUG_STORE_PASSWORD` | `PLUXY_SERVER_DEBUG_STORE_PASSWORD` |
-| `PLUXY_PLAYER_DEBUG_KEY_ALIAS` | `PLUXY_SERVER_DEBUG_KEY_ALIAS` |
-| `PLUXY_PLAYER_DEBUG_KEY_PASSWORD` | `PLUXY_SERVER_DEBUG_KEY_PASSWORD` |
+| Application unifiée |
+|---|
+| `PLUXY_PLAYER_DEBUG_STORE_FILE` |
+| `PLUXY_PLAYER_DEBUG_STORE_PASSWORD` |
+| `PLUXY_PLAYER_DEBUG_KEY_ALIAS` |
+| `PLUXY_PLAYER_DEBUG_KEY_PASSWORD` |
 
 Sans ces identifiants, un build local utilise la clé debug Android de ce PC.
 Gradle lancé directement a besoin des variables pour utiliser les clés stables.
@@ -76,9 +77,8 @@ Gardez les clés actuelles pour les prochaines mises à jour.
 
 ## Publication GitHub
 
-Pour chaque préfixe `PLUXY_PLAYER_DEBUG_` et `PLUXY_SERVER_DEBUG_`, les secrets
-Actions utilisent les suffixes `JKS_BASE64`, `STORE_PASSWORD`, `KEY_ALIAS` et
-`KEY_PASSWORD`, soit huit secrets. Le Base64 du JKS est lui aussi secret.
+Pour le préfixe `PLUXY_PLAYER_DEBUG_`, les secrets Actions utilisent les suffixes `JKS_BASE64`, `STORE_PASSWORD`, `KEY_ALIAS` et
+`KEY_PASSWORD`, soit quatre secrets. Le Base64 du JKS est lui aussi secret.
 Leurs valeurs doivent être configurées dans le dépôt qui publie les APK.
 
 La publication attend les contrôles Python, Android et APK du même run, vérifie

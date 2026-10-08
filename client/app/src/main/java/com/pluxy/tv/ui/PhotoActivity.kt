@@ -20,6 +20,9 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.accessibility.AccessibilityNodeInfoCompat
 import androidx.lifecycle.lifecycleScope
 import coil.ImageLoader
+import coil.request.ImageRequest
+import coil.size.Scale
+import coil.size.Precision
 import coil.dispose
 import coil.load
 import com.pluxy.tv.R
@@ -31,6 +34,7 @@ import com.pluxy.tv.api.networkOrNull
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlin.math.abs
@@ -56,6 +60,13 @@ class PhotoActivity : ThemedActivity() {
     private lateinit var closeButton: ImageButton
     private lateinit var retryButton: Button
     private lateinit var errorView: TextView
+    private lateinit var folderNotice: TextView
+    private var folderPages: List<PhotoFolderPage> = emptyList()
+    private var photoById: Map<String, MediaItem> = emptyMap()
+    private val folderPositions = mutableMapOf<String, String>()
+    private var prefetchJob: Job? = null
+    private val hideFolderNotice = Runnable { if (::folderNotice.isInitialized) folderNotice.visibility = View.GONE }
+    private val showLoading = Runnable { if (!imageDisplayed && activityStarted) loading.visibility = View.VISIBLE }
     private val accessibilityManager by lazy { getSystemService(ACCESSIBILITY_SERVICE) as AccessibilityManager }
     private val accessibilityListener = AccessibilityManager.AccessibilityStateChangeListener { enabled ->
         if (enabled && ::photoInfo.isInitialized) setChromeVisible(true)
@@ -112,6 +123,7 @@ class PhotoActivity : ThemedActivity() {
         closeButton = findViewById(R.id.btnPhotoClose)
         retryButton = findViewById(R.id.btnPhotoRetry)
         errorView = findViewById(R.id.photoError)
+        folderNotice = findViewById(R.id.photoFolderNotice)
         photos = listOf(initial)
         selectedFolder = savedInstanceState?.getString(STATE_FOLDER) ?: intent.getStringExtra(EXTRA_FOLDER).orEmpty()
         selectedAlbumKey = savedInstanceState?.getString(STATE_ALBUM_KEY) ?: intent.getStringExtra(EXTRA_ALBUM_KEY).orEmpty()
@@ -170,9 +182,7 @@ class PhotoActivity : ThemedActivity() {
                     LibraryPreferences.collections(this@PhotoActivity, api.baseUrl).firstOrNull { it.id == collectionId }
                         ?.let { TvLibraryContent.collectionItems(snapshot.items, it) }.orEmpty()
                 }
-                val selected = allowed.filter { it.kind == "photo" }
-                    .filter { if (selectedAlbumKey.isNotBlank()) LibraryOrganizer.photoAlbumKey(it) == selectedAlbumKey
-                        else valid.isBlank() || TvLibraryContent.photoFolderLabel(it) == valid }
+                val selected = allowed.filter { it.kind == "photo" && it.available }
                 val ordered = if (folderSort.isNotBlank()) TvLibraryContent.sortMedia(selected,
                     TvLibraryContent.Query("photo", sort = folderSort, descending = folderDescending))
                     else selected.sortedWith(compareByDescending<MediaItem> { LibraryOrganizer.captureTime(it) ?: -1.0 }
@@ -180,9 +190,13 @@ class PhotoActivity : ThemedActivity() {
                 ordered to valid
             }
             selectedFolder = validFolder
-            if (fresh.isNotEmpty()) {
+            folderPages = photoFolderPages(fresh)
+            photoById = fresh.associateBy { it.id }
+            val scoped = fresh.filter { if (selectedAlbumKey.isNotBlank()) LibraryOrganizer.photoAlbumKey(it) == selectedAlbumKey
+                else validFolder.isBlank() || TvLibraryContent.photoFolderLabel(it) == validFolder }
+            if (scoped.isNotEmpty()) {
                 val currentId = photos.getOrNull(index)?.id
-                photos = fresh
+                photos = scoped
                 index = restoredPhotoIndex(photos, currentId)
                 if (photos[index].id != currentId) {
                     android.widget.Toast.makeText(this@PhotoActivity, R.string.photo_missing_fallback, android.widget.Toast.LENGTH_SHORT).show()
@@ -191,6 +205,7 @@ class PhotoActivity : ThemedActivity() {
                     updatePhotoLabel()
                     updateSlideshowControls()
                     scheduleSlideshow()
+                    prefetchNearby()
                 }
             }
         }
@@ -232,6 +247,7 @@ class PhotoActivity : ThemedActivity() {
 
     private fun showAt(requested: Int) {
         if (photos.isEmpty()) return
+        prefetchJob?.cancel()
         handler.removeCallbacks(slideshowTick)
         val version = ++imageRequestVersion
         imageDisplayed = false
@@ -242,23 +258,32 @@ class PhotoActivity : ThemedActivity() {
         if (retryButton.hasFocus()) photoView.requestFocus()
         retryButton.visibility = View.GONE
         updateSlideshowControls()
-        loading.visibility = View.VISIBLE
+        loading.visibility = View.GONE
+        handler.removeCallbacks(showLoading)
+        handler.postDelayed(showLoading, 200L)
         val previousImage = photoView.drawable
         photoView.load(api.abs("/stream/direct/${item.id}"), imageLoader) {
-            crossfade(180)
+            size(photoWidth(), photoHeight())
+            scale(Scale.FIT)
+            precision(Precision.INEXACT)
+            memoryCacheKey(photoCacheKey(item))
+            crossfade(120)
             placeholder(previousImage)
             if (previousImage != null) error(previousImage) else error(R.drawable.ic_photo_placeholder)
             listener(
                 onSuccess = { _, _ ->
                     if (version == imageRequestVersion && !isDestroyed) {
                         loading.visibility = View.GONE
+                        handler.removeCallbacks(showLoading)
                         imageDisplayed = true
                         scheduleSlideshow()
+                        prefetchNearby()
                     }
                 },
                 onError = { _, _ ->
                     if (version == imageRequestVersion && !isDestroyed) {
                         loading.visibility = View.GONE
+                        handler.removeCallbacks(showLoading)
                         errorView.setText(R.string.photo_load_error)
                         errorView.visibility = View.VISIBLE
                         retryButton.visibility = View.VISIBLE
@@ -279,6 +304,44 @@ class PhotoActivity : ThemedActivity() {
 
     private fun browseTo(requested: Int) {
         showAt(requested)
+    }
+
+    private fun browseFolder(offset: Int) {
+        val current = photos.getOrNull(index) ?: return
+        if (folderPages.isEmpty()) return
+        val key = LibraryOrganizer.photoAlbumKey(current)
+        folderPositions[key] = current.id
+        val pageIndex = folderPages.indexOfFirst { it.key == key }.coerceAtLeast(0)
+        val nextIndex = wrappedPhotoIndex(pageIndex + offset, folderPages.size)
+        val page = folderPages[nextIndex]
+        selectedAlbumKey = page.key
+        selectedFolder = ""
+        photos = page.photos
+        showAt(restoredPhotoIndex(photos, folderPositions[page.key]))
+        folderNotice.text = "${page.label} · ${nextIndex + 1}/${folderPages.size}"
+        folderNotice.visibility = View.VISIBLE
+        handler.removeCallbacks(hideFolderNotice)
+        handler.postDelayed(hideFolderNotice, 2_400L)
+    }
+
+    private fun photoWidth() = photoView.width.takeIf { it > 0 } ?: resources.displayMetrics.widthPixels
+    private fun photoHeight() = photoView.height.takeIf { it > 0 } ?: resources.displayMetrics.heightPixels
+    private fun photoCacheKey(item: MediaItem) = "${api.baseUrl}:photo:${item.id}:${photoWidth()}x${photoHeight()}"
+
+    private fun prefetchNearby() {
+        prefetchJob?.cancel()
+        if (!activityStarted || !imageDisplayed) return
+        val ids = nearbyPhotoIds(folderPages, photos, index)
+        prefetchJob = lifecycleScope.launch {
+            // Sequential requests leave decoding capacity for the image on screen.
+            for (id in ids) {
+                val item = photoById[id] ?: photos.firstOrNull { it.id == id } ?: continue
+                imageLoader.execute(ImageRequest.Builder(this@PhotoActivity)
+                    .data(api.abs("/stream/direct/$id"))
+                    .size(photoWidth(), photoHeight()).scale(Scale.FIT).precision(Precision.INEXACT)
+                    .memoryCacheKey(photoCacheKey(item)).build())
+            }
+        }
     }
 
     private fun setSlideshowRunning(running: Boolean) {
@@ -368,7 +431,6 @@ class PhotoActivity : ThemedActivity() {
             ) return true
             when (event.keyCode) {
                 KeyEvent.KEYCODE_DPAD_LEFT -> {
-                    if (chromeVisible && controlFocused) return super.dispatchKeyEvent(event)
                     consumedKeys.add(event.keyCode)
                     if (event.repeatCount == 0 || event.repeatCount % 3 == 0) {
                         browseTo(index - 1)
@@ -376,7 +438,6 @@ class PhotoActivity : ThemedActivity() {
                     return true
                 }
                 KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                    if (chromeVisible && controlFocused) return super.dispatchKeyEvent(event)
                     consumedKeys.add(event.keyCode)
                     if (event.repeatCount == 0 || event.repeatCount % 3 == 0) {
                         browseTo(index + 1)
@@ -385,11 +446,9 @@ class PhotoActivity : ThemedActivity() {
                 }
                 KeyEvent.KEYCODE_DPAD_UP,
                 KeyEvent.KEYCODE_DPAD_DOWN -> {
-                    if (!chromeVisible || !controlFocused) {
-                        consumedKeys.add(event.keyCode)
-                        revealControls()
-                        return true
-                    }
+                    consumedKeys.add(event.keyCode)
+                    if (event.repeatCount == 0) browseFolder(if (event.keyCode == KeyEvent.KEYCODE_DPAD_UP) -1 else 1)
+                    return true
                 }
                 KeyEvent.KEYCODE_DPAD_CENTER,
                 KeyEvent.KEYCODE_ENTER,
@@ -428,10 +487,15 @@ class PhotoActivity : ThemedActivity() {
         updateSlideshowControls()
         updateScreenAwake()
         scheduleSlideshow()
+        prefetchNearby()
     }
 
     override fun onStop() {
         activityStarted = false
+        prefetchJob?.cancel()
+        handler.removeCallbacks(showLoading)
+        handler.removeCallbacks(hideFolderNotice)
+        if (::folderNotice.isInitialized) folderNotice.visibility = View.GONE
         handler.removeCallbacks(slideshowTick)
         accessibilityManager.removeAccessibilityStateChangeListener(accessibilityListener)
         updateScreenAwake()
@@ -455,6 +519,7 @@ class PhotoActivity : ThemedActivity() {
 
     override fun onDestroy() {
         imageRequestVersion++
+        prefetchJob?.cancel()
         handler.removeCallbacksAndMessages(null)
         if (::photoView.isInitialized) photoView.dispose()
         api.close()

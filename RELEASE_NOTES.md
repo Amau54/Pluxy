@@ -1,15 +1,13 @@
-# Pluxy 1.6.2
+# Pluxy 1.7.0
 
-Lecteur et serveur Android : **version 1.6.2, versionCode 53**.
+Une seule application Android : **version 1.7.0, versionCode 54**.
 
-- Photos en arborescence : racines distinctes, sous-dossiers en cascade et images visibles par défaut. Albums et chronologie restent disponibles.
-- Films, séries et vidéos personnelles séparés. Chaque dossier du serveur PC ou Android peut être classé automatiquement ou recevoir un type choisi.
-- La détection utilise les dossiers, noms de caméra, épisodes, durée et titre intégré. Sans indice fiable, le fichier reste dans Vidéos.
-- Miniatures vidéo choisies parmi plusieurs captures, avec préférence pour une image visible plutôt qu’un fondu noir ou blanc. Cache réutilisé et chargements réessayés lorsque le serveur est occupé.
-- Installation automatique de FFmpeg et ffprobe sur Windows, dans le compte utilisateur.
-- TMDB accepte les clés API et les jetons de lecture. Les titres sont vérifiés avant d’attribuer une affiche ; le serveur PC distingue les recherches sans résultat des erreurs de connexion ou de clé.
-- Bouton de diagnostic TMDB et miniatures dans les réglages du serveur PC.
+- Choix Lecteur ou Serveur au premier lancement. Le mode reste mémorisé et se change dans les options des deux interfaces. Le passage au lecteur arrête le serveur sans effacer ses réglages.
+- Diaporama : gauche/droite passe directement aux images, haut/bas change de dossier. Un indicateur discret donne le dossier courant ; les images voisines et les dossiers adjacents sont préchargés.
+- Navigation horizontale TV : les cartes restent dans leur ligne, les éléments hors écran sont parcourus et les actualisations ne reprennent plus le focus pendant un déplacement.
+- Les vidéos personnelles se lancent directement. Films et séries gardent leur fiche.
+- Marges et espaces entre les cartes légèrement réduits, avec les zones tactiles conservées.
 
-Le classement ne déplace aucun fichier. Pour corriger une détection, changez la catégorie du dossier puis relancez l’analyse.
+Cette APK met à jour l’ancien lecteur Pluxy. L’ancienne application Pluxy Serveur est un autre package : arrêtez son serveur, puis sélectionnez vos dossiers et renseignez vos réglages dans le mode Serveur de Pluxy. Aucun fichier média n’est déplacé.
 
 [Téléchargements](https://github.com/Amau54/Pluxy/releases/tag/dev-latest) · [Signature des APK](docs/DEBUG_SIGNING.md).

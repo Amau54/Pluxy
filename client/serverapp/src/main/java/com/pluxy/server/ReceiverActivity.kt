@@ -89,7 +89,7 @@ class ReceiverActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_receiver)
+        setContentView(R.layout.server_activity_receiver)
         profileStore = ReceiverProfileStore(this)
         discovery = DlnaDiscovery(this)
         selectedId = savedInstanceState?.getString(STATE_SELECTED_ID)
@@ -376,7 +376,7 @@ class ReceiverActivity : AppCompatActivity() {
         )
         buttons.forEach { (candidate, button) ->
             val selected = candidate == value
-            button.setBackgroundResource(if (selected) R.drawable.bg_button_primary else R.drawable.bg_button_secondary)
+            button.setBackgroundResource(if (selected) R.drawable.server_bg_button_primary else R.drawable.server_bg_button_secondary)
             button.setTextColor(if (selected) Color.rgb(16, 16, 16) else Color.WHITE)
         }
         if (clearSelection) selectedId = null
@@ -692,7 +692,7 @@ private class ReceiverAdapter(
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder = Holder(
-        LayoutInflater.from(parent.context).inflate(R.layout.item_receiver, parent, false),
+        LayoutInflater.from(parent.context).inflate(R.layout.server_item_receiver, parent, false),
     )
 
     override fun getItemCount(): Int = items.size
@@ -735,7 +735,7 @@ private class RemoteMediaAdapter(
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
-        val layout = if (viewType == TYPE_FOLDER) R.layout.item_remote_folder else R.layout.item_remote_media
+        val layout = if (viewType == TYPE_FOLDER) R.layout.server_item_remote_folder else R.layout.server_item_remote_media
         return if (viewType == TYPE_FOLDER) FolderHolder(
             LayoutInflater.from(parent.context).inflate(layout, parent, false),
         ) else Holder(LayoutInflater.from(parent.context).inflate(layout, parent, false))
@@ -751,7 +751,7 @@ private class RemoteMediaAdapter(
     }
 
     private fun bindFolder(holder: FolderHolder, folder: BrowserRow.Folder) {
-        holder.chevron.setImageResource(if (folder.expanded) R.drawable.ic_chevron_down else R.drawable.ic_chevron_right)
+        holder.chevron.setImageResource(if (folder.expanded) R.drawable.server_ic_chevron_down else R.drawable.server_ic_chevron_right)
         holder.title.text = folder.name
         holder.count.text = "${folder.count} élément${if (folder.count > 1) "s" else ""}"
         ViewCompat.setStateDescription(holder.itemView, if (folder.expanded) "Dossier ouvert" else "Dossier fermé")
@@ -760,9 +760,9 @@ private class RemoteMediaAdapter(
 
     private fun bindMedia(holder: Holder, item: MediaEntry) {
         holder.kind.setImageResource(when (item.kind) {
-            "photo" -> R.drawable.ic_media_photo
-            "audio" -> R.drawable.ic_media_music
-            else -> R.drawable.ic_media_video
+            "photo" -> R.drawable.server_ic_media_photo
+            "audio" -> R.drawable.server_ic_media_music
+            else -> R.drawable.server_ic_media_video
         })
         holder.title.text = item.title
         holder.description.text = when (item.kind) {
@@ -778,7 +778,7 @@ private class RemoteMediaAdapter(
                 .joinToString(" · ")
         }
         holder.itemView.setBackgroundResource(
-            if (item.id == selectedId) R.drawable.bg_selected else R.drawable.bg_button_secondary,
+            if (item.id == selectedId) R.drawable.server_bg_selected else R.drawable.server_bg_button_secondary,
         )
         holder.itemView.isSelected = item.id == selectedId
         holder.selected.visibility = if (item.id == selectedId) View.VISIBLE else View.GONE

@@ -1,9 +1,10 @@
 # Confidentialité
 
-Mise à jour : 4 octobre 2026
+Mise à jour : 8 octobre 2026
 
-Cette politique concerne Pluxy (`com.pluxy.tv`), Pluxy Serveur (`com.pluxy.server`)
-et le serveur PC. Le projet est maintenu par **Amau54**.
+Cette politique concerne Pluxy (`com.pluxy.tv`), qui réunit les modes Lecteur et
+Serveur, l’ancienne application Pluxy Serveur (`com.pluxy.server`) et le serveur PC.
+Le projet est maintenu par **Amau54**.
 
 ## Fonctionnement
 
@@ -58,7 +59,7 @@ Le profil conservé peut être réinitialisé dans l'application.
 
 ## Services externes
 
-**Google Cast.** Pluxy Serveur utilise le SDK Android Sender pour découvrir et piloter
+**Google Cast.** Le mode Serveur utilise le SDK Android Sender pour découvrir et piloter
 les appareils Cast. Selon sa [déclaration officielle](https://developers.google.com/cast/docs/android_sender/data_disclosure),
 Google reçoit des événements de découverte et de session ainsi que des informations
 techniques sur le téléphone, le SDK et l'application. Les journaux sont anonymes,

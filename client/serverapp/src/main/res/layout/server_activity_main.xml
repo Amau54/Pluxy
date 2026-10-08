@@ -3,7 +3,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/bg_server_ambient"
+    android:background="@drawable/server_bg_server_ambient"
     android:fitsSystemWindows="true">
 
     <ScrollView
@@ -31,7 +31,7 @@
                     android:layout_width="40dp"
                     android:layout_height="40dp"
                     android:contentDescription="Logo Pluxy"
-                    android:src="@drawable/ic_launcher" />
+                    android:src="@drawable/server_ic_launcher" />
 
                 <LinearLayout
                     android:layout_width="0dp"
@@ -44,7 +44,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="Pluxy Serveur"
-                        android:textColor="@color/pluxy_text"
+                        android:textColor="@color/server_pluxy_text"
                         android:textSize="22sp"
                         android:fontFamily="sans-serif-medium" />
 
@@ -53,7 +53,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
                         android:text="Votre téléphone devient une médiathèque"
-                        android:textColor="@color/pluxy_muted"
+                        android:textColor="@color/server_pluxy_muted"
                         android:textSize="13sp" />
                 </LinearLayout>
 
@@ -62,8 +62,8 @@
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
-                android:background="@drawable/bg_glass_card"
+                android:layout_marginTop="12dp"
+                android:background="@drawable/server_bg_glass_card"
                 android:orientation="vertical"
                 android:padding="14dp">
 
@@ -77,16 +77,16 @@
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
                         android:text="SERVEUR"
-                        android:textColor="@color/pluxy_muted"
+                        android:textColor="@color/server_pluxy_muted"
                         android:textSize="11sp"
                         android:fontFamily="sans-serif-medium" />
                     <TextView
                         android:id="@+id/statusPill"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:background="@drawable/bg_status"
+                        android:background="@drawable/server_bg_status"
                         android:text="●  Arrêté"
-                        android:textColor="@color/pluxy_muted"
+                        android:textColor="@color/server_pluxy_muted"
                         android:textSize="12sp" />
                 </LinearLayout>
 
@@ -96,7 +96,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="7dp"
                     android:text="Indisponible"
-                    android:textColor="@color/pluxy_text"
+                    android:textColor="@color/server_pluxy_text"
                     android:textIsSelectable="true"
                     android:textSize="18sp"
                     android:fontFamily="sans-serif-medium" />
@@ -107,7 +107,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="5dp"
                     android:text="Prêt à démarrer"
-                    android:textColor="@color/pluxy_muted"
+                    android:textColor="@color/server_pluxy_muted"
                     android:textSize="13sp" />
 
                 <Button
@@ -118,10 +118,10 @@
                     android:paddingTop="6dp"
                     android:paddingBottom="6dp"
                     android:layout_marginTop="12dp"
-                    android:background="@drawable/bg_button_primary"
+                    android:background="@drawable/server_bg_button_primary"
                     android:text="Démarrer le serveur"
                     android:textAllCaps="false"
-                    android:textColor="@color/pluxy_on_accent"
+                    android:textColor="@color/server_pluxy_on_accent"
                     android:textSize="15sp"
                     android:fontFamily="sans-serif-medium" />
 
@@ -133,10 +133,10 @@
                     android:paddingTop="6dp"
                     android:paddingBottom="6dp"
                     android:layout_marginTop="8dp"
-                    android:background="@drawable/bg_button_cast"
+                    android:background="@drawable/server_bg_button_cast"
                     android:text="Envoyer Cast"
                     android:textAllCaps="false"
-                    android:textColor="@color/pluxy_on_accent"
+                    android:textColor="@color/server_pluxy_on_accent"
                     android:textSize="15sp"
                     android:fontFamily="sans-serif-medium" />
             </LinearLayout>
@@ -149,10 +149,10 @@
                 android:paddingTop="6dp"
                 android:paddingBottom="6dp"
                 android:layout_marginTop="10dp"
-                android:background="@drawable/bg_button_secondary"
+                android:background="@drawable/server_bg_button_secondary"
                 android:text="Options"
                 android:textAllCaps="false"
-                android:textColor="@color/pluxy_text"
+                android:textColor="@color/server_pluxy_text"
                 android:textSize="15sp"
                 android:fontFamily="sans-serif-medium" />
 
@@ -161,16 +161,22 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
-                android:background="@drawable/bg_glass_card"
+                android:background="@drawable/server_bg_glass_card"
                 android:orientation="vertical"
                 android:padding="14dp"
                 android:visibility="gone">
+
+                <Button android:id="@+id/changeApplicationMode"
+                    android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:minHeight="48dp" android:text="Mode de l’application · Serveur"
+                    android:textAllCaps="false" android:textColor="@color/server_pluxy_text"
+                    android:background="@drawable/server_bg_button_secondary" />
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="MÉDIAS"
-                    android:textColor="@color/pluxy_accent_bright"
+                    android:textColor="@color/server_pluxy_accent_bright"
                     android:textSize="11sp"
                     android:fontFamily="sans-serif-medium" />
 
@@ -182,21 +188,21 @@
                     android:paddingTop="6dp"
                     android:paddingBottom="6dp"
                     android:layout_marginTop="8dp"
-                    android:background="@drawable/bg_option"
+                    android:background="@drawable/server_bg_option"
                     android:paddingStart="12dp"
                     android:paddingEnd="12dp"
                     android:text="Détecter mes médias"
-                    android:textColor="@color/pluxy_text"
+                    android:textColor="@color/server_pluxy_text"
                     android:textSize="15sp"
-                    app:thumbTint="@color/pluxy_accent"
-                    app:trackTint="@color/pluxy_glass_stroke" />
+                    app:thumbTint="@color/server_pluxy_accent"
+                    app:trackTint="@color/server_pluxy_glass_stroke" />
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="14dp"
                     android:text="DOSSIERS MANUELS"
-                    android:textColor="@color/pluxy_muted"
+                    android:textColor="@color/server_pluxy_muted"
                     android:textSize="11sp"
                     android:fontFamily="sans-serif-medium" />
 
@@ -205,7 +211,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
                     android:text="Ajoutez un ou plusieurs dossiers par thème."
-                    android:textColor="@color/pluxy_muted"
+                    android:textColor="@color/server_pluxy_muted"
                     android:textSize="12sp" />
 
                 <Button
@@ -216,13 +222,13 @@
                     android:paddingTop="6dp"
                     android:paddingBottom="6dp"
                     android:layout_marginTop="8dp"
-                    android:background="@drawable/bg_button_secondary"
+                    android:background="@drawable/server_bg_button_secondary"
                     android:gravity="start|center_vertical"
                     android:paddingStart="12dp"
                     android:text="Films et séries · ajouter ou gérer"
                     android:textSize="14sp"
                     android:textAllCaps="false"
-                    android:textColor="@color/pluxy_text" />
+                    android:textColor="@color/server_pluxy_text" />
 
                 <TextView
                     android:id="@+id/folderPath"
@@ -232,7 +238,7 @@
                     android:ellipsize="end"
                     android:maxLines="2"
                     android:text="Aucun dossier"
-                    android:textColor="@color/pluxy_muted"
+                    android:textColor="@color/server_pluxy_muted"
                     android:textSize="11sp" />
 
                 <Button
@@ -243,13 +249,13 @@
                     android:paddingTop="6dp"
                     android:paddingBottom="6dp"
                     android:layout_marginTop="10dp"
-                    android:background="@drawable/bg_button_secondary"
+                    android:background="@drawable/server_bg_button_secondary"
                     android:gravity="start|center_vertical"
                     android:paddingStart="12dp"
                     android:text="Images · ajouter ou gérer"
                     android:textSize="14sp"
                     android:textAllCaps="false"
-                    android:textColor="@color/pluxy_text" />
+                    android:textColor="@color/server_pluxy_text" />
 
                 <TextView
                     android:id="@+id/photoFolderPath"
@@ -259,7 +265,7 @@
                     android:ellipsize="end"
                     android:maxLines="2"
                     android:text="Aucun dossier"
-                    android:textColor="@color/pluxy_muted"
+                    android:textColor="@color/server_pluxy_muted"
                     android:textSize="11sp" />
 
                 <Button
@@ -270,13 +276,13 @@
                     android:paddingTop="6dp"
                     android:paddingBottom="6dp"
                     android:layout_marginTop="10dp"
-                    android:background="@drawable/bg_button_secondary"
+                    android:background="@drawable/server_bg_button_secondary"
                     android:gravity="start|center_vertical"
                     android:paddingStart="12dp"
                     android:text="Musique · ajouter ou gérer"
                     android:textSize="14sp"
                     android:textAllCaps="false"
-                    android:textColor="@color/pluxy_text" />
+                    android:textColor="@color/server_pluxy_text" />
 
                 <TextView
                     android:id="@+id/audioFolderPath"
@@ -286,7 +292,7 @@
                     android:ellipsize="end"
                     android:maxLines="2"
                     android:text="Aucun dossier"
-                    android:textColor="@color/pluxy_muted"
+                    android:textColor="@color/server_pluxy_muted"
                     android:textSize="11sp" />
 
                 <TextView
@@ -294,7 +300,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="14dp"
                     android:text="SERVEUR"
-                    android:textColor="@color/pluxy_accent_bright"
+                    android:textColor="@color/server_pluxy_accent_bright"
                     android:textSize="11sp"
                     android:fontFamily="sans-serif-medium" />
 
@@ -304,13 +310,13 @@
                     android:layout_height="wrap_content"
                     android:minHeight="48dp"
                     android:layout_marginTop="8dp"
-                    android:background="@drawable/bg_input"
+                    android:background="@drawable/server_bg_input"
                     android:hint="Nom du serveur"
                     android:inputType="textCapSentences"
                     android:maxLines="1"
                     android:textSize="14sp"
-                    android:textColor="@color/pluxy_text"
-                    android:textColorHint="@color/pluxy_muted" />
+                    android:textColor="@color/server_pluxy_text"
+                    android:textColorHint="@color/server_pluxy_muted" />
 
                 <Button
                     android:id="@+id/tmdbHelpToggle"
@@ -320,12 +326,12 @@
                     android:paddingTop="6dp"
                     android:paddingBottom="6dp"
                     android:layout_marginTop="6dp"
-                    android:background="@drawable/bg_button_secondary"
+                    android:background="@drawable/server_bg_button_secondary"
                     android:paddingStart="12dp"
                     android:paddingEnd="12dp"
                     android:text="À quoi sert TMDB ?"
                     android:textAllCaps="false"
-                    android:textColor="@color/pluxy_text"
+                    android:textColor="@color/server_pluxy_text"
                     android:textSize="13sp" />
 
                 <TextView
@@ -333,10 +339,10 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="6dp"
-                    android:background="@drawable/bg_option"
+                    android:background="@drawable/server_bg_option"
                     android:padding="14dp"
                     android:text="TMDB ajoute affiches, synopsis et informations pour les films et séries. La lecture fonctionne sans cette clé.\n\nPour l’activer : créez un compte gratuit sur themoviedb.org, ouvrez Réglages › API, créez une clé API (v3), puis collez-la ci-dessus."
-                    android:textColor="@color/pluxy_muted"
+                    android:textColor="@color/server_pluxy_muted"
                     android:textSize="12sp"
                     android:visibility="gone" />
 
@@ -346,13 +352,13 @@
                     android:layout_height="wrap_content"
                     android:minHeight="48dp"
                     android:layout_marginTop="9dp"
-                    android:background="@drawable/bg_input"
+                    android:background="@drawable/server_bg_input"
                     android:hint="Clé TMDB — facultatif"
                     android:inputType="textPassword"
                     android:maxLines="1"
                     android:textSize="14sp"
-                    android:textColor="@color/pluxy_text"
-                    android:textColorHint="@color/pluxy_muted" />
+                    android:textColor="@color/server_pluxy_text"
+                    android:textColorHint="@color/server_pluxy_muted" />
 
                 <androidx.appcompat.widget.SwitchCompat
                     android:id="@+id/keepAwake"
@@ -361,15 +367,15 @@
                     android:minHeight="48dp"
                     android:paddingTop="6dp"
                     android:paddingBottom="6dp"
-                    android:layout_marginTop="16dp"
-                    android:background="@drawable/bg_option"
+                    android:layout_marginTop="12dp"
+                    android:background="@drawable/server_bg_option"
                     android:paddingStart="12dp"
                     android:paddingEnd="12dp"
                     android:text="Actif écran éteint"
-                    android:textColor="@color/pluxy_text"
+                    android:textColor="@color/server_pluxy_text"
                     android:textSize="15sp"
-                    app:thumbTint="@color/pluxy_accent"
-                    app:trackTint="@color/pluxy_glass_stroke" />
+                    app:thumbTint="@color/server_pluxy_accent"
+                    app:trackTint="@color/server_pluxy_glass_stroke" />
 
                 <androidx.appcompat.widget.SwitchCompat
                     android:id="@+id/autoStart"
@@ -379,14 +385,14 @@
                     android:paddingTop="6dp"
                     android:paddingBottom="6dp"
                     android:layout_marginTop="8dp"
-                    android:background="@drawable/bg_option"
+                    android:background="@drawable/server_bg_option"
                     android:paddingStart="12dp"
                     android:paddingEnd="12dp"
                     android:text="Démarrer avec le téléphone"
-                    android:textColor="@color/pluxy_text"
+                    android:textColor="@color/server_pluxy_text"
                     android:textSize="15sp"
-                    app:thumbTint="@color/pluxy_accent"
-                    app:trackTint="@color/pluxy_glass_stroke" />
+                    app:thumbTint="@color/server_pluxy_accent"
+                    app:trackTint="@color/server_pluxy_glass_stroke" />
 
                 <Button
                     android:id="@+id/rescan"
@@ -396,11 +402,11 @@
                     android:paddingTop="6dp"
                     android:paddingBottom="6dp"
                     android:layout_marginTop="14dp"
-                    android:background="@drawable/bg_button_secondary"
+                    android:background="@drawable/server_bg_button_secondary"
                     android:text="Actualiser les médias"
                     android:textSize="14sp"
                     android:textAllCaps="false"
-                    android:textColor="@color/pluxy_text" />
+                    android:textColor="@color/server_pluxy_text" />
 
                 <Button
                     android:id="@+id/copyAddress"
@@ -410,11 +416,11 @@
                     android:paddingTop="6dp"
                     android:paddingBottom="6dp"
                     android:layout_marginTop="8dp"
-                    android:background="@drawable/bg_button_secondary"
+                    android:background="@drawable/server_bg_button_secondary"
                     android:text="Copier l’adresse"
                     android:textSize="14sp"
                     android:textAllCaps="false"
-                    android:textColor="@color/pluxy_text" />
+                    android:textColor="@color/server_pluxy_text" />
 
                 <Button
                     android:id="@+id/batterySettings"
@@ -424,11 +430,11 @@
                     android:paddingTop="6dp"
                     android:paddingBottom="6dp"
                     android:layout_marginTop="8dp"
-                    android:background="@drawable/bg_button_secondary"
+                    android:background="@drawable/server_bg_button_secondary"
                     android:text="Réglages batterie"
                     android:textSize="14sp"
                     android:textAllCaps="false"
-                    android:textColor="@color/pluxy_text" />
+                    android:textColor="@color/server_pluxy_text" />
 
                 <Button
                     android:id="@+id/privacyPolicy"
@@ -438,11 +444,11 @@
                     android:paddingTop="6dp"
                     android:paddingBottom="6dp"
                     android:layout_marginTop="8dp"
-                    android:background="@drawable/bg_button_secondary"
+                    android:background="@drawable/server_bg_button_secondary"
                     android:text="Confidentialité et crédits"
                     android:textSize="14sp"
                     android:textAllCaps="false"
-                    android:textColor="@color/pluxy_text" />
+                    android:textColor="@color/server_pluxy_text" />
 
                 <ImageView
                     android:layout_width="64dp"
@@ -450,7 +456,7 @@
                     android:layout_marginTop="12dp"
                     android:adjustViewBounds="true"
                     android:contentDescription="Logo TMDB"
-                    android:src="@drawable/tmdb_logo" />
+                    android:src="@drawable/server_tmdb_logo" />
             </LinearLayout>
         </LinearLayout>
     </ScrollView>

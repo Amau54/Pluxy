@@ -11,6 +11,14 @@
         android:layout_width="32dp" android:layout_height="32dp"
         android:layout_gravity="center" android:indeterminateTint="?attr/pluxyAccent" />
 
+    <TextView android:id="@+id/photoFolderNotice"
+        android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:layout_gravity="top|center_horizontal" android:layout_marginTop="16dp"
+        android:layout_marginHorizontal="24dp" android:paddingHorizontal="12dp" android:paddingVertical="6dp"
+        android:background="@drawable/bg_auxiliary_controls" android:textColor="?attr/pluxyTextPrimary"
+        android:textSize="13sp" android:maxLines="2" android:ellipsize="end"
+        android:accessibilityLiveRegion="polite" android:visibility="gone" />
+
     <LinearLayout android:id="@+id/photoInfo"
         android:layout_width="match_parent" android:layout_height="wrap_content"
         android:layout_gravity="bottom|start"

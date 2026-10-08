@@ -18,8 +18,11 @@ class LibraryFocusPolicyTest {
     @Test fun `refresh with menu focus keeps it`() {
         assertEquals(LibraryFocusIntent.KEEP, libraryFocusIntent(false, false, true, false, false))
     }
-    @Test fun `navigation within grid can restore its latest remembered target`() {
-        assertEquals(LibraryFocusIntent.RESTORE, libraryFocusIntent(true, false, true, true, true))
+    @Test fun `navigation within grid prevents delayed refresh taking focus`() {
+        assertEquals(LibraryFocusIntent.KEEP, libraryFocusIntent(true, false, true, true, true))
+    }
+    @Test fun `refresh never moves an already focused card`() {
+        assertEquals(LibraryFocusIntent.KEEP, libraryFocusIntent(true, false, true, false, true))
     }
     @Test fun `explicit search can focus empty recovery action from the menu`() {
         assertTrue(shouldFocusLibraryEmptyAction(false, true, false, false, true))

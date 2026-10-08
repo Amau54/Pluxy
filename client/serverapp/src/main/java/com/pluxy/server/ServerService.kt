@@ -82,6 +82,11 @@ class ServerService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (ApplicationMode.read(this) != ApplicationMode.SERVER) {
+            commands.close()
+            stopByUser()
+            return START_NOT_STICKY
+        }
         if (intent?.action == ACTION_STOP) {
             // An early Stop must cancel disk restoration, rather than wait for it.
             commands.close()
@@ -311,7 +316,7 @@ class ServerService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_server_small)
+            .setSmallIcon(R.drawable.server_ic_server_small)
             .setContentTitle("Pluxy Serveur Android")
             .setContentText(text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
@@ -335,13 +340,13 @@ class ServerService : Service() {
             )
             builder
                 .addAction(
-                    R.drawable.ic_server_small,
+                    R.drawable.server_ic_server_small,
                     if (remote.phase.name == "PLAYING") "Pause" else "Lecture",
                     playPauseIntent,
                 )
-                .addAction(R.drawable.ic_server_small, "Arrêter la TV", remoteStopIntent)
+                .addAction(R.drawable.server_ic_server_small, "Arrêter la TV", remoteStopIntent)
         }
-        builder.addAction(R.drawable.ic_server_small, "Arrêter le serveur", stopIntent)
+        builder.addAction(R.drawable.server_ic_server_small, "Arrêter le serveur", stopIntent)
         return builder.build()
     }
 
@@ -356,10 +361,10 @@ class ServerService : Service() {
         if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.O) return
         val channel = NotificationChannel(
             CHANNEL_ID,
-            getString(R.string.notification_channel_name),
+            getString(R.string.server_notification_channel_name),
             NotificationManager.IMPORTANCE_LOW,
         ).apply {
-            description = getString(R.string.notification_channel_description)
+            description = getString(R.string.server_notification_channel_description)
             setShowBadge(false)
         }
         (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)

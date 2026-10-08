@@ -5,7 +5,7 @@
     android:layout_height="wrap_content"
     android:minHeight="56dp"
     android:layout_marginBottom="4dp"
-    android:background="@drawable/bg_button_secondary"
+    android:background="@drawable/server_bg_button_secondary"
     android:gravity="center_vertical"
     android:orientation="horizontal"
     android:paddingStart="10dp"
@@ -20,7 +20,7 @@
         android:background="@android:color/transparent"
         android:padding="3dp"
         android:scaleType="centerInside"
-        app:tint="@color/pluxy_accent"
+        app:tint="@color/server_pluxy_accent"
         android:contentDescription="@null"
         android:importantForAccessibility="no" />
 
@@ -37,7 +37,7 @@
             android:layout_height="wrap_content"
             android:ellipsize="end"
             android:maxLines="2"
-            android:textColor="@color/pluxy_text"
+            android:textColor="@color/server_pluxy_text"
             android:textSize="14sp"
             android:fontFamily="sans-serif-medium" />
 
@@ -48,7 +48,7 @@
             android:layout_marginTop="2dp"
             android:ellipsize="end"
             android:maxLines="1"
-            android:textColor="@color/pluxy_muted"
+            android:textColor="@color/server_pluxy_muted"
             android:textSize="12sp" />
     </LinearLayout>
 
@@ -57,8 +57,8 @@
         android:layout_width="24dp"
         android:layout_height="match_parent"
         android:scaleType="centerInside"
-        android:src="@drawable/ic_check"
-        app:tint="@color/pluxy_accent"
+        android:src="@drawable/server_ic_check"
+        app:tint="@color/server_pluxy_accent"
         android:contentDescription="@null"
         android:importantForAccessibility="no"
         android:visibility="gone" />

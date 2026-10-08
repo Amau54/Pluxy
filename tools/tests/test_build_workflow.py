@@ -14,7 +14,8 @@ def jobs():
 
 def test_quick_apks_are_built_once_and_publication_requires_all_gates():
     source, sections = jobs()
-    assert ":app:assembleDebug :serverapp:assembleDebug" in sections["apk"]
+    assert ":app:assembleDebug" in sections["apk"]
+    assert "serverapp/build/outputs/apk" not in source
     assert "assembleDebug" not in sections["android"] + sections["dev-release"]
     for name in ("dev-release", "release"):
         assert "needs: [python, android, apk]" in sections[name]
@@ -33,7 +34,7 @@ def test_tests_lint_r8_and_required_job_name_survive_fast_path():
                  ":receiver-core:testDebugUnitTest", ":receiver-dlna:testDebugUnitTest",
                  ":app:lintRelease", ":serverapp:lintRelease", ":receiver-core:lintRelease",
                  ":receiver-dlna:lintRelease", ":receiver-cast:lintRelease",
-                 ":app:bundleRelease", ":serverapp:bundleRelease"):
+                 ":app:bundleRelease"):
         assert task in gate
     assert "pytest -q server/tests tools/tests" in sections["python"]
 
@@ -55,9 +56,10 @@ def test_pinned_actions_build_cache_stable_signing_and_private_mapping():
         assert "gradle/actions/setup-gradle@" in sections[job]
         assert "--build-cache" in sections[job]
     assert "cache-read-only: true" in sections["release"]
-    for owner in ("PLAYER", "SERVER"):
+    for owner in ("PLAYER",):
         for field in ("JKS_BASE64", "STORE_PASSWORD", "KEY_ALIAS", "KEY_PASSWORD"):
             assert f"secrets.PLUXY_{owner}_DEBUG_{field}" in sections["dev-release"]
+    assert "PLUXY_SERVER_DEBUG" not in sections["dev-release"]
     assert "ready=false" in sections["dev-release"] and "::warning::" in sections["dev-release"]
     assert "apksigner" in sections["dev-release"] and "publish-debug" in sections["dev-release"]
     assert "jarsigner -verify -strict -keystore" in sections["release"]

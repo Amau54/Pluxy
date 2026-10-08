@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
-    <solid android:color="@color/pluxy_card" />
-    <corners android:radius="@dimen/radius_lg" />
+    <solid android:color="@color/server_pluxy_card" />
+    <corners android:radius="@dimen/server_radius_lg" />
     <stroke android:width="0.5dp" android:color="#263044" />
 </shape>

@@ -44,6 +44,22 @@ def test_manifest_refuses_wrong_keystore_certificate(distribution, monkeypatch):
         pub.manifest(distribution, Path("sdk"), "debug", SHA, None)
 
 
+def test_unified_apk_can_replace_legacy_two_apk_distribution(distribution):
+    (distribution / "Pluxy-Server-Android-debug.apk").unlink()
+    info = pub.manifest(distribution, Path("sdk"), "debug", SHA, None)
+    assert len(info["artifacts"]) == 1
+    assert info["artifacts"][0]["package"] == "com.pluxy.tv"
+    assert "Pluxy-Server-Android" not in (distribution / "SHA256SUMS.txt").read_text()
+
+
+def test_unified_distribution_requires_reader_and_rejects_duplicate_packages():
+    assert not pub.valid_apk_packages([{"name": "server.apk", "package": "com.pluxy.server"}])
+    assert not pub.valid_apk_packages([
+        {"name": "one.apk", "package": "com.pluxy.tv"},
+        {"name": "two.apk", "package": "com.pluxy.tv"},
+    ])
+
+
 def test_apk_parser_requires_valid_signature_and_known_package(tmp_path, monkeypatch):
     path = tmp_path / "player.apk"
     path.write_bytes(b"apk")

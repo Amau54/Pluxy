@@ -133,12 +133,11 @@ jobs:
         working-directory: client
         run: |
           chmod +x gradlew
-          ./gradlew :app:assembleDebug :serverapp:assembleDebug --build-cache --console=plain --warning-mode=all
+          ./gradlew :app:assembleDebug --build-cache --console=plain --warning-mode=all
       - name: Preparer les APK provisoires
         run: |
           mkdir -p dist-apk
           cp client/app/build/outputs/apk/debug/app-debug.apk dist-apk/Pluxy-debug.apk
-          cp client/serverapp/build/outputs/apk/debug/serverapp-debug.apk dist-apk/Pluxy-Server-Android-debug.apk
           echo 'APK de controle disponibles. Signature locale du runner : ne remplacent pas le canal dev-latest. Publication seulement apres tous les gates et re-signature stable.' >> "$GITHUB_STEP_SUMMARY"
       - name: Conserver les APK du run par identifiant immuable
         id: upload
@@ -185,14 +184,13 @@ jobs:
             :receiver-core:testDebugUnitTest :receiver-dlna:testDebugUnitTest \
             :app:lintRelease :serverapp:lintRelease \
             :receiver-core:lintRelease :receiver-dlna:lintRelease :receiver-cast:lintRelease \
-            :app:bundleRelease :serverapp:bundleRelease \
+            :app:bundleRelease \
             --build-cache --console=plain --warning-mode=all
 
       - name: Preparer les artefacts de controle non publiables
         run: |
           mkdir -p dist-ci
           cp client/app/build/outputs/bundle/release/app-release.aab dist-ci/Pluxy-unsigned.aab
-          cp client/serverapp/build/outputs/bundle/release/serverapp-release.aab dist-ci/Pluxy-Server-Android-unsigned.aab
 
       - name: Publier les artefacts de controle
         continue-on-error: true
@@ -224,21 +222,17 @@ jobs:
         shell: bash
         env:
           PLAYER_JKS_BASE64: ${{ secrets.PLUXY_PLAYER_DEBUG_JKS_BASE64 }}
-          SERVER_JKS_BASE64: ${{ secrets.PLUXY_SERVER_DEBUG_JKS_BASE64 }}
           PLAYER_STORE_PASSWORD: ${{ secrets.PLUXY_PLAYER_DEBUG_STORE_PASSWORD }}
           PLAYER_KEY_ALIAS: ${{ secrets.PLUXY_PLAYER_DEBUG_KEY_ALIAS }}
           PLAYER_KEY_PASSWORD: ${{ secrets.PLUXY_PLAYER_DEBUG_KEY_PASSWORD }}
-          SERVER_STORE_PASSWORD: ${{ secrets.PLUXY_SERVER_DEBUG_STORE_PASSWORD }}
-          SERVER_KEY_ALIAS: ${{ secrets.PLUXY_SERVER_DEBUG_KEY_ALIAS }}
-          SERVER_KEY_PASSWORD: ${{ secrets.PLUXY_SERVER_DEBUG_KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          for name in PLAYER_JKS_BASE64 SERVER_JKS_BASE64 PLAYER_STORE_PASSWORD PLAYER_KEY_ALIAS PLAYER_KEY_PASSWORD SERVER_STORE_PASSWORD SERVER_KEY_ALIAS SERVER_KEY_PASSWORD; do
+          for name in PLAYER_JKS_BASE64 PLAYER_STORE_PASSWORD PLAYER_KEY_ALIAS PLAYER_KEY_PASSWORD; do
             if [[ -z "${!name:-}" ]]; then
               echo 'ready=false' >> "$GITHUB_OUTPUT"
-              echo '::warning::Controles reussis, mais publication dev-latest ignoree : les 8 secrets de signature stable sont requis.'
+              echo '::warning::Controles reussis, mais publication dev-latest ignoree : les 4 secrets de signature stable sont requis.'
               echo '### Publication non effectuee' >> "$GITHUB_STEP_SUMMARY"
-              echo 'dev-latest reste sur son ancienne version. Configurer les cles compatibles existantes et leurs 6 identifiants ; aucune nouvelle cle ne sera generee automatiquement.' >> "$GITHUB_STEP_SUMMARY"
+              echo 'dev-latest reste sur son ancienne version. Configurer les cles compatibles existantes et ses 3 identifiants ; aucune nouvelle cle ne sera generee automatiquement.' >> "$GITHUB_STEP_SUMMARY"
               exit 0
             fi
           done
@@ -278,33 +272,23 @@ jobs:
           PLAYER_STORE_PASSWORD: ${{ secrets.PLUXY_PLAYER_DEBUG_STORE_PASSWORD }}
           PLAYER_KEY_ALIAS: ${{ secrets.PLUXY_PLAYER_DEBUG_KEY_ALIAS }}
           PLAYER_KEY_PASSWORD: ${{ secrets.PLUXY_PLAYER_DEBUG_KEY_PASSWORD }}
-          SERVER_JKS_BASE64: ${{ secrets.PLUXY_SERVER_DEBUG_JKS_BASE64 }}
-          SERVER_STORE_PASSWORD: ${{ secrets.PLUXY_SERVER_DEBUG_STORE_PASSWORD }}
-          SERVER_KEY_ALIAS: ${{ secrets.PLUXY_SERVER_DEBUG_KEY_ALIAS }}
-          SERVER_KEY_PASSWORD: ${{ secrets.PLUXY_SERVER_DEBUG_KEY_PASSWORD }}
         run: |
           set -euo pipefail
           required=(
             PLAYER_JKS_BASE64 PLAYER_STORE_PASSWORD PLAYER_KEY_ALIAS PLAYER_KEY_PASSWORD
-            SERVER_JKS_BASE64 SERVER_STORE_PASSWORD SERVER_KEY_ALIAS SERVER_KEY_PASSWORD
           )
           for name in "${required[@]}"; do
             [[ -n "${!name:-}" ]] || { echo "Secret debug manquant: $name" >&2; exit 1; }
           done
           printf '%s' "$PLAYER_JKS_BASE64" | base64 --decode > "$RUNNER_TEMP/pluxy-player-debug.jks"
-          printf '%s' "$SERVER_JKS_BASE64" | base64 --decode > "$RUNNER_TEMP/pluxy-server-debug.jks"
           chmod 600 "$RUNNER_TEMP"/pluxy-*-debug.jks
           mkdir -p dist-dev
           signer="$ANDROID_HOME/build-tools/36.0.0/apksigner"
           "$signer" sign --v4-signing-enabled false --ks "$RUNNER_TEMP/pluxy-player-debug.jks" --ks-key-alias "$PLAYER_KEY_ALIAS" \
             --ks-pass env:PLAYER_STORE_PASSWORD --key-pass env:PLAYER_KEY_PASSWORD \
             --out dist-dev/Pluxy-debug.apk dist-input/Pluxy-debug.apk
-          "$signer" sign --v4-signing-enabled false --ks "$RUNNER_TEMP/pluxy-server-debug.jks" --ks-key-alias "$SERVER_KEY_ALIAS" \
-            --ks-pass env:SERVER_STORE_PASSWORD --key-pass env:SERVER_KEY_PASSWORD \
-            --out dist-dev/Pluxy-Server-Android-debug.apk dist-input/Pluxy-Server-Android-debug.apk
           PLAYER_CERT_SHA256="$(keytool -exportcert -keystore "$RUNNER_TEMP/pluxy-player-debug.jks" -storepass:env PLAYER_STORE_PASSWORD -alias "$PLAYER_KEY_ALIAS" | sha256sum | cut -d' ' -f1)"
-          SERVER_CERT_SHA256="$(keytool -exportcert -keystore "$RUNNER_TEMP/pluxy-server-debug.jks" -storepass:env SERVER_STORE_PASSWORD -alias "$SERVER_KEY_ALIAS" | sha256sum | cut -d' ' -f1)"
-          export PLAYER_CERT_SHA256 SERVER_CERT_SHA256
+          export PLAYER_CERT_SHA256
           python tools/publish_apk.py manifest --directory dist-dev --build-tools "$ANDROID_HOME/build-tools/36.0.0" \
             --commit "$GITHUB_SHA" --channel debug --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
 
@@ -324,7 +308,7 @@ jobs:
         if: always() && steps.signing.outputs.ready == 'true'
         shell: bash
         run: |
-          for key in "$RUNNER_TEMP/pluxy-player-debug.jks" "$RUNNER_TEMP/pluxy-server-debug.jks"; do
+          for key in "$RUNNER_TEMP/pluxy-player-debug.jks"; do
             if [[ -f "$key" ]]; then shred -u "$key" 2>/dev/null || rm -f "$key"; fi
           done
 
@@ -377,11 +361,9 @@ jobs:
         run: |
           set -euo pipefail
           player_version=$(grep -oP 'versionName\s*=\s*"\K[^"]+' client/app/build.gradle.kts)
-          server_version=$(grep -oP 'versionName\s*=\s*"\K[^"]+' client/serverapp/build.gradle.kts)
           player_code=$(grep -oP 'versionCode\s*=\s*\K[0-9]+' client/app/build.gradle.kts)
-          server_code=$(grep -oP 'versionCode\s*=\s*\K[0-9]+' client/serverapp/build.gradle.kts)
-          [[ "$player_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ && "$player_version" == "$server_version" ]]
-          [[ "$player_code" == "$server_code" && "$player_code" -gt 0 ]]
+          [[ "$player_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$player_code" -gt 0 ]]
           if [[ "${GITHUB_REF_TYPE:-}" == tag ]]; then [[ "$GITHUB_REF_NAME" == "v$player_version" ]]; fi
           export RELEASE_TAG="v$player_version"
           python -c 'import os; from tools.publish_apk import Publisher; p=Publisher(os.environ["GITHUB_REPOSITORY"]); p.require_main(os.environ["GITHUB_SHA"]); p.require_unused_tag(os.environ["RELEASE_TAG"], os.environ["GITHUB_SHA"])'
@@ -410,10 +392,6 @@ jobs:
           PLUXY_PLAYER_UPLOAD_STORE_PASSWORD: ${{ secrets.PLUXY_PLAYER_UPLOAD_STORE_PASSWORD }}
           PLUXY_PLAYER_UPLOAD_KEY_ALIAS: ${{ secrets.PLUXY_PLAYER_UPLOAD_KEY_ALIAS }}
           PLUXY_PLAYER_UPLOAD_KEY_PASSWORD: ${{ secrets.PLUXY_PLAYER_UPLOAD_KEY_PASSWORD }}
-          SERVER_JKS_BASE64: ${{ secrets.PLUXY_SERVER_UPLOAD_JKS_BASE64 }}
-          PLUXY_SERVER_UPLOAD_STORE_PASSWORD: ${{ secrets.PLUXY_SERVER_UPLOAD_STORE_PASSWORD }}
-          PLUXY_SERVER_UPLOAD_KEY_ALIAS: ${{ secrets.PLUXY_SERVER_UPLOAD_KEY_ALIAS }}
-          PLUXY_SERVER_UPLOAD_KEY_PASSWORD: ${{ secrets.PLUXY_SERVER_UPLOAD_KEY_PASSWORD }}
         run: |
           set -euo pipefail
           required=(
@@ -421,10 +399,6 @@ jobs:
             PLUXY_PLAYER_UPLOAD_STORE_PASSWORD
             PLUXY_PLAYER_UPLOAD_KEY_ALIAS
             PLUXY_PLAYER_UPLOAD_KEY_PASSWORD
-            SERVER_JKS_BASE64
-            PLUXY_SERVER_UPLOAD_STORE_PASSWORD
-            PLUXY_SERVER_UPLOAD_KEY_ALIAS
-            PLUXY_SERVER_UPLOAD_KEY_PASSWORD
           )
           for name in "${required[@]}"; do
             if [[ -z "${!name:-}" ]]; then
@@ -433,16 +407,12 @@ jobs:
             fi
           done
           printf '%s' "$PLAYER_JKS_BASE64" | base64 --decode > "$RUNNER_TEMP/pluxy-player-upload.jks"
-          printf '%s' "$SERVER_JKS_BASE64" | base64 --decode > "$RUNNER_TEMP/pluxy-server-upload.jks"
           chmod 600 "$RUNNER_TEMP"/*.jks
           {
             echo "PLUXY_PLAYER_UPLOAD_STORE_FILE=$RUNNER_TEMP/pluxy-player-upload.jks"
-            echo "PLUXY_SERVER_UPLOAD_STORE_FILE=$RUNNER_TEMP/pluxy-server-upload.jks"
           } >> "$GITHUB_ENV"
           keytool -list -keystore "$RUNNER_TEMP/pluxy-player-upload.jks" \
             -storepass:env PLUXY_PLAYER_UPLOAD_STORE_PASSWORD -alias "$PLUXY_PLAYER_UPLOAD_KEY_ALIAS" >/dev/null
-          keytool -list -keystore "$RUNNER_TEMP/pluxy-server-upload.jks" \
-            -storepass:env PLUXY_SERVER_UPLOAD_STORE_PASSWORD -alias "$PLUXY_SERVER_UPLOAD_KEY_ALIAS" >/dev/null
 
       - name: Construire les AAB et APK release signees
         working-directory: client
@@ -450,15 +420,11 @@ jobs:
           PLUXY_PLAYER_UPLOAD_STORE_PASSWORD: ${{ secrets.PLUXY_PLAYER_UPLOAD_STORE_PASSWORD }}
           PLUXY_PLAYER_UPLOAD_KEY_ALIAS: ${{ secrets.PLUXY_PLAYER_UPLOAD_KEY_ALIAS }}
           PLUXY_PLAYER_UPLOAD_KEY_PASSWORD: ${{ secrets.PLUXY_PLAYER_UPLOAD_KEY_PASSWORD }}
-          PLUXY_SERVER_UPLOAD_STORE_PASSWORD: ${{ secrets.PLUXY_SERVER_UPLOAD_STORE_PASSWORD }}
-          PLUXY_SERVER_UPLOAD_KEY_ALIAS: ${{ secrets.PLUXY_SERVER_UPLOAD_KEY_ALIAS }}
-          PLUXY_SERVER_UPLOAD_KEY_PASSWORD: ${{ secrets.PLUXY_SERVER_UPLOAD_KEY_PASSWORD }}
         run: |
           set -euo pipefail
           chmod +x gradlew
           ./gradlew \
             :app:bundleRelease :app:assembleRelease \
-            :serverapp:bundleRelease :serverapp:assembleRelease \
             --build-cache --console=plain --warning-mode=all
 
       - name: Nommer et verifier les artefacts
@@ -467,29 +433,19 @@ jobs:
           PLAYER_VERSION: ${{ steps.version.outputs.version }}
           PLUXY_PLAYER_UPLOAD_STORE_PASSWORD: ${{ secrets.PLUXY_PLAYER_UPLOAD_STORE_PASSWORD }}
           PLUXY_PLAYER_UPLOAD_KEY_ALIAS: ${{ secrets.PLUXY_PLAYER_UPLOAD_KEY_ALIAS }}
-          PLUXY_SERVER_UPLOAD_STORE_PASSWORD: ${{ secrets.PLUXY_SERVER_UPLOAD_STORE_PASSWORD }}
-          PLUXY_SERVER_UPLOAD_KEY_ALIAS: ${{ secrets.PLUXY_SERVER_UPLOAD_KEY_ALIAS }}
         run: |
           set -euo pipefail
           player_version="$PLAYER_VERSION"
-          server_version="$PLAYER_VERSION"
           mkdir -p dist-release
           cp client/app/build/outputs/bundle/release/app-release.aab "dist-release/Pluxy-$player_version.aab"
-          cp client/serverapp/build/outputs/bundle/release/serverapp-release.aab "dist-release/Pluxy-Server-Android-$server_version.aab"
           cp client/app/build/outputs/apk/release/app-release.apk "dist-release/Pluxy-$player_version.apk"
-          cp client/serverapp/build/outputs/apk/release/serverapp-release.apk "dist-release/Pluxy-Server-Android-$server_version.apk"
           mkdir -p dist-mapping
           cp client/app/build/outputs/mapping/release/mapping.txt \
             "dist-mapping/Pluxy-$player_version-mapping.txt"
-          cp client/serverapp/build/outputs/mapping/release/mapping.txt \
-            "dist-mapping/Pluxy-Server-Android-$server_version-mapping.txt"
           jarsigner -verify -strict -keystore "$PLUXY_PLAYER_UPLOAD_STORE_FILE" -storepass:env PLUXY_PLAYER_UPLOAD_STORE_PASSWORD \
             "dist-release/Pluxy-$player_version.aab" "$PLUXY_PLAYER_UPLOAD_KEY_ALIAS"
-          jarsigner -verify -strict -keystore "$PLUXY_SERVER_UPLOAD_STORE_FILE" -storepass:env PLUXY_SERVER_UPLOAD_STORE_PASSWORD \
-            "dist-release/Pluxy-Server-Android-$server_version.aab" "$PLUXY_SERVER_UPLOAD_KEY_ALIAS"
           PLAYER_CERT_SHA256="$(keytool -exportcert -keystore "$PLUXY_PLAYER_UPLOAD_STORE_FILE" -storepass:env PLUXY_PLAYER_UPLOAD_STORE_PASSWORD -alias "$PLUXY_PLAYER_UPLOAD_KEY_ALIAS" | sha256sum | cut -d' ' -f1)"
-          SERVER_CERT_SHA256="$(keytool -exportcert -keystore "$PLUXY_SERVER_UPLOAD_STORE_FILE" -storepass:env PLUXY_SERVER_UPLOAD_STORE_PASSWORD -alias "$PLUXY_SERVER_UPLOAD_KEY_ALIAS" | sha256sum | cut -d' ' -f1)"
-          export PLAYER_CERT_SHA256 SERVER_CERT_SHA256
+          export PLAYER_CERT_SHA256
           python tools/publish_apk.py manifest --directory dist-release --build-tools "$ANDROID_HOME/build-tools/36.0.0" \
             --commit "$GITHUB_SHA" --channel release --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
 
@@ -499,7 +455,7 @@ jobs:
         run: |
           set +e
           ./client/gradlew --stop
-          for key in "$RUNNER_TEMP/pluxy-player-upload.jks" "$RUNNER_TEMP/pluxy-server-upload.jks"; do
+          for key in "$RUNNER_TEMP/pluxy-player-upload.jks"; do
             if [[ -f "$key" ]]; then shred -u "$key" 2>/dev/null || rm -f "$key"; fi
           done
 

@@ -12,7 +12,8 @@ $temporaryDirectory = $null
 $timer = [Diagnostics.Stopwatch]::StartNew()
 try {
     $environment = Find-AndroidEnvironment $repository
-    $expected = if ($Application -eq 'Player') { 'com.pluxy.tv' } else { 'com.pluxy.server' }
+    $expected = 'com.pluxy.tv'
+    $Application = 'Player'
     if (-not $Apk) {
         $manifestPath = Join-Path $repository "dist/BUILD_INFO-$($Application.ToLowerInvariant())-$($Configuration.ToLowerInvariant()).json"
         if (-not (Test-Path -LiteralPath $manifestPath)) { throw 'Aucun build local identifie. Lancez Build-APK.bat ou indiquez -Apk.' }
