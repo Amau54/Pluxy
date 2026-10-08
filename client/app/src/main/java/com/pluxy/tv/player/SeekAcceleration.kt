@@ -16,7 +16,10 @@ object SeekAcceleration {
         Stage(1_200L, 10_000L, "×1"),
         Stage(2_500L, 20_000L, "×2"),
         Stage(5_000L, 40_000L, "×4"),
-        Stage(Long.MAX_VALUE, 80_000L, "×8"),
+        Stage(8_000L, 80_000L, "×8"),
+        Stage(12_000L, 160_000L, "×16"),
+        Stage(18_000L, 320_000L, "×32"),
+        Stage(Long.MAX_VALUE, 640_000L, "×64"),
     )
 
     fun distanceMs(elapsedMs: Long): Long {

@@ -1,0 +1,21 @@
+Pluxy pour Windows — composants tiers
+
+Microsoft WebView2 SDK et WebView2Loader
+Microsoft Corporation. Voir WebView2.txt.
+https://www.nuget.org/packages/Microsoft.Web.WebView2/1.0.4258.31
+Le runtime Evergreen est installé et mis à jour par Microsoft.
+
+mpv 36bf3d5290, compilation Windows x86_64 du 8 octobre 2026
+GPL version 2 ou ultérieure. Le moteur est exécuté comme un programme séparé.
+Voir mpv-Copyright.txt, mpv-LICENSE.GPL.txt et mpv-LICENSE.LGPL.txt.
+Sources de mpv : https://github.com/mpv-player/mpv/tree/36bf3d5290
+Compilation et dépendances : https://github.com/shinchiro/mpv-winbuild-cmake
+Distribution originale : https://github.com/shinchiro/mpv-winbuild-cmake/releases/tag/20261008
+FFmpeg, libplacebo, libass et les autres bibliothèques de ce moteur sont décrits
+dans les recettes de compilation et les notices de leurs projets respectifs.
+
+Python et FFmpeg du serveur sont téléchargés uniquement lorsque le serveur
+est préparé. Leurs distributions originales et notices restent dans le dossier
+du runtime. Pluxy ne les installe pas pour utiliser le mode Lecteur.
+Python : https://www.python.org/
+FFmpeg : https://ffmpeg.org/ — https://www.gyan.dev/ffmpeg/builds/

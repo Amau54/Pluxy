@@ -20,6 +20,16 @@ class SeekAccelerationTest {
         assertEquals("×2", SeekAcceleration.speedLabel(1_200L))
         assertEquals("×4", SeekAcceleration.speedLabel(2_500L))
         assertEquals("×8", SeekAcceleration.speedLabel(5_000L))
+        assertEquals("×16", SeekAcceleration.speedLabel(8_000L))
+        assertEquals("×32", SeekAcceleration.speedLabel(12_000L))
+        assertEquals("×64", SeekAcceleration.speedLabel(18_000L))
+    }
+
+    @Test fun `a long hold can cross a film without a discontinuous jump`() {
+        assertEquals(384_000L, SeekAcceleration.distanceMs(8_000L))
+        assertEquals(1_024_000L, SeekAcceleration.distanceMs(12_000L))
+        assertEquals(2_944_000L, SeekAcceleration.distanceMs(18_000L))
+        assertTrue(SeekAcceleration.distanceMs(18_001L) - SeekAcceleration.distanceMs(17_999L) < 1_000L)
     }
 
     @Test

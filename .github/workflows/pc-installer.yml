@@ -1,0 +1,67 @@
+name: Application PC et installateur Windows
+
+on:
+  push:
+    branches: [main]
+    paths: ['desktop/**', 'server/**', 'tools/Build-PC.ps1', 'tools/Test-PC.ps1', 'tools/PC-Launcher.ps1', 'tools/Start-PC.ps1', 'tools/Media-Runtime.ps1', '.github/workflows/pc-installer.yml']
+  pull_request:
+    branches: [main]
+    paths: ['desktop/**', 'server/**', 'tools/Build-PC.ps1', 'tools/Test-PC.ps1', 'tools/PC-Launcher.ps1', 'tools/Start-PC.ps1', 'tools/Media-Runtime.ps1', '.github/workflows/pc-installer.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pc-installer-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Construire l’application et l’installateur
+        shell: powershell
+        run: ./tools/Build-PC.ps1
+      - name: Tester le paquet et la navigation native à dix minutes
+        shell: powershell
+        run: ./tools/Test-PC.ps1
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: Pluxy-PC
+          path: |
+            dist-pc/Pluxy-Setup.exe
+            dist-pc/PC_BUILD_INFO.json
+            dist-pc/PC_SHA256SUMS.txt
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: Pluxy-PC
+          path: pc
+      - name: Publier le téléchargement PC
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          cd pc
+          sha256sum -c PC_SHA256SUMS.txt
+          printf '%s\n' 'Installez Pluxy-Setup.exe, puis choisissez Lecteur ou Serveur au premier lancement.' > release-notes.txt
+          if gh release view pc-latest >/dev/null 2>&1; then
+            gh release edit pc-latest --title 'Pluxy pour Windows' --notes-file release-notes.txt --latest=false
+          else
+            gh release create pc-latest --target "$GITHUB_SHA" --title 'Pluxy pour Windows' --notes-file release-notes.txt --latest=false
+          fi
+          gh release upload pc-latest Pluxy-Setup.exe PC_BUILD_INFO.json PC_SHA256SUMS.txt --clobber

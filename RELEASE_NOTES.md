@@ -1,3 +1,13 @@
+## Windows 1.8.0 · Android 1.7.6
+
+- Windows : une application unique avec choix Lecteur ou Serveur, mémorisé et modifiable dans les options.
+- Téléchargement PC : installateur graphique, raccourci et désinstallation ; le dépôt complet n'est plus nécessaire.
+- Lecteur PC : films, séries par saisons, vidéos, dossiers photos, musique, thèmes et lecture native des fichiers originaux.
+- Serveur PC : préparation de Python et FFmpeg sans fenêtre de commande ; démarrage automatique via l'application installée.
+- Android : reprise du rendu Dolby/DTS après déplacement, cible conservée pendant le chargement et secours temporel en copie vidéo/audio sur serveur PC.
+- Navigation : maintien gauche/droite progressif jusqu'à ×64, sans multiplier les ouvertures de flux pendant le maintien.
+- Android : Media3 1.11.1, avec les correctifs récents de navigation Matroska et de rendu.
+
 # Pluxy 1.7.5
 
 Une seule application Android : **version 1.7.5, versionCode 59**.

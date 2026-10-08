@@ -16,8 +16,14 @@ try {
     try { $ownsMutex = $mutex.WaitOne(0) }
     catch [Threading.AbandonedMutexException] { $ownsMutex = $true }
     if (-not $ownsMutex) {
-        Write-Host '[Pluxy] La preparation est deja en cours dans une autre fenetre.'
-        exit 0
+        if ($PrepareOnly) {
+            try { $ownsMutex = $mutex.WaitOne(1200000) }
+            catch [Threading.AbandonedMutexException] { $ownsMutex = $true }
+            if (-not $ownsMutex) { throw 'La preparation precedente ne repond plus. Relancez Pluxy.' }
+        } else {
+            Write-Host '[Pluxy] La preparation est deja en cours dans une autre fenetre.'
+            exit 0
+        }
     }
     Write-Host '[Pluxy] Verification du serveur PC...'
     $python = Initialize-PCEnvironment -ServerDirectory $server -RuntimeDirectory $runtime

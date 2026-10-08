@@ -18,7 +18,7 @@ android {
 
 dependencies {
     api(project(":receiver-core"))
-    val media3 = "1.10.1"
+    val media3 = "1.11.1"
     implementation("androidx.media3:media3-common:$media3")
     api("androidx.media3:media3-cast:$media3")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")

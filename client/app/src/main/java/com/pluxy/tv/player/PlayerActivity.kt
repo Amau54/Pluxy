@@ -197,6 +197,8 @@ class PlayerActivity : ThemedActivity() {
     private var lastGoodPositionMs = 0L
     private var lastBuildAtMs = 0L
     private var streamPositionOffsetMs = 0L
+    private var pendingSeekTargetMs: Long? = null
+    private var seekRebuildRunnable: Runnable? = null
 
     // La playlist VOD couvre tout le film : position et durée sont absolues.
     private fun absolutePositionMs(): Long = PlaybackSeekPolicy.absolutePosition(
@@ -206,6 +208,7 @@ class PlayerActivity : ThemedActivity() {
     /** Position FIABLE pour reprendre/recharger/seeker : la position courante si elle est
      *  plausible, sinon la dernière bonne position connue (jamais un 0 transitoire). */
     private fun reliablePositionMs(): Long {
+        pendingSeekTargetMs?.let { return it }
         // Pendant la reprise post-seek, Media3 peut encore publier l'ANCIENNE position.
         // La cible mémorisée reste alors la seule base fiable pour un second geste rapide.
         if (SystemClock.elapsedRealtime() - lastSeekAtMs <= SEEK_GRACE_MS) {
@@ -221,10 +224,13 @@ class PlayerActivity : ThemedActivity() {
             val p = player
             if (p != null && p.playbackState != Player.STATE_IDLE) {
                 val pos = absolutePositionMs()
-                if (pos > 0 && SystemClock.elapsedRealtime() - lastSeekAtMs > SEEK_GRACE_MS) {
+                if (p.playbackState == Player.STATE_READY && pendingSeekTargetMs?.let { kotlin.math.abs(pos - it) < 2_000L } == true) {
+                    pendingSeekTargetMs = null
+                }
+                if (pos > 0 && p.playbackState == Player.STATE_READY && pendingSeekTargetMs == null && SystemClock.elapsedRealtime() - lastSeekAtMs > SEEK_GRACE_MS) {
                     lastGoodPositionMs = pos
                 }
-                if (!isSeeking && !timelineScrubbing) updateTimeline(pos)
+                if (!isSeeking && !timelineScrubbing) updateTimeline(pendingSeekTargetMs ?: pos)
                 updatePlayPauseButton()
                 updateMediaSessionPlaybackState()
                 maybeRecoverQuality()
@@ -321,7 +327,8 @@ class PlayerActivity : ThemedActivity() {
     /** Démarre un scrub visuel. Le lecteur réel ne reçoit aucun seek avant la relâche :
      *  cela évite les rafales de requêtes Range/HLS et les redémarrages FFmpeg. */
     private fun startSeekHold(dir: Int) {
-        val p = player ?: return
+        val p = player
+        if (p == null && seekRebuildRunnable == null) return
         if (seekKeyHeld) return
         seekBaseMs = reliablePositionMs()
         seekAccumMs = SeekAcceleration.TAP_MS * dir
@@ -335,17 +342,17 @@ class PlayerActivity : ThemedActivity() {
         armSeekReleaseFallback()
     }
 
-    private fun updateHeldSeekPreview(p: ExoPlayer, nowMs: Long) {
+    private fun updateHeldSeekPreview(p: ExoPlayer?, nowMs: Long) {
         val elapsed = (nowMs - seekHoldStartedAtMs).coerceAtLeast(0L)
         seekAccumMs = SeekAcceleration.distanceMs(elapsed) * seekDirection
-        val dur = durationMs.takeIf { it > 0 } ?: (p.duration.takeIf { it > 0 } ?: Long.MAX_VALUE)
+        val dur = durationMs.takeIf { it > 0 } ?: (p?.duration?.takeIf { it > 0 } ?: Long.MAX_VALUE)
         val target = (seekBaseMs + seekAccumMs).coerceIn(0L, dur)
         showSeekOverlay(seekDirection, seekAccumMs, target, SeekAcceleration.speedLabel(elapsed))
     }
 
     private val seekPreviewRunnable = object : Runnable {
         override fun run() {
-            val p = player ?: return
+            val p = player
             if (!seekKeyHeld) return
             updateHeldSeekPreview(p, SystemClock.elapsedRealtime())
             handler.postDelayed(this, SEEK_PREVIEW_TICK_MS)
@@ -353,10 +360,11 @@ class PlayerActivity : ThemedActivity() {
     }
 
     private val seekCommitRunnable = Runnable {
-        val p = player ?: run { dismissSeekOverlay(); return@Runnable }
+        val p = player
+        if (p == null && seekRebuildRunnable == null) { cancelPendingSeek(); return@Runnable }
         handler.removeCallbacks(seekPreviewRunnable)
         seekKeyHeld = false
-        val dur = durationMs.takeIf { it > 0 } ?: (p.duration.takeIf { it > 0 } ?: Long.MAX_VALUE)
+        val dur = durationMs.takeIf { it > 0 } ?: (p?.duration?.takeIf { it > 0 } ?: Long.MAX_VALUE)
         val target = (seekBaseMs + seekAccumMs).coerceIn(0L, dur)
         goToAbsolute(target)
         isSeeking = false
@@ -502,7 +510,7 @@ class PlayerActivity : ThemedActivity() {
             TvPlaybackKeyRouter.Command.KeepSeekAlive -> armSeekReleaseFallback()
             TvPlaybackKeyRouter.Command.CommitSeek -> {
                 if (isSeeking) {
-                    player?.let { updateHeldSeekPreview(it, SystemClock.elapsedRealtime()) }
+                    updateHeldSeekPreview(player, SystemClock.elapsedRealtime())
                     handler.removeCallbacks(seekCommitRunnable)
                     seekCommitRunnable.run()
                 }
@@ -919,7 +927,10 @@ class PlayerActivity : ThemedActivity() {
 
     private fun togglePlayPause() {
         if (terminalPlaybackError) { retryPlayback(); return }
-        val p = player ?: return
+        val p = player ?: run {
+            if (seekRebuildRunnable != null) savedPlayWhenReady = !savedPlayWhenReady
+            return
+        }
         val focusPrimary = controlsOverlay.visibility != View.VISIBLE
         if (p.playbackState == Player.STATE_ENDED) {
             replayFromBeginning(p)
@@ -935,7 +946,10 @@ class PlayerActivity : ThemedActivity() {
 
     private fun playOrReplay() {
         if (terminalPlaybackError) { retryPlayback(); return }
-        val p = player ?: return
+        val p = player ?: run {
+            if (seekRebuildRunnable != null) savedPlayWhenReady = true
+            return
+        }
         val focusPrimary = controlsOverlay.visibility != View.VISIBLE
         if (p.playbackState == Player.STATE_ENDED) replayFromBeginning(p) else p.play()
         updatePlayPauseButton()
@@ -945,6 +959,7 @@ class PlayerActivity : ThemedActivity() {
 
     private fun pausePlayback() {
         val focusPrimary = controlsOverlay.visibility != View.VISIBLE
+        if (seekRebuildRunnable != null) savedPlayWhenReady = false
         player?.pause()
         updatePlayPauseButton()
         showControls(focusPlayPause = focusPrimary)
@@ -1066,7 +1081,7 @@ class PlayerActivity : ThemedActivity() {
                 .setActions(actions)
                 .setState(
                     state,
-                    absolutePositionMs(),
+                    pendingSeekTargetMs ?: absolutePositionMs(),
                     if (p?.isPlaying == true) p.playbackParameters.speed else 0f,
                     SystemClock.elapsedRealtime(),
                 )
@@ -1250,6 +1265,7 @@ class PlayerActivity : ThemedActivity() {
     }
 
     private fun reprepareForStrategy(strategy: PlaybackStrategy) {
+        cancelSeekRebuild()
         savedPositionMs = reliablePositionMs()
         if (!terminalPlaybackError) savedPlayWhenReady = player?.playWhenReady ?: savedPlayWhenReady
         if (savedPositionMs > 0L) lastGoodPositionMs = savedPositionMs
@@ -1305,6 +1321,7 @@ class PlayerActivity : ThemedActivity() {
 
     override fun onStop() {
         activityStarted = false
+        cancelSeekRebuild()
         playerChoiceMenuGeneration++
         playerChoiceMenu?.dismiss()
         playerChoiceMenu = null
@@ -1560,8 +1577,18 @@ class PlayerActivity : ThemedActivity() {
         // currentPosition reste masqué à l'ancienne valeur pendant tout le buffering ;
         // sans ça un repli rétablirait l'ANCIENNE position (et annulerait le retour début).
         markSeekTarget(t)
+        // Un second geste pendant la libération audio ne relance pas deux moteurs.
+        // Le runnable déjà prévu reprend simplement la cible la plus récente.
+        if (seekRebuildRunnable != null) return
         player?.let { p ->
             val attempt = attempts.getOrNull(attemptIdx)
+            if (PlaybackSeekRecoveryPolicy.needsAudioReset(attempt?.delivery == "direct",
+                    p.audioFormat?.sampleMimeType,
+                    AudioOutputMode.fromKey(PluxyApplication.audioOutputMode(this)) == AudioOutputMode.PASSTHROUGH)) {
+                rebuildAfterSeek(t, separateAudioRelease = true, recoveryCount = 0)
+                saveProgress()
+                return
+            }
             if (attempt != null && PlaybackSeekPolicy.isRemux(attempt.url)) {
                 loadAttempt(attemptIdx, restorePos = t)
                 saveProgress()
@@ -1580,7 +1607,7 @@ class PlayerActivity : ThemedActivity() {
             // EXACT uniquement pour l'action explicite de l'utilisateur. On revient
             // aussitôt au point de synchro proche pour ne pas ralentir les reprises,
             // reconstructions et replis automatiques ultérieurs.
-            p.setSeekParameters(SeekParameters.EXACT)
+            p.setSeekParameters(if (item.isHdr || (item.height ?: 0) >= 2160) SeekParameters.CLOSEST_SYNC else SeekParameters.EXACT)
             p.seekTo(t)
             p.setSeekParameters(SeekParameters.CLOSEST_SYNC)
         }
@@ -1591,6 +1618,51 @@ class PlayerActivity : ThemedActivity() {
     private fun markSeekTarget(targetMs: Long) {
         lastGoodPositionMs = targetMs
         savedPositionMs = targetMs
+        pendingSeekTargetMs = targetMs
+    }
+
+    private fun cancelSeekRebuild() {
+        seekRebuildRunnable?.let { handler.removeCallbacks(it) }
+        seekRebuildRunnable = null
+    }
+
+    /** Un AudioTrack direct peut garder les compteurs du précédent après flush.
+     * Libérer les renderers et laisser la liaison se stabiliser évite leur chevauchement. */
+    private fun rebuildAfterSeek(targetMs: Long, separateAudioRelease: Boolean, recoveryCount: Int) {
+        val previous = player ?: return
+        savedPlayWhenReady = previous.playWhenReady
+        markSeekTarget(targetMs)
+        handler.removeCallbacks(saveTick)
+        handler.removeCallbacks(positionTick)
+        handler.removeCallbacks(bufferWatchdog)
+        handler.removeCallbacks(audioRecoverRunnable)
+        retryRunnable?.let { handler.removeCallbacks(it) }
+        retryRunnable = null
+        cancelPendingSeek()
+        cancelSeekRebuild()
+        lastBuildAtMs = SystemClock.elapsedRealtime()
+        playerView.player = null
+        player = null
+        previous.release()
+        setLoadingVisible(true)
+        setStatus("Reprise à ${fmtPlayerTime(targetMs)} · vidéo originale…")
+        val rebuild = object : Runnable {
+            override fun run() {
+                if (seekKeyHeld && activityStarted) {
+                    handler.postDelayed(this, SEEK_PREVIEW_TICK_MS)
+                    return
+                }
+                seekRebuildRunnable = null
+                if (activityStarted && !isFinishing && buffer != null && attempts.isNotEmpty()) {
+                    savedPositionMs = pendingSeekTargetMs ?: targetMs
+                    buildPlayer()
+                    watchdogReloads = recoveryCount
+                }
+            }
+        }
+        seekRebuildRunnable = rebuild
+        updateMediaSessionPlaybackState()
+        if (separateAudioRelease) handler.postDelayed(rebuild, 1_200L) else rebuild.run()
     }
 
     private fun buildMediaItem(url: String, delivery: String): MediaItem {
@@ -1891,6 +1963,7 @@ class PlayerActivity : ThemedActivity() {
                     startBufferWatchdog()
                 }
                 Player.STATE_READY -> {
+                    pendingSeekTargetMs = null
                     setLoadingVisible(false)
                     retries = 0; setStatus("")
                     handler.removeCallbacks(bufferWatchdog)   // le chargement a abouti
@@ -1934,6 +2007,7 @@ class PlayerActivity : ThemedActivity() {
             reason: Int,
         ) {
             if (reason == Player.DISCONTINUITY_REASON_SEEK) {
+                markSeekTarget(PlaybackSeekPolicy.absolutePosition(streamPositionOffsetMs, newPosition.positionMs))
                 lastSeekAtMs = SystemClock.elapsedRealtime()
                 playStartedAtMs = 0L
                 networkStallStartMs = 0L          // le buffering qui suit est lié au seek
@@ -2170,6 +2244,8 @@ class PlayerActivity : ThemedActivity() {
         markPreviousCompleted: Boolean = true,
         serverUrl: String = api.baseUrl,
     ) {
+        cancelSeekRebuild()
+        pendingSeekTargetMs = null
         val previousId = item.id
         val previousDuration = durationMs
         val previousApi = api
@@ -2263,7 +2339,10 @@ class PlayerActivity : ThemedActivity() {
                 bufWatchLastBytes = bytes
                 bufWatchProgressAtMs = now
             }
-            if (PlaybackBufferWatchPolicy.isStuck(
+            if (PlaybackSeekRecoveryPolicy.renderedBufferStuck(
+                    now - bufWatchStartedAtMs, p.totalBufferedDuration,
+                    !isTranscode, now - lastSeekAtMs < 60_000L,
+                ) || PlaybackBufferWatchPolicy.isStuck(
                     now - bufWatchStartedAtMs, now - bufWatchProgressAtMs, isTranscode,
                 )) { onLoadStuck(); return }
             handler.postDelayed(this, BUF_WATCH_POLL_MS)
@@ -2276,6 +2355,27 @@ class PlayerActivity : ThemedActivity() {
         handler.removeCallbacks(bufferWatchdog)
         val pos = reliablePositionMs()
         Logger.log("stuck", "chargement bloqué mode=${if (isTranscode) "hls" else "direct"} attempt=$attemptIdx pos=$pos")
+        val attempt = attempts.getOrNull(attemptIdx)
+        val recentSeek = pendingSeekTargetMs != null || SystemClock.elapsedRealtime() - lastSeekAtMs < 60_000L
+        when (PlaybackSeekRecoveryPolicy.action(attempt?.delivery == "direct", recentSeek,
+                attempt?.let { PlaybackSeekPolicy.isRemux(it.url) } == true,
+                serverKind == "pc" && transcodingAvailable && directStreamSeekAvailable, watchdogReloads)) {
+            PlaybackSeekRecoveryPolicy.Action.REBUILD -> {
+                Logger.log("seek", "rendu bloqué -> nouveau moteur à $pos, vidéo/audio conservés")
+                rebuildAfterSeek(pos, separateAudioRelease = true, recoveryCount = 1)
+                return
+            }
+            PlaybackSeekRecoveryPolicy.Action.TEMPORAL_COPY -> {
+                watchdogReloads = 2
+                attempts[attemptIdx] = attempt!!.copy(url = "/stream/remux/${item.id}?copy_audio=true",
+                    label = "Direct Stream · vidéo et audio d’origine")
+                Logger.log("seek", "index direct bloqué -> copie temporelle à $pos")
+                markSeekTarget(pos)
+                rebuildAfterSeek(pos, separateAudioRelease = true, recoveryCount = 2)
+                return
+            }
+            PlaybackSeekRecoveryPolicy.Action.NORMAL_FALLBACK -> Unit
+        }
         when {
             activeStrategy == PlaybackStrategy.AUTO && maybeDownshift(learnNetworkConstraint = networkStallStartMs > 0L) -> Unit
             attemptIdx + 1 < attempts.size -> {
@@ -2329,6 +2429,7 @@ class PlayerActivity : ThemedActivity() {
             "index=$idx tier=${attempt.tier} delivery=${attempt.delivery} url=${attempt.url}",
         )
         val temporal = PlaybackSeekPolicy.isRemux(attempt.url)
+        if (restorePos > 0L) pendingSeekTargetMs = restorePos
         streamPositionOffsetMs = if (temporal && directStreamSeekAvailable) restorePos.coerceAtLeast(0L) else 0L
         if (temporal && restorePos > 0 && !directStreamSeekAvailable) {
             setStatus("Mettez à jour le serveur PC pour reprendre ce flux.")
@@ -2514,7 +2615,7 @@ class PlayerActivity : ThemedActivity() {
     }
 
     private fun saveProgress() {
-        if (player == null) return
+        if (player == null && pendingSeekTargetMs == null) return
         val pos = reliablePositionMs()
         val dur = durationMs.takeIf { it > 0 } ?: (player?.duration ?: 0L)
         // The activity can advance to the next episode before this IO job runs.

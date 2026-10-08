@@ -40,3 +40,10 @@ Le [SVG de référence](https://commons.wikimedia.org/wiki/File:Tmdb.new.logo.sv
 distribué sous [licence Creative Commons Attribution-ShareAlike 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
 L'adaptation Android reprend ce tracé en blanc. Cette licence concerne le logo,
 pas les affiches ni les autres images renvoyées par l'API.
+
+## Lecteur Windows
+
+Le lecteur Windows utilise Microsoft WebView2 et le moteur mpv dans un processus séparé.
+Les licences sont conservées dans le dossier `licenses` de l'installation.
+Les versions et empreintes de compilation sont dans `desktop/dependencies.json`.
+Voir [les notices Windows](../desktop/THIRD_PARTY.txt) pour les sources et distributions.

@@ -1,0 +1,58 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Threading.Tasks;
+
+namespace Pluxy {
+    internal static class SelfTest {
+        private static readonly List<string> checks=new List<string>();
+        private static void Check(bool passed,string message) { if(!passed) throw new Exception(message); checks.Add(message); }
+        private static string Argument(string[] args,string name) { int at=Array.IndexOf(args,name); return at>=0 && at+1<args.Length?args[at+1]:null; }
+        public static int Run(string[] args) {
+            string report=Argument(args,"--report") ?? Path.Combine(Native.Data,"self-test.json"); int code=0; string error=null;
+            try { Verify(args).GetAwaiter().GetResult(); } catch(Exception exception) { error=exception.ToString(); code=1; }
+            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(report)));
+            File.WriteAllText(report,Native.Json.Serialize(new{success=code==0,checks=checks,error=error})); return code;
+        }
+        private static async Task Verify(string[] args) {
+            Check(LibraryClient.NormalizeServer("192.168.1.20:8420")=="http://192.168.1.20:8420","Adresse du serveur normalisée");
+            foreach(string invalid in new[]{"file:///C:/secret","http://user:pass@localhost","http://localhost/private","http://localhost/?secret=1"}) {
+                bool rejected=false; try { LibraryClient.NormalizeServer(invalid); } catch(ArgumentException) { rejected=true; } Check(rejected,"Adresse refusée : "+invalid);
+            }
+            bool badId=false; try { LibraryClient.ItemPath("../config.json"); } catch(ArgumentException) { badId=true; } Check(badId,"Chemin de média limité à un identifiant");
+            Check(Native.Quote("C:\\Photos de famille\\")=="\"C:\\Photos de famille\\\\\"","Arguments Windows avec espaces et antislash final");
+            Check(File.Exists(Path.Combine(Native.Root,"ui","reader.js")),"Interface du lecteur présente");
+            Check(SeekAcceleration.Distance(0)==10 && SeekAcceleration.Distance(12000)==1024 && SeekAcceleration.Speed(18000)=="×64","Avance progressive de dix secondes à ×64");
+            if(Array.IndexOf(args,"--test-bootstrap")>=0) {
+                using(var controller=new ServerController()) {
+                    await controller.Start(message=>{});
+                    Check(controller.Owned,"Serveur préparé et démarré sans console");
+                    using(var api=new LibraryClient()) await api.Connect(controller.Address);
+                    controller.Stop();
+                    Check(!controller.Owned,"Arrêt du serveur lancé par l'application");
+                }
+            }
+            string server=Argument(args,"--test-server");
+            if(server!=null) {
+                using(var api=new LibraryClient()) {
+                    await api.Connect(server); var page=Native.Object(await api.Api("page",new Dictionary<string,object>{{"kind","movie"}}));
+                    Check(page.ContainsKey("items"),"Connexion au serveur et catalogue paginé");
+                }
+            }
+            string url=Argument(args,"--video");
+            if(url!=null) {
+                using(var player=new MpvSession()) {
+                    await player.Start(url,IntPtr.Zero,"auto",0,true);
+                    double duration=0; for(int i=0;i<60;i++) { try { duration=Convert.ToDouble(await player.Command("get_property","duration")); if(duration>0) break; } catch(IOException) { } await Task.Delay(250); }
+                    Check(duration>5,"Vidéo originale ouverte par le moteur natif");
+                    await player.Command("set_property","pause",true);
+                    string seek=Argument(args,"--seek"); double target=Math.Min(seek==null?25:double.Parse(seek,System.Globalization.CultureInfo.InvariantCulture),duration-.5); await player.Command("seek",target,"absolute+exact"); await Task.Delay(800);
+                    double position=Convert.ToDouble(await player.Command("get_property","time-pos")); Check(Math.Abs(position-target)<1,"Déplacement absolu sans retour au début");
+                    double delta=Math.Min(10,duration*.1); await player.Command("seek",-delta,"relative+exact"); await Task.Delay(500);
+                    position=Convert.ToDouble(await player.Command("get_property","time-pos")); Check(Math.Abs(position-(target-delta))<1,"Retour relatif dans le fichier original");
+                    string height=Argument(args,"--height"); if(height!=null) Check(Convert.ToInt32(await player.Command("get_property","height"))==int.Parse(height),"Résolution vidéo originale conservée : "+height);
+                }
+            }
+        }
+    }
+}

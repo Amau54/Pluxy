@@ -38,8 +38,8 @@ android {
         applicationId = "com.pluxy.tv"
         minSdk = 23            // Android TV 6.0+ ET mobile (Android 6+)
         targetSdk = 36
-        versionCode = 59
-        versionName = "1.7.5"
+        versionCode = 60
+        versionName = "1.7.6"
     }
 
     signingConfigs {
@@ -95,7 +95,7 @@ android {
 dependencies {
     implementation(project(":serverapp"))
     // Version stable courante : correctifs ExoPlayer/HLS récents sans canal preview.
-    val media3 = "1.10.1"
+    val media3 = "1.11.1"
     implementation("androidx.media3:media3-exoplayer:$media3")
     implementation("androidx.media3:media3-exoplayer-hls:$media3")
     implementation("androidx.media3:media3-ui:$media3")

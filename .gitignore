@@ -66,6 +66,8 @@ dist/*SHA256SUMS.txt
 dist-ci/
 dist-release/
 dist-mapping/
+dist-pc/
+desktop/.deps/
 
 # On VERSIONNE volontairement :
 #   - client/gradlew*, client/gradle/wrapper/*   (build en un clic)

@@ -28,6 +28,9 @@ def _launch_command() -> str:
     pyw = exe.with_name("pythonw.exe")
     py = pyw if pyw.exists() else exe
     server = Path(__file__).resolve().parent.parent          # .../server
+    desktop = server.parent / "Pluxy.exe"
+    if desktop.is_file():
+        return f'"{desktop}" --server --background'
     target = server / "pluxy_tray.pyw"
     if not target.exists():                                   # repli : serveur seul
         target = server / "run.py"

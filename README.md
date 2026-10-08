@@ -6,15 +6,15 @@
 
 Vos films, séries, photos et musique sur la TV.
 
-**1.7.5 · Android TV et Android 6.0+**
+**Android 1.7.6 · Windows 1.8.0**
 
 [Application Android](https://github.com/Amau54/Pluxy/releases/download/dev-latest/Pluxy-debug.apk)
-· [Serveur PC](https://github.com/Amau54/Pluxy/archive/refs/heads/main.zip)
+· [Application PC](https://github.com/Amau54/Pluxy/releases/download/pc-latest/Pluxy-Setup.exe)
 
 </div>
 
 Pluxy lit les fichiers d'un PC, d'un téléphone ou d'une tablette sur votre réseau
-local. La même application Android sert de lecteur ou de serveur : choisissez
+local. Les applications Android et Windows proposent un lecteur et un serveur : choisissez
 son mode au premier lancement, puis dans les options pour le modifier.
 Les appareils doivent être sur le même réseau.
 
@@ -38,25 +38,31 @@ le format choisi ; le mode forcé ne change pas les limites physiques des ports.
 
 ## Démarrer sur PC
 
-1. Téléchargez le ZIP du projet et extrayez-le dans un dossier.
-2. Sous Windows 10 ou 11, double-cliquez sur [Pluxy-Server.bat](Pluxy-Server.bat).
-3. Choisissez vos dossiers dans la fenêtre qui s'ouvre.
-4. Ouvrez Pluxy sur la TV et sélectionnez le serveur détecté.
+1. Téléchargez [Pluxy-Setup.exe](https://github.com/Amau54/Pluxy/releases/download/pc-latest/Pluxy-Setup.exe).
+2. Installez Pluxy sous Windows 10 ou 11, en 64 bits, puis ouvrez son raccourci.
+3. Choisissez **Lecteur** pour vous connecter à un serveur, ou **Serveur** pour partager vos dossiers.
 
-Python, FFmpeg et ffprobe sont installés automatiquement s'ils manquent. Le premier lancement nécessite
-Internet pour préparer les composants. Les lancements suivants réutilisent
-l'installation. Aucun droit administrateur n'est demandé.
+Le choix est mémorisé. **Options → Changer de mode** permet de le modifier.
+Le lecteur présente les films, séries par saisons, vidéos, dossiers photos et albums
+musicaux. Il lit les fichiers originaux avec son moteur vidéo intégré ; Python
+n'est pas nécessaire pour ce mode.
 
-L'icône Pluxy dans la zone de notification permet de rouvrir la fenêtre ou
-d'arrêter le serveur. L'adresse de configuration est `http://localhost:8420/`
-par défaut. Si vous changez le port, la fenêtre utilise la nouvelle adresse.
+En mode Serveur, Python, FFmpeg et les dépendances manquantes sont préparés
+automatiquement, avec une progression dans l'application. La première préparation
+nécessite Internet. Aucune fenêtre de commande ni droits administrateur ne sont requis.
+Le composant d'affichage Microsoft est aussi installé s'il manque.
 
-Le lanceur prépare FFmpeg dans votre compte Windows. Pour utiliser votre propre
-installation, ajoutez-la au `PATH` ou renseignez `ffmpeg.ffmpeg_path` et
-`ffmpeg.ffprobe_path` dans `%LOCALAPPDATA%\Pluxy\config.json`.
-L'accélération NVENC nécessite un GPU NVIDIA compatible et ses pilotes.
-La conversion logicielle utilise le processeur et peut être plus lente.
-La lecture du fichier original fonctionne sans FFmpeg.
+Fermer la fenêtre d'un serveur démarré par Pluxy le laisse disponible près de
+l'horloge. **Quitter Pluxy** l'arrête. Vos dossiers, réglages et reprises restent
+conservés lors des mises à jour et de la désinstallation.
+
+Le lecteur conserve la résolution d'origine. Le HDR et le passthrough Dolby/DTS
+dépendent également de l'écran, de la sortie Windows et de l'ampli. La sortie audio
+se choisit dans les réglages du lecteur. Maintenir gauche/droite accélère la navigation
+jusqu'à ×64 ; relâcher applique le déplacement.
+
+Pour développer le serveur depuis les sources, [Pluxy-Server.bat](Pluxy-Server.bat)
+reste disponible. L'accélération NVENC nécessite un GPU NVIDIA compatible et ses pilotes.
 
 ## Démarrer depuis Android
 
@@ -89,7 +95,7 @@ en charge en DLNA. Google Cast nécessite les services Google sur le téléphone
 - Filtres par genre, année, état de lecture, durée, résolution et HDR ; tri séparé.
 - Accès aux films par première lettre depuis le menu de tri.
 - Collections de votre choix ou collections alimentées par vos filtres.
-- Photos par dossiers dépliés, albums ou date de prise de vue, galerie et diaporama.
+- Photos par dossiers repliables, albums ou date de prise de vue, galerie et diaporama.
 - Musique par album, avec les pistes dans l'ordre des disques et des numéros.
 - Navigation mobile en bas de l'écran ; densité Compact ou Confort dans les réglages.
 - Audio, sous-titres et déplacement dans la vidéo depuis la télécommande.
@@ -146,7 +152,9 @@ nécessite une réinstallation.
 
 L’application est dans `client/app`, le serveur Android intégré dans la bibliothèque `client/serverapp`,
 les modules Cast/DLNA dans `client/receiver-*` et le serveur PC dans `server/pluxy`.
-Les scripts de construction et d'installation sont dans `tools`.
+Le lecteur Windows est dans `desktop`. Les scripts de construction et d'installation sont dans `tools`.
+Pour construire son installateur sous Windows : `./tools/Build-PC.ps1`.
+`./tools/Test-PC.ps1` vérifie le paquet et la navigation dans une vidéo de douze minutes.
 
 ## Données et réseau
 
