@@ -76,6 +76,12 @@ namespace Pluxy {
             try { var save=api.SaveProgress(server,id,position,duration,progressSession,++progressSequence); await Task.WhenAny(save,Task.Delay(2000)); if(save.IsCompleted) await save; else saveObserver=save.ContinueWith(t=>Native.Log(t.Exception),TaskContinuationOptions.OnlyOnFaulted); } catch(Exception error) { Native.Log(error); }
             timer.Dispose(); seekTimer.Dispose(); Close();
         }
+        protected override bool ProcessCmdKey(ref Message message,Keys keyData) {
+            if(ActiveControl!=timeline && (keyData==Keys.Right || keyData==Keys.Left)) {
+                StartSeek(keyData==Keys.Right?1:-1); return true;
+            }
+            return base.ProcessCmdKey(ref message,keyData);
+        }
         private async Task Run(params object[] command) { if(!ready || closing) return; try { await mpv.Command(command); } catch(Exception error) { Native.Log(error); status.Visible=true; status.Text="La lecture a été interrompue. Fermez le lecteur et réessayez."; } }
         private void StartSeek(int direction) { if(!ready || closing || duration<=0 || seekDirection!=0) return; seekDirection=direction; seekBase=position; seekClock.Restart(); UpdateSeek(); seekTimer.Start(); }
         private void UpdateSeek() { if(seekDirection==0) return; double delta=SeekAcceleration.Distance(seekClock.ElapsedMilliseconds)*seekDirection; seekTarget=Math.Max(0,Math.Min(duration-.25,seekBase+delta)); status.Visible=true; status.Text=(delta>0?"+":"−")+Clock(Math.Abs(delta))+" · "+SeekAcceleration.Speed(seekClock.ElapsedMilliseconds)+" · "+Clock(seekTarget); }
