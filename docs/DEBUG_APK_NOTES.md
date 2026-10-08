@@ -1,6 +1,8 @@
-# APK de test — Pluxy 1.7.3 (57)
+# APK de test — Pluxy 1.7.4 (58)
 
 Une seule APK Android TV/mobile avec les modes Lecteur et Serveur, hors Google Play.
+Les images des cartes suivent leurs coins arrondis, même avec le contour de sélection.
+Les captures vidéo remplissent aussi les cartes de films, sans bandes grises.
 Choisissez le mode au premier lancement ; il se change ensuite dans les options.
 Cette APK conserve l’identité de l’ancien lecteur. Si vous utilisiez Pluxy Serveur,
 arrêtez l’ancien serveur et sélectionnez vos dossiers dans la nouvelle application.

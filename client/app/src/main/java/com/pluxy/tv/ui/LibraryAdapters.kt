@@ -691,12 +691,7 @@ private fun loadArtwork(
             return
         }
         holder.poster.setArtworkAspect(frameAspect)
-        holder.poster.scaleType =
-            if (candidate.aspect != frameAspect) {
-                ImageView.ScaleType.FIT_CENTER
-            } else {
-                ImageView.ScaleType.CENTER_CROP
-            }
+        holder.poster.scaleType = ImageView.ScaleType.CENTER_CROP
         val builder: coil.request.ImageRequest.Builder.() -> Unit = {
             crossfade(true)
             placeholder(fallback)
