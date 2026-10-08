@@ -5,6 +5,22 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PlaybackFailurePolicyTest {
+    @Test fun audioOrUnknownRendererCannotBlacklistVideo() {
+        assertFalse(PlaybackFailurePolicy.isVideoRenderer("audio/true-hd"))
+        assertFalse(PlaybackFailurePolicy.isVideoRenderer("audio/vnd.dts"))
+        assertFalse(PlaybackFailurePolicy.isVideoRenderer(null))
+        assertTrue(PlaybackFailurePolicy.isVideoRenderer("video/hevc"))
+    }
+
+    @Test fun audioAdaptationIsBoundedAndRespectsStrictDirectPlay() {
+        assertTrue(PlaybackFailurePolicy.canAdaptAudio(PlaybackStrategy.AUTO, true, false, "audio/true-hd"))
+        assertFalse(PlaybackFailurePolicy.canAdaptAudio(PlaybackStrategy.AUTO, true, true, "audio/true-hd"))
+        assertFalse(PlaybackFailurePolicy.canAdaptAudio(PlaybackStrategy.DIRECT, true, false, "audio/true-hd"))
+        assertFalse(PlaybackFailurePolicy.canAdaptAudio(PlaybackStrategy.AUTO, false, false, "audio/true-hd"))
+        assertFalse(PlaybackFailurePolicy.canAdaptAudio(PlaybackStrategy.AUTO, true, false, "video/hevc"))
+        assertFalse(PlaybackFailurePolicy.canAdaptAudio(PlaybackStrategy.AUTO, true, false, null))
+    }
+
     @Test fun missingSubtitleOrSegmentIsNotAMissingOriginal() {
         for (status in listOf(404, 410)) {
             assertTrue(PlaybackFailurePolicy.requiresUserActionForPath("/stream/direct/film", status))

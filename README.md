@@ -6,7 +6,7 @@
 
 Vos films, séries, photos et musique sur la TV.
 
-**1.7.1 · Android TV et Android 6.0+**
+**1.7.2 · Android TV et Android 6.0+**
 
 [Application Android](https://github.com/Amau54/Pluxy/releases/download/dev-latest/Pluxy-debug.apk)
 · [Serveur PC](https://github.com/Amau54/Pluxy/archive/refs/heads/main.zip)
@@ -22,6 +22,12 @@ Aucun compte ni abonnement n'est nécessaire. Pluxy ne fournit pas de contenu.
 
 Dans le lecteur, **Réglages → Thème** propose Corail, Océan et Minuit. Le choix
 est conservé sur cet appareil et s'applique aussi aux commandes vidéo.
+
+Pour conserver le fichier 4K/HDR, choisissez **Mode de lecture → Direct Play uniquement**
+dans le lecteur. Ce mode ne réduit pas la résolution. L'appareil et sa sortie audio
+doivent accepter les formats du fichier. En mode automatique, le serveur PC peut
+adapter seulement le son en gardant la vidéo originale : le lecteur affiche alors
+« Direct Stream ». Le HDR dépend aussi des capacités de l'écran et de son décodeur.
 
 ## Démarrer sur PC
 

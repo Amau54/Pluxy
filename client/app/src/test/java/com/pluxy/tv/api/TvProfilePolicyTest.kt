@@ -7,6 +7,20 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TvProfilePolicyTest {
+    @Test fun `anciennes limites ambigues sont oubliees une seule fois`() {
+        val old = LearnedTvProfile(unsupportedVideoCodecs = setOf("hevc"), maxStableBitrateMbps = 8, revision = 4)
+        val migrated = TvProfilePolicy.migrate(old, 0)
+        assertTrue(migrated.unsupportedVideoCodecs.isEmpty())
+        assertNull(migrated.maxStableBitrateMbps)
+        assertEquals(5, migrated.revision)
+        assertEquals(migrated, TvProfilePolicy.migrate(migrated, TvProfilePolicy.SCHEMA_VERSION))
+    }
+
+    @Test fun `nouveaux echecs video confirmes restent memorises`() {
+        val current = LearnedTvProfile(unsupportedVideoCodecs = setOf("hevc10"), revision = 1)
+        assertEquals(current, TvProfilePolicy.migrate(current, TvProfilePolicy.SCHEMA_VERSION))
+    }
+
     @Test
     fun `une coupure generique ne condamne pas un codec au premier incident`() {
         val first = TvProfilePolicy.recordFormatFailure(

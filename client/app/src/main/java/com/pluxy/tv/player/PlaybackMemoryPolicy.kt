@@ -39,7 +39,7 @@ internal object PlaybackMemoryPolicy {
         }
         val minBufferMs = requested.minBufferMs.coerceIn(durationFloorMs, durationCapMs)
         val maxBufferMs = requested.maxBufferMs.coerceIn(minBufferMs, durationCapMs)
-        val afterRebufferFloorMs = if (isLowRamDevice) 3_000 else 8_000
+        val afterRebufferFloorMs = 500
 
         val safeMemoryClassMb = memoryClassMb.coerceAtLeast(1)
         val heapBudgetMb = when {

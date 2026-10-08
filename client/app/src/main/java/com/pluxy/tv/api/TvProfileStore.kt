@@ -19,6 +19,14 @@ data class LearnedTvProfile(
 )
 
 object TvProfilePolicy {
+    const val SCHEMA_VERSION = 2
+
+    // Older clients attributed audio decoder errors to video and startup delays to Wi-Fi.
+    // These derived limits cannot be trusted; media and user settings are untouched.
+    fun migrate(current: LearnedTvProfile, schemaVersion: Int): LearnedTvProfile =
+        if (schemaVersion < SCHEMA_VERSION) LearnedTvProfile(revision = current.revision + 1)
+        else current
+
     fun apply(
         detected: ClientCapabilities,
         learned: LearnedTvProfile,
@@ -142,7 +150,7 @@ class TvProfileStore(context: Context) {
         val raw = prefs.getString(key(), null) ?: return LearnedTvProfile()
         return runCatching {
             val json = JSONObject(raw)
-            LearnedTvProfile(
+            val stored = LearnedTvProfile(
                 unsupportedVideoCodecs = json.stringSet("unsupported_video_codecs"),
                 unsupportedContainers = json.stringSet("unsupported_containers"),
                 failureCounts = json.optJSONObject("failure_counts")?.let { counts ->
@@ -155,6 +163,9 @@ class TvProfileStore(context: Context) {
                 lastUpdatedAtMs = json.optLong("last_updated_at_ms", 0).coerceAtLeast(0),
                 revision = json.optInt("revision", 0).coerceAtLeast(0),
             )
+            TvProfilePolicy.migrate(stored, json.optInt("schema_version", 0)).also {
+                if (json.optInt("schema_version", 0) < TvProfilePolicy.SCHEMA_VERSION) save(it)
+            }
         }.getOrDefault(LearnedTvProfile())
     }
 
@@ -187,6 +198,7 @@ class TvProfileStore(context: Context) {
 
     private fun save(value: LearnedTvProfile) {
         val json = JSONObject().apply {
+            put("schema_version", TvProfilePolicy.SCHEMA_VERSION)
             put("unsupported_video_codecs", JSONArray(value.unsupportedVideoCodecs.sorted()))
             put("unsupported_containers", JSONArray(value.unsupportedContainers.sorted()))
             put("failure_counts", JSONObject(value.failureCounts))

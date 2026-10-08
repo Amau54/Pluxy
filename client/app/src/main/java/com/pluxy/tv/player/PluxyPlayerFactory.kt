@@ -10,6 +10,9 @@ import androidx.media3.common.AudioAttributes
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.HttpDataSource
+import androidx.media3.datasource.DataSource
+import androidx.media3.datasource.DataSpec
+import androidx.media3.datasource.TransferListener
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
@@ -29,15 +32,7 @@ import java.net.URI
 import java.net.UnknownHostException
 import java.util.concurrent.TimeUnit
 
-/**
- * Construit un ExoPlayer optimisé pour le streaming 4K HDR sur Wi-Fi instable :
- *
- *  1. Pré-buffer (LoadControl) piloté par la config serveur puis plafonné selon la
- *     classe mémoire et le signal low-RAM de l'appareil.
- *  2. Décodage matériel HEVC Main10 + passthrough HDR10 (tunneling) vers la dalle
- *     OLED de la Philips 803.
- *  3. Source HLS (transcode NVENC) ou progressive (Direct Play / Direct Stream).
- */
+/** Lecteur matériel en priorité, tampon plafonné selon la RAM et flux limités au serveur choisi. */
 @OptIn(UnstableApi::class)
 object PluxyPlayerFactory {
 
@@ -46,6 +41,7 @@ object PluxyPlayerFactory {
         buffer: BufferConfig,
         baseUrl: String = PluxyApplication.serverBaseUrl(context),
         sessionId: String? = null,
+        onBytesTransferred: ((Int) -> Unit)? = null,
     ): ExoPlayer {
         // ---- 1. LoadControl : tampon adapté à la mémoire réelle ------------ //
         val activityManager =
@@ -74,9 +70,8 @@ object PluxyPlayerFactory {
             .build()
 
         // ---- 2. Renderers : MATÉRIEL d'abord, logiciel en REPLI ------------ //
-        // MODE_ON (et non PREFER) : le décodeur matériel HEVC/HDR est prioritaire ;
-        // FFmpeg logiciel n'est utilisé QUE si le matériel échoue. PREFER cassait
-        // le HDR10 (décodage CPU + conflit avec le tunneling).
+        // Les décodeurs matériels restent prioritaires. Les extensions ne sont
+        // disponibles que si elles sont effectivement incluses dans l'application.
         val renderers = DefaultRenderersFactory(context)
             .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
             .setEnableDecoderFallback(true)
@@ -110,6 +105,14 @@ object PluxyPlayerFactory {
                 put("User-Agent", "PluxyTV/1.0")
                 sessionId?.let { put("X-Pluxy-Session", it) }
             })
+        if (onBytesTransferred != null) httpFactory.setTransferListener(object : TransferListener {
+            override fun onTransferInitializing(source: DataSource, dataSpec: DataSpec, isNetwork: Boolean) = Unit
+            override fun onTransferStart(source: DataSource, dataSpec: DataSpec, isNetwork: Boolean) = Unit
+            override fun onTransferEnd(source: DataSource, dataSpec: DataSpec, isNetwork: Boolean) = Unit
+            override fun onBytesTransferred(source: DataSource, dataSpec: DataSpec, isNetwork: Boolean, bytesTransferred: Int) {
+                if (isNetwork && bytesTransferred > 0) onBytesTransferred(bytesTransferred)
+            }
+        })
 
         // Tolérance aux erreurs de chargement : un segment transcodé peut renvoyer un
         // 503 passager (NVENC momentanément en retard sur une scène lourde). On RÉESSAIE

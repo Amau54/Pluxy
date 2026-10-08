@@ -183,8 +183,8 @@ class PluxyApi(val baseUrl: String, val sessionId: String = UUID.randomUUID().to
         withContext(Dispatchers.IO) { networkOrNull { getJson<ServerInfo>("/api/server/info") } }
 
     @OptIn(UnstableApi::class)
-    suspend fun decide(itemId: String): PlaybackDecision = withContext(Dispatchers.IO) {
-        requestDecision("/api/playback/decide", itemId)
+    suspend fun decide(itemId: String, compatibleAudio: Boolean = false): PlaybackDecision = withContext(Dispatchers.IO) {
+        requestDecision("/api/playback/decide", itemId, compatibleAudio)
     }
 
     suspend fun diagnose(itemId: String): PlaybackDecision = withContext(Dispatchers.IO) {
@@ -192,8 +192,10 @@ class PluxyApi(val baseUrl: String, val sessionId: String = UUID.randomUUID().to
     }
 
     @OptIn(UnstableApi::class)
-    private suspend fun requestDecision(path: String, itemId: String): PlaybackDecision {
-        val payload = DecideRequest(itemId, DeviceProfile.capabilities())
+    private suspend fun requestDecision(path: String, itemId: String, compatibleAudio: Boolean = false): PlaybackDecision {
+        val detected = DeviceProfile.capabilities()
+        val capabilities = if (compatibleAudio) detected.copy(supportedAudioCodecs = listOf("aac"), maxAudioChannels = 2) else detected
+        val payload = DecideRequest(itemId, capabilities)
         val json = moshi.adapter(DecideRequest::class.java).toJson(payload)
         val req = Request.Builder()
             .url("$baseUrl$path")

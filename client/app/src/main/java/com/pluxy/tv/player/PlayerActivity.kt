@@ -52,6 +52,7 @@ import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.ExoPlaybackException
 import androidx.media3.exoplayer.SeekParameters
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.CaptionStyleCompat
@@ -61,6 +62,7 @@ import androidx.media3.ui.TimeBar
 import com.pluxy.tv.PluxyApplication
 import com.pluxy.tv.R
 import com.pluxy.tv.api.BufferConfig
+import com.pluxy.tv.api.PlaybackDecision
 import com.pluxy.tv.api.DeviceProfile
 import com.pluxy.tv.api.MediaItem as PluxyItem
 import com.pluxy.tv.api.PluxyApi
@@ -114,6 +116,8 @@ class PlayerActivity : ThemedActivity() {
     private lateinit var item: PluxyItem
     private val tvProfileStore by lazy { TvProfileStore(this) }
     private var forceDirectForLaunch = false
+    private var compatibleAudio = false
+    private var audioAdaptationPending = false
     private var startFromBeginning = false
     private var autoResume = false
     private var networkConstraintRecorded = false
@@ -177,6 +181,8 @@ class PlayerActivity : ThemedActivity() {
     // donc la progression du tampon : pas d'avancée pendant X s (ou buffering trop long)
     // -> on bascule sur la tentative suivante (repli HLS) ou on recharge.
     private var bufWatchLastPos = 0L
+    private var transferBytes = java.util.concurrent.atomic.AtomicLong()
+    private var bufWatchLastBytes = 0L
     private var bufWatchProgressAtMs = 0L
     private var bufWatchStartedAtMs = 0L
     private var watchdogReloads = 0
@@ -538,6 +544,7 @@ class PlayerActivity : ThemedActivity() {
         subtitleChoice = restored?.subtitleChoice
         aspectIdx = (restored?.aspectIndex ?: 0).coerceIn(aspectModes.indices)
         forceDirectForLaunch = restored?.forceDirect ?: intent.getBooleanExtra(EXTRA_FORCE_DIRECT, false)
+        compatibleAudio = restored?.compatibleAudio ?: false
         if (restored != null) {
             savedPositionMs = restored.positionMs.coerceAtLeast(0L)
             lastGoodPositionMs = savedPositionMs
@@ -584,7 +591,7 @@ class PlayerActivity : ThemedActivity() {
                 else player?.playWhenReady ?: savedPlayWhenReady
             outState.putString(STATE_SESSION, sessionAdapter.toJson(PlaybackSessionState(
                 item, api.baseUrl, reliablePositionMs(), playIntent, playbackSpeed,
-                subtitlesDisabled, audioChoice, subtitleChoice, aspectIdx, forceDirectForLaunch,
+                subtitlesDisabled, audioChoice, subtitleChoice, aspectIdx, forceDirectForLaunch, compatibleAudio,
             )))
         }
         super.onSaveInstanceState(outState)
@@ -1347,7 +1354,10 @@ class PlayerActivity : ThemedActivity() {
         prepareJob = lifecycleScope.launch {
             repeat(PREPARE_ATTEMPTS) { attempt ->
                 try {
-                    val decision = api.decide(item.id)
+                    val decision = if (strategy == PlaybackStrategy.DIRECT) PlaybackDecision(
+                        mode = "direct_play", streamUrl = "/stream/direct/${item.id}", delivery = "direct",
+                        reasons = listOf("Lecture du fichier original demandée, sans conversion."),
+                    ) else api.decide(item.id, compatibleAudio)
                     val runtime = api.clientRuntime()
                     val progress = ProgressOutbox.pendingResume(api.baseUrl, item.id)
                         ?: api.getProgress(item.id)
@@ -1451,7 +1461,11 @@ class PlayerActivity : ThemedActivity() {
     private fun buildPlayer() {
         if (player != null || buffer == null) return
         setLoadingVisible(true)
-        val exo = PluxyPlayerFactory.build(this, buffer!!, api.baseUrl, api.sessionId)
+        val currentBytes = java.util.concurrent.atomic.AtomicLong()
+        transferBytes = currentBytes
+        val exo = PluxyPlayerFactory.build(this, buffer!!, api.baseUrl, api.sessionId) {
+            currentBytes.addAndGet(it.toLong())
+        }
         player = exo
         playerView.player = exo
         styleSubtitles()
@@ -1760,7 +1774,20 @@ class PlayerActivity : ThemedActivity() {
     }
 
     private fun playerListener() = object : Player.Listener {
-        override fun onTracksChanged(tracks: Tracks) = applyTrackChoices()
+        override fun onTracksChanged(tracks: Tracks) {
+            applyTrackChoices()
+            if (audioAdaptationPending) return
+            val audio = tracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }
+            if (audio.isNotEmpty() && audio.none { group -> (0 until group.length).any { group.isTrackSupported(it) } }) {
+                val mime = audio.first().getTrackFormat(0).sampleMimeType
+                if (tryAudioAdaptation(mime)) return
+                if (activeStrategy == PlaybackStrategy.DIRECT || !transcodingAvailable || compatibleAudio) {
+                    showTerminalPlaybackError("La piste audio n'est pas prise en charge par cet appareil ou sa sortie HDMI. " +
+                        "Essayez le mode automatique sur un serveur PC, ou un autre lecteur.")
+                    return
+                }
+            }
+        }
         override fun onPlaybackStateChanged(state: Int) {
             updatePlayPauseButton()
             updateMediaSessionPlaybackState()
@@ -1876,7 +1903,16 @@ class PlayerActivity : ThemedActivity() {
             setLoadingVisible(false)
             updateMediaSessionPlaybackState()
             Logger.log("error", "${error.errorCodeName} (attempt $attemptIdx)")
+            val rendererMime = (error as? ExoPlaybackException)?.rendererFormat?.sampleMimeType
+            Logger.log("error", "renderer=$rendererMime detail=${error.cause?.message?.take(180)}")
             learnDeterministicFormatFailure(error)
+            if (audioAdaptationPending) return
+            if (tryAudioAdaptation(rendererMime)) return
+            if (rendererMime?.startsWith("audio/") == true) {
+                showTerminalPlaybackError("La lecture du son a échoué sur cet appareil ou sa sortie HDMI. " +
+                    "Changer la résolution vidéo ne corrige pas ce problème. Essayez un autre lecteur ou une autre piste audio.")
+                return
+            }
             val httpError = generateSequence(error as Throwable) { it.cause }
                 .filterIsInstance<HttpDataSource.InvalidResponseCodeException>()
                 .firstOrNull()
@@ -1911,11 +1947,36 @@ class PlayerActivity : ThemedActivity() {
         }
     }
 
+    private fun tryAudioAdaptation(mimeType: String?): Boolean {
+        if (attempts.getOrNull(attemptIdx)?.tier != PlaybackTier.ORIGINAL ||
+            !PlaybackFailurePolicy.canAdaptAudio(activeStrategy, transcodingAvailable, compatibleAudio, mimeType)
+        ) return false
+        val owner = player ?: return false
+        val ownerItem = item.id
+        val ownerApi = api
+        compatibleAudio = true
+        audioAdaptationPending = true
+        // Keep the language choice, but don't force the failed TrueHD/DTS format again.
+        audioChoice = audioChoice?.copy(mimeType = null, channels = -1, trackId = null)
+        Logger.log("audio", "adaptation audio demandée mime=$mimeType ; capacités vidéo conservées")
+        setLoadingVisible(true)
+        setStatus("Adaptation du son — vidéo originale si compatible…")
+        // Renderer callbacks must finish before releasing their player.
+        handler.post {
+            audioAdaptationPending = false
+            if (activityStarted && !isFinishing && !isDestroyed &&
+                player === owner && item.id == ownerItem && api === ownerApi
+            ) reprepareForStrategy(PlaybackStrategy.AUTO)
+        }
+        return true
+    }
+
     private fun learnDeterministicFormatFailure(error: PlaybackException) {
         val current = attempts.getOrNull(attemptIdx) ?: return
         if (current.delivery != "direct") return
         val containerFailure =
             error.errorCode == PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED
+        if (!containerFailure && !PlaybackFailurePolicy.isVideoRenderer((error as? ExoPlaybackException)?.rendererFormat?.sampleMimeType)) return
         val formatFailure =
             error.errorCode == PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED
         val profileFailure =
@@ -2066,6 +2127,7 @@ class PlayerActivity : ThemedActivity() {
         ioScope.launch { previousApi.stopHls(previousId) }
 
         item = next
+        compatibleAudio = false
         intent.putExtra(EXTRA_ITEM, itemAdapter.toJson(next))
         api = PluxyApi(serverUrl)
         progressSequence = 0L
@@ -2103,21 +2165,11 @@ class PlayerActivity : ThemedActivity() {
     }
 
     // ---- Chien de garde : chargement bloqué ------------------------------- //
-    /** Seuil « plus aucune progression du tampon » avant de basculer. Plus long en
-     *  transcodage HLS (le serveur peut légitimement mettre du temps à produire le
-     *  1er segment, surtout après un seek). Court en lecture directe : si rien n'arrive
-     *  en quelques secondes, c'est bloqué. */
-    private fun stuckNoProgressMs(): Long = if (isTranscode) 45_000L else 12_000L
-    /** Plafond absolu de buffering : UNIQUEMENT en lecture directe (un flux qui progresse
-     *  trop lentement pour jamais démarrer -> repli vers le transcodage à débit plafonné).
-     *  En transcodage on N'impose PAS de plafond : le serveur peut produire lentement mais
-     *  sûrement (jusqu'à ~90 s après un seek) ; seule l'absence de progression fait basculer. */
-    private fun stuckMaxBufferingMs(): Long = if (isTranscode) Long.MAX_VALUE else 40_000L
-
     private fun startBufferWatchdog() {
         val p = player ?: return
         handler.removeCallbacks(bufferWatchdog)
         bufWatchLastPos = p.bufferedPosition.coerceAtLeast(0)
+        bufWatchLastBytes = transferBytes.get()
         bufWatchProgressAtMs = SystemClock.elapsedRealtime()
         bufWatchStartedAtMs = bufWatchProgressAtMs
         handler.postDelayed(bufferWatchdog, BUF_WATCH_POLL_MS)
@@ -2132,13 +2184,17 @@ class PlayerActivity : ThemedActivity() {
             }
             val now = SystemClock.elapsedRealtime()
             val pos = p.bufferedPosition.coerceAtLeast(0)
-            if (pos > bufWatchLastPos + 200) {          // le tampon avance -> ça charge
+            val bytes = transferBytes.get()
+            if (pos > bufWatchLastPos + 200 ||
+                bytes - bufWatchLastBytes >= PlaybackBufferWatchPolicy.BYTE_PROGRESS_THRESHOLD
+            ) {
                 bufWatchLastPos = pos
+                bufWatchLastBytes = bytes
                 bufWatchProgressAtMs = now
             }
-            val noProgress = now - bufWatchProgressAtMs >= stuckNoProgressMs()
-            val tooLong = now - bufWatchStartedAtMs >= stuckMaxBufferingMs()
-            if (noProgress || tooLong) { onLoadStuck(); return }
+            if (PlaybackBufferWatchPolicy.isStuck(
+                    now - bufWatchStartedAtMs, now - bufWatchProgressAtMs, isTranscode,
+                )) { onLoadStuck(); return }
             handler.postDelayed(this, BUF_WATCH_POLL_MS)
         }
     }
@@ -2150,7 +2206,7 @@ class PlayerActivity : ThemedActivity() {
         val pos = reliablePositionMs()
         Logger.log("stuck", "chargement bloqué mode=${if (isTranscode) "hls" else "direct"} attempt=$attemptIdx pos=$pos")
         when {
-            activeStrategy == PlaybackStrategy.AUTO && maybeDownshift() -> Unit
+            activeStrategy == PlaybackStrategy.AUTO && maybeDownshift(learnNetworkConstraint = networkStallStartMs > 0L) -> Unit
             attemptIdx + 1 < attempts.size -> {
                 setStatus("Chargement lent — bascule…")
                 loadAttempt(attemptIdx + 1, restorePos = pos)
@@ -2239,7 +2295,7 @@ class PlayerActivity : ThemedActivity() {
     /** Descend d'un palier de qualité pour tenir le débit réseau (sans perdre la position).
      *  Direct Play -> « main » (HEVC/HDR plafonné) -> « compat » (1080p). Au plus bas
      *  palier, on ne fait rien (le compat 1080p tient sur n'importe quel réseau). */
-    private fun maybeDownshift(): Boolean {
+    private fun maybeDownshift(learnNetworkConstraint: Boolean = true): Boolean {
         if (activeStrategy != PlaybackStrategy.AUTO) return false
         val target = PlaybackPlanner.nextAdaptiveIndex(attempts, attemptIdx)
         if (target <= attemptIdx) {
@@ -2251,13 +2307,16 @@ class PlayerActivity : ThemedActivity() {
             warnNetworkLimitOnce()
             return false
         }
-        recordNetworkConstraintOnce()
+        if (learnNetworkConstraint) recordNetworkConstraintOnce()
         rebufferTimes.clear()
         stallWindow.clear()
         networkStallStartMs = 0L
         val toCompat = attempts[target].tier == PlaybackTier.COMPATIBILITY
-        val msg = if (toCompat) "Réseau limité : passage en 1080p compatible…"
-                  else "Réseau instable : qualité adaptée au débit…"
+        val msg = if (!learnNetworkConstraint) {
+            if (toCompat) "Lecture bloquée : essai du mode compatible 1080p…"
+            else "Lecture bloquée : essai d'un flux adapté…"
+        } else if (toCompat) "Réseau limité : passage en 1080p compatible…"
+        else "Réseau instable : qualité adaptée au débit…"
         setStatus(msg)
         Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
         Logger.log("downshift", "-> attempt $target (${attempts[target].url})")

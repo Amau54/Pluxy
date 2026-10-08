@@ -192,10 +192,9 @@ object PlaybackPlanner {
         return base.copy(
             minBufferMs = minMs,
             maxBufferMs = maxMs,
-            bufferForPlaybackMs = base.bufferForPlaybackMs.coerceAtMost(minMs),
+            bufferForPlaybackMs = base.bufferForPlaybackMs.coerceIn(250, 2_500),
             bufferForPlaybackAfterRebufferMs = base.bufferForPlaybackAfterRebufferMs
-                .coerceAtLeast(30_000)
-                .coerceAtMost(minMs),
+                .coerceIn(500, 5_000),
             targetBufferBytesMb = base.targetBufferBytesMb.coerceAtLeast(256),
         )
     }

@@ -14,7 +14,7 @@ class PlaybackSessionStateTest {
             MediaItem("next", "Episode suivant", "", "mp4", 1, 300.0),
             "http://192.168.1.20:8420", 145000, false, 1.5f, true,
             PlaybackTrackChoice("en", "Commentaire", "audio/aac", 2, "changed-track"),
-            PlaybackTrackChoice("fr", "Français", "text/vtt"), 1, true,
+            PlaybackTrackChoice("fr", "Français", "text/vtt"), 1, true, true,
         )
         assertEquals(state, adapter.fromJson(adapter.toJson(state)))
     }

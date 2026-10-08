@@ -1,4 +1,4 @@
-# APK de test — Pluxy 1.7.1 (55)
+# APK de test — Pluxy 1.7.2 (56)
 
 Une seule APK Android TV/mobile avec les modes Lecteur et Serveur, hors Google Play.
 Choisissez le mode au premier lancement ; il se change ensuite dans les options.
@@ -8,6 +8,12 @@ Android ne transfère pas les autorisations entre les deux packages.
 
 Bibliothèques en grille, filtres, collections, albums photo et musique.
 Navigation TV/mobile compacte et choix de densité dans les réglages.
+Direct Play démarre avec un seuil de lecture plus court, tout en conservant le
+tampon réseau. Une erreur audio ne marque plus HEVC comme incompatible ; les
+anciennes limites apprises sont réinitialisées. En automatique, un échec audio
+sur une vidéo originale déclenche une nouvelle négociation du son avec le serveur PC.
+La recherche d'un serveur de remplacement est automatique si le serveur actuel
+ne répond plus ; plusieurs serveurs disponibles donnent lieu à un choix.
 `BUILD_INFO.json` indique le commit, la version et les certificats.
 Les sommes de contrôle sont dans `SHA256SUMS.txt`.
 

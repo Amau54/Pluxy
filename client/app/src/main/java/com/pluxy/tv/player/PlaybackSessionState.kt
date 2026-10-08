@@ -14,6 +14,7 @@ data class PlaybackSessionState(
     val subtitleChoice: PlaybackTrackChoice? = null,
     val aspectIndex: Int = 0,
     val forceDirect: Boolean = false,
+    val compatibleAudio: Boolean = false,
 )
 
 data class PlaybackTrackChoice(

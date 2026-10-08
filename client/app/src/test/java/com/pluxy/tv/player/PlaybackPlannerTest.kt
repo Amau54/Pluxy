@@ -134,8 +134,21 @@ class PlaybackPlannerTest {
 
         assertEquals(120_000, reinforced.minBufferMs)
         assertEquals(180_000, reinforced.maxBufferMs)
-        assertEquals(30_000, reinforced.bufferForPlaybackAfterRebufferMs)
+        assertEquals(5_000, reinforced.bufferForPlaybackAfterRebufferMs)
         assertEquals(256, reinforced.targetBufferBytesMb)
+    }
+
+    @Test
+    fun `large prefetch buffer does not delay direct startup`() {
+        val reinforced = PlaybackPlanner.reinforcedBuffer(
+            BufferConfig(50_000, 120_000, 30_000, 60_000, 256, 30_000),
+        )
+        assertEquals(2_500, reinforced.bufferForPlaybackMs)
+        assertEquals(5_000, reinforced.bufferForPlaybackAfterRebufferMs)
+        val resolved = PlaybackMemoryPolicy.resolve(reinforced, 256, true, false)
+        assertEquals(2_500, resolved.bufferForPlaybackMs)
+        assertEquals(5_000, resolved.bufferForPlaybackAfterRebufferMs)
+        assertTrue(resolved.targetBufferBytes <= 85 * 1024 * 1024)
     }
 
     private fun decision(

@@ -3,6 +3,11 @@ package com.pluxy.tv.player
 /** A missing original file cannot be recovered by buffering or changing quality.
  * HLS 404/410 can be temporary segment/session expiry and must retain recovery. */
 internal object PlaybackFailurePolicy {
+    fun isVideoRenderer(mimeType: String?): Boolean = mimeType?.startsWith("video/") == true
+
+    fun canAdaptAudio(strategy: PlaybackStrategy, transcodingAvailable: Boolean, alreadyAdapted: Boolean, mimeType: String?): Boolean =
+        strategy == PlaybackStrategy.AUTO && transcodingAvailable && !alreadyAdapted && mimeType?.startsWith("audio/") == true
+
     fun requiresUserActionForPath(path: String?, httpStatus: Int?): Boolean =
         requiresUserAction(if (path?.startsWith("/stream/direct/") == true) "direct" else null, httpStatus)
 
