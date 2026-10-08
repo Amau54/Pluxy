@@ -20,7 +20,7 @@ if ($generated.Code -ne 0) { throw "Création du média de test impossible : $($
 $report = Join-Path $OutputDirectory 'native.json'
 $result = Invoke-PCNative -FilePath $exe -Arguments @('--self-test','--video',$video,'--seek','600','--height','180','--report',$report) -TimeoutSeconds 90
 $verified = Get-Content -LiteralPath $report -Raw | ConvertFrom-Json
-if ($result.Code -ne 0 -or -not $verified.success) { throw "Test du lecteur PC en échec : $($verified.error)" }
+if ($result.Code -ne 0 -or -not $verified.success) { throw "Test du lecteur PC en échec après $($verified.checks -join ', ') : $($verified.error)" }
 $verified.checks | Write-Output
 
 # Un port et des données séparés évitent de toucher à la bibliothèque du PC de test.

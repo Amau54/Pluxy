@@ -8,6 +8,15 @@ namespace Pluxy {
         private static readonly List<string> checks=new List<string>();
         private static void Check(bool passed,string message) { if(!passed) throw new Exception(message); checks.Add(message); }
         private static string Argument(string[] args,string name) { int at=Array.IndexOf(args,name); return at>=0 && at+1<args.Length?args[at+1]:null; }
+        private static async Task<double> WaitPosition(MpvSession player,double expected) {
+            double position=-1;
+            for(int i=0;i<60;i++) {
+                try { var value=await player.Command("get_property","time-pos"); if(value!=null) position=Convert.ToDouble(value); } catch(IOException) { }
+                if(Math.Abs(position-expected)<1) return position;
+                await Task.Delay(100);
+            }
+            return position;
+        }
         public static int Run(string[] args) {
             string report=Argument(args,"--report") ?? Path.Combine(Native.Data,"self-test.json"); int code=0; string error=null;
             try { Verify(args).GetAwaiter().GetResult(); } catch(Exception exception) { error=exception.ToString(); code=1; }
@@ -46,10 +55,10 @@ namespace Pluxy {
                     double duration=0; for(int i=0;i<60;i++) { try { duration=Convert.ToDouble(await player.Command("get_property","duration")); if(duration>0) break; } catch(IOException) { } await Task.Delay(250); }
                     Check(duration>5,"Vidéo originale ouverte par le moteur natif");
                     await player.Command("set_property","pause",true);
-                    string seek=Argument(args,"--seek"); double target=Math.Min(seek==null?25:double.Parse(seek,System.Globalization.CultureInfo.InvariantCulture),duration-.5); await player.Command("seek",target,"absolute+exact"); await Task.Delay(800);
-                    double position=Convert.ToDouble(await player.Command("get_property","time-pos")); Check(Math.Abs(position-target)<1,"Déplacement absolu sans retour au début");
-                    double delta=Math.Min(10,duration*.1); await player.Command("seek",-delta,"relative+exact"); await Task.Delay(500);
-                    position=Convert.ToDouble(await player.Command("get_property","time-pos")); Check(Math.Abs(position-(target-delta))<1,"Retour relatif dans le fichier original");
+                    string seek=Argument(args,"--seek"); double target=Math.Min(seek==null?25:double.Parse(seek,System.Globalization.CultureInfo.InvariantCulture),duration-.5); await player.Command("seek",target,"absolute+exact");
+                    double position=await WaitPosition(player,target); Check(Math.Abs(position-target)<1,"Déplacement absolu sans retour au début");
+                    double delta=Math.Min(10,duration*.1); await player.Command("seek",-delta,"relative+exact");
+                    position=await WaitPosition(player,target-delta); Check(Math.Abs(position-(target-delta))<1,"Retour relatif dans le fichier original");
                     string height=Argument(args,"--height"); if(height!=null) Check(Convert.ToInt32(await player.Command("get_property","height"))==int.Parse(height),"Résolution vidéo originale conservée : "+height);
                 }
             }

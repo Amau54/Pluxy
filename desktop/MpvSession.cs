@@ -21,7 +21,7 @@ namespace Pluxy {
             if(!File.Exists(executable)) throw new IOException("Le moteur de lecture manque. Réinstallez Pluxy.");
             var name="pluxy-"+Guid.NewGuid().ToString("N");
             var arguments=new List<string>{"--no-config","--no-terminal","--idle=yes","--keep-open=yes","--osc=no","--input-default-bindings=no","--input-ipc-server=\\\\.\\pipe\\"+name,"--hwdec=auto-safe","--vo=gpu-next","--gpu-api=d3d11","--target-colorspace-hint=yes","--cache=yes","--demuxer-max-bytes=128MiB","--demuxer-max-back-bytes=32MiB","--volume-max=100"};
-            if(headless) { arguments.Add("--vo=null"); arguments.Add("--ao=null"); }
+            if(headless) { arguments.Add("--vo=null"); arguments.Add("--ao=null"); arguments.Add("--pause=yes"); }
             else { arguments.Add("--wid="+unchecked((uint)host.ToInt64())); arguments.Add("--ao=wasapi"); }
             if(audio=="passthrough") { arguments.Add("--audio-spdif=ac3,dts,dts-hd,eac3,truehd"); arguments.Add("--audio-exclusive=yes"); }
             else if(audio=="compatible") arguments.Add("--audio-channels=stereo");
@@ -38,6 +38,14 @@ namespace Pluxy {
             if(pipe==null) throw new IOException("Le lecteur vidéo ne répond pas.");
             reader=new StreamReader(pipe,new UTF8Encoding(false),true,4096,true);
             writer=new StreamWriter(pipe,new UTF8Encoding(false),4096,true) { AutoFlush=true };
+            // L'ouverture du pipe précède celle du média : les commandes de seek
+            // ne sont disponibles qu'après l'initialisation des pistes.
+            for(int attempt=0;attempt<120;attempt++) {
+                try { if(await Command("get_property","time-pos")!=null) return; }
+                catch(IOException) { if(disposed || !pipe.IsConnected) throw; }
+                await Task.Delay(250);
+            }
+            throw new IOException("La vidéo n'a pas pu être ouverte. Vérifiez le fichier et le serveur.");
         }
         public async Task<object> Command(params object[] command) {
             if(disposed || pipe==null) throw new IOException("Le lecteur est fermé.");
@@ -50,7 +58,7 @@ namespace Pluxy {
                     var text=await line; if(text==null || text.Length>1024*1024) throw new IOException("La lecture a été interrompue.");
                     var result=Native.Object(Native.Json.DeserializeObject(text));
                     if((int)Native.Number(result,"request_id",-1)!=id) continue;
-                    if(Native.Text(result,"error")!="success") throw new IOException(Native.Text(result,"error","Commande vidéo refusée."));
+                    if(Native.Text(result,"error")!="success") throw new IOException(string.Join(" ",Array.ConvertAll(command,value=>Convert.ToString(value)))+" : "+Native.Text(result,"error","Commande vidéo refusée."));
                     object data; return result.TryGetValue("data",out data)?data:null;
                 }
                 throw new IOException("Le lecteur ne répond plus.");
