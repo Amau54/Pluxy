@@ -116,7 +116,11 @@ namespace Pluxy {
         }
         private void Restore() { Show(); WindowState=FormWindowState.Normal; Activate(); }
         private void Quit() { quitting=true; Close(); }
-        private void ChooseMode() { if(busy) return; choosing=true; Restore(); browser.Source=new Uri(Origin+"index.html"); }
+        private void ChooseMode() {
+            if(busy) return; choosing=true; Restore();
+            if(browser.CoreWebView2!=null) browser.CoreWebView2.Navigate(Origin+"index.html");
+            else browser.Source=new Uri(Origin+"index.html");
+        }
         private void Options() {
             var menu=new ContextMenuStrip(); menu.Items.Add("Changer de mode…",null,(s,e)=>ChooseMode());
             menu.Items.Add("Afficher le dossier des réglages",null,(s,e)=> { Directory.CreateDirectory(Native.Data); Process.Start(new ProcessStartInfo(Native.Data) { UseShellExecute=true }); });
