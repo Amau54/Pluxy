@@ -162,6 +162,8 @@ class Library:
                 if stop_event is not None and stop_event.is_set():
                     return len(previous)
                 base = Path(root)
+                category = cfg.server.media_dir_types.get(root, "auto")
+                root_exts = PHOTO_EXTENSIONS if category == "photo" else AUDIO_EXTENSIONS if category == "audio" else exts
                 if not base.is_dir():
                     missing_roots.append(base)
                     continue
@@ -196,7 +198,7 @@ class Library:
                         if len(found) >= MAX_MEDIA_ITEMS:
                             break
                         f = parent / name
-                        if f.suffix.lower() not in exts:
+                        if f.suffix.lower() not in root_exts:
                             continue
                         item_id = self.make_id(str(f))
                         try:
@@ -210,7 +212,7 @@ class Library:
                         category = cfg.server.media_dir_types.get(root, "auto")
                         kind = _detect_kind(f, category, existing.duration if existing else 0,
                                             existing.embedded_title or "" if existing else "")
-                        if kind == "photo" and has_audio and name.casefold() in AUDIO_ARTWORK_NAMES:
+                        if kind == "photo" and category != "photo" and has_audio and name.casefold() in AUDIO_ARTWORK_NAMES:
                             continue
                         existing = previous.get(item_id)
                         added_at = existing.added_at if existing else discovered_at
@@ -460,6 +462,10 @@ def _clean_series_name(raw: str) -> str:
     source, audio, langue, année, édition…) puis le suffixe de saison."""
     if not raw:
         return ""
+    # Season packs can end in codec/source/release tags, not in the season itself.
+    marker = re.search(r"(?i)(?:^|[\s._-])(?:saison|season|s)[\s._-]*(\d{1,3})(?=$|[\s._-])", raw)
+    if marker and marker.start() > 0:
+        raw = raw[:marker.start()]
     s = _fn._to_spaces(raw)
     for pat in (_fn._YEAR, _fn._RESOLUTION, _fn._SOURCE, _fn._CODEC, _fn._BITDEPTH,
                 _fn._HDR, _fn._AUDIO, _fn._LANG, _fn._EDITION, _fn._PROPER):

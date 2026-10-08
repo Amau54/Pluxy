@@ -6,6 +6,17 @@ import org.junit.Test
 
 class FilenameParserTest {
     @Test
+    fun `eight season release folders identify one show`() {
+        val seasons = (1..8).map { season ->
+            FilenameParser.parse("Boreal.S%02dE01.MULTI.1080p.mkv".format(season),
+                listOf("Series", "Boreal.S%02d.MULTI.1080p.WEB-DL-TEAM".format(season)))
+        }
+        assertEquals(setOf("boreal"), seasons.map { it.seriesKey }.toSet())
+        assertEquals((1..8).toList(), seasons.map { it.season })
+        assertEquals(setOf("Boreal"), seasons.map { it.seriesName }.toSet())
+    }
+
+    @Test
     fun `film release name is cleaned without losing year`() {
         val parsed = FilenameParser.parse("Dune.2021.2160p.UHD.BluRay.x265-GROUP.mkv")
         assertEquals("Dune", parsed.title)

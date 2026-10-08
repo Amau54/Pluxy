@@ -77,6 +77,7 @@ internal class LibraryAdapter(
         if (holder is HeaderViewHolder && row is LibRow.Header) {
             holder.title.text = row.title
             val tree = row.id.startsWith("photo-tree:")
+            holder.itemView.findViewById<ImageView>(R.id.sectionFolder).visibility = if (tree && row.collapsible) View.VISIBLE else View.GONE
             holder.title.setTextSize(TypedValue.COMPLEX_UNIT_PX, holder.itemView.resources.getDimension(
                 if (tree) R.dimen.section_header_tree_title_size else R.dimen.section_header_title_size))
             (holder.itemView.layoutParams as? ViewGroup.MarginLayoutParams)?.let { margins ->

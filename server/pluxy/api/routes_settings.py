@@ -136,4 +136,5 @@ def client_runtime(request: Request) -> dict:
         "server_kind": "pc",
         "transcoding_available": ffmpeg_available(cfg),
         "direct_stream_available": ffmpeg_available(cfg),
+        "direct_stream_seek_available": ffmpeg_available(cfg),
     }

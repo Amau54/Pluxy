@@ -50,6 +50,7 @@ def build_direct_stream_cmd(
     media: MediaInfo,
     decision: PlaybackDecision,
     cfg: PluxyConfig,
+    start_time: float = 0.0,
 ) -> List[str]:
     """
     Direct Stream : seule la couche conteneur (et/ou l'audio) pose problème.
@@ -59,11 +60,18 @@ def build_direct_stream_cmd(
     cmd = [
         cfg.ffmpeg.ffmpeg_path,
         "-hide_banner", "-loglevel", cfg.ffmpeg.log_level,
+    ]
+    if start_time > 0:
+        cmd += ["-ss", f"{start_time:.3f}"]
+    cmd += [
         "-i", media.path,
         "-map", "0:v:0",
         "-c:v", "copy",                # vidéo intacte (HEVC/HDR10 préservé)
         *_audio_args(decision, cfg),
         "-map", "0:s?", "-c:s", "copy",
+        # Keep video keyframe preroll before zero. Shifting it to zero would
+        # delay audio and make the player's requested position run ahead.
+        "-avoid_negative_ts", "disabled",
         "-f", "matroska",
         "-",
     ]

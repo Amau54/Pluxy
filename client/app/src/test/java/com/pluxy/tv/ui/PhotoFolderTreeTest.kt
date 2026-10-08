@@ -12,8 +12,8 @@ class PhotoFolderTreeTest {
         val photos = listOf(photo("a", "disk1", "2024/Voyage/a.jpg"), photo("b", "disk1", "2024/b.jpg"),
             photo("c", "disk2", "2024/Voyage/c.jpg"), photo("d", "disk1", "d.jpg"))
         val rows = PhotoFolderTree.rows(photos)
-        assertEquals(listOf("d", "b", "a", "c"), rows.filterIsInstance<LibRow.MediaRow>().map { it.item.id })
-        val headers = rows.filterIsInstance<LibRow.Header>()
+        assertEquals(listOf("a", "b", "d", "c"), rows.filterIsInstance<LibRow.MediaRow>().map { it.item.id })
+        val headers = rows.filterIsInstance<LibRow.Header>().filter { it.collapsible }
         assertEquals(listOf(0, 1, 2, 0, 1, 2), headers.map { it.depth })
         assertTrue(headers.all { it.expanded })
         assertEquals(headers.size, headers.map { it.id }.distinct().size)
@@ -40,5 +40,14 @@ class PhotoFolderTreeTest {
             photo("beta", "one", "Voyage/beta.jpg").copy(addedAt = 2.0))
         val rows = PhotoFolderTree.rows(photos, query = TvLibraryContent.Query("photo", sort = "added"))
         assertEquals(listOf("beta", "alpha"), rows.filterIsInstance<LibRow.MediaRow>().map { it.item.id })
+    }
+
+    @Test fun `les dossiers replies restent visibles avec les images de la racine`() {
+        val photos = listOf(photo("root", "one", "root.jpg"), photo("child", "one", "Voyage/child.jpg"))
+        val rows = PhotoFolderTree.rows(photos, setOf("photo-tree:one/Voyage"))
+        assertEquals(listOf("root"), rows.filterIsInstance<LibRow.MediaRow>().map { it.item.id })
+        val child = rows.filterIsInstance<LibRow.Header>().first { it.id == "photo-tree:one/Voyage" }
+        assertFalse(child.expanded)
+        assertTrue(rows.indexOf(child) < rows.indexOfFirst { it is LibRow.MediaRow })
     }
 }

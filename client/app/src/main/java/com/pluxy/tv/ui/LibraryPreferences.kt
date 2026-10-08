@@ -45,6 +45,15 @@ object LibraryPreferences {
         ).apply()
     }
 
+    fun photoFolders(context: Context): Pair<Set<String>, Set<String>> =
+        prefs(context).getStringSet(key(context, "photo-folders-known"), emptySet()).orEmpty().toSet() to
+            prefs(context).getStringSet(key(context, "photo-folders-collapsed"), emptySet()).orEmpty().toSet()
+
+    fun savePhotoFolders(context: Context, known: Set<String>, collapsed: Set<String>) {
+        prefs(context).edit().putStringSet(key(context, "photo-folders-known"), known.toSet())
+            .putStringSet(key(context, "photo-folders-collapsed"), collapsed.toSet()).apply()
+    }
+
     fun view(context: Context, destination: String): String =
         prefs(context).getString(key(context, "view:$destination"), "library").orEmpty()
             .takeIf { it in setOf("discover", "library", "collections") } ?: "library"

@@ -203,6 +203,7 @@ data class ClientRuntime(
     @Json(name = "server_kind") val serverKind: String = "pc",
     @Json(name = "transcoding_available") val transcodingAvailable: Boolean = true,
     @Json(name = "direct_stream_available") val directStreamAvailable: Boolean = true,
+    @Json(name = "direct_stream_seek_available") val directStreamSeekAvailable: Boolean = false,
 )
 
 // --------------------------------------------------------------------------- //

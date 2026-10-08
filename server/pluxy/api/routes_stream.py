@@ -19,7 +19,7 @@ import subprocess
 import threading
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import (
     FileResponse,
     RedirectResponse,
@@ -36,6 +36,7 @@ from ..state import AppState, get_state
 from ..tools import NO_WINDOW
 from ..security import playback_key, session_token
 from ..transcoder import build_direct_stream_cmd
+from ..subtitle_seek import shift_subtitles
 
 router = APIRouter(tags=["stream"])
 
@@ -256,11 +257,17 @@ def stream_direct(item_id: str, request: Request):
 #  2b. Direct Stream — remux à la volée (Matroska) sur pipe                    #
 # --------------------------------------------------------------------------- #
 @router.get("/stream/remux/{item_id}")
-def stream_remux(item_id: str, request: Request):
+def stream_remux(item_id: str, request: Request,
+                 start_ms: int = Query(0, ge=0, le=604_800_000), copy_audio: bool = False):
     st = get_state(request)
     it = st.library.get(item_id)
     if not it:
         raise HTTPException(404, "Média introuvable")
+
+    # A pipe has no byte index. Never pretend that a nonzero Range starts there.
+    if request.headers.get("range") not in (None, "bytes=0-"):
+        raise HTTPException(416, "Ce flux utilise une position temporelle, pas une plage d'octets",
+                            headers={"Accept-Ranges": "none"})
 
     cfg = st.cfgm.cfg
     if not st.remux_slots.acquire(blocking=False):
@@ -274,11 +281,18 @@ def stream_remux(item_id: str, request: Request):
         else:
             media = _safe_probe_limited(st, it.path)
             dec = decide(media, ClientCapabilities(), cfg)
-        cmd = build_direct_stream_cmd(media, dec, cfg)
+        if copy_audio:
+            dec = dec.model_copy(update={"audio_action": "copy"})
+        start_time = start_ms / 1000
+        if media.duration > 0 and start_time >= media.duration:
+            raise HTTPException(416, "Position après la fin du média")
+        cmd = build_direct_stream_cmd(media, dec, cfg, start_time=start_time)
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
                                 stderr=subprocess.DEVNULL, creationflags=NO_WINDOW)
     except FileNotFoundError:
         st.remux_slots.release()
+        if start_ms:
+            raise HTTPException(503, "FFmpeg indisponible : déplacement temporel impossible")
         # FFmpeg absent -> repli Direct Play (fichier brut).
         return RedirectResponse(url=f"/stream/direct/{item_id}", status_code=302)
     except Exception:
@@ -310,7 +324,8 @@ def stream_remux(item_id: str, request: Request):
                 pass
             st.remux_slots.release()
 
-    return StreamingResponse(pump(), media_type="video/x-matroska")
+    return StreamingResponse(pump(), media_type="video/x-matroska",
+                             headers={"Accept-Ranges": "none", "X-Pluxy-Start-Ms": str(start_ms)})
 
 
 # --------------------------------------------------------------------------- #
@@ -443,7 +458,8 @@ def hls_stop(item_id: str, request: Request) -> dict:
 #  3. Sous-titres externes (.srt...) — injectés dans ExoPlayer (pas de burn-in)#
 # --------------------------------------------------------------------------- #
 @router.get("/stream/subs/{item_id}/{sub_index}")
-def stream_subs(item_id: str, sub_index: int, request: Request):
+def stream_subs(item_id: str, sub_index: int, request: Request,
+                start_ms: int = Query(0, ge=0, le=604_800_000)):
     st = get_state(request)
     it = st.library.get(item_id)
     # Borne stricte : rejette les index négatifs (sinon external_subs[-1] servi).
@@ -452,6 +468,15 @@ def stream_subs(item_id: str, sub_index: int, request: Request):
     path = it.external_subs[sub_index]
     if not os.path.isfile(path):
         raise HTTPException(404, "Fichier de sous-titres introuvable")
+    if start_ms:
+        if os.path.getsize(path) > 4 * 1024 * 1024:
+            raise HTTPException(413, "Fichier de sous-titres trop volumineux")
+        raw = Path(path).read_bytes()
+        try:
+            text = raw.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            text = raw.decode("cp1252", errors="replace")
+        return Response(shift_subtitles(text, Path(path).suffix.lower(), start_ms), media_type=_sub_mime(path))
     return FileResponse(path, media_type=_sub_mime(path))
 
 

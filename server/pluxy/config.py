@@ -51,7 +51,7 @@ class ServerCfg(BaseModel):
     host: str = Field(default="0.0.0.0", min_length=1, max_length=253)
     port: int = Field(default=8420, ge=1, le=65535)
     media_dirs: List[str] = Field(default_factory=list, max_length=128)
-    media_dir_types: dict[str, Literal["auto", "movie", "series", "clip"]] = Field(default_factory=dict, max_length=128)
+    media_dir_types: dict[str, Literal["auto", "movie", "series", "clip", "photo", "audio"]] = Field(default_factory=dict, max_length=128)
     transcode_temp_dir: str = Field(default="./.pluxy_cache", min_length=1, max_length=4096)
     transcode_cache_quota_mb: int = Field(default=8192, ge=16, le=1_048_576)
     transcode_min_free_mb: int = Field(default=1024, ge=0, le=1_048_576)

@@ -172,7 +172,7 @@ object TvLibraryContent {
     internal fun seriesRows(episodes: List<MediaItem>): List<LibRow.SeriesRow> = episodes.groupBy(::mediaSeriesIdentity)
         .map { (key, values) -> LibRow.SeriesRow(
             key = key,
-            name = values.firstNotNullOfOrNull { it.seriesName?.ifBlank { null } } ?: values.first().title,
+            name = SeriesIdentity.displayName(values.first()),
             count = values.size,
             watchedCount = values.count { it.watched },
             poster = values.firstNotNullOfOrNull { it.posterUrl },

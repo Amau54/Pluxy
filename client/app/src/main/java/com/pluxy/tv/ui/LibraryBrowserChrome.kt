@@ -23,6 +23,8 @@ class LibraryBrowserChrome(
     private val onHome: () -> Unit,
     private val onLibrary: () -> Unit,
     private val onSearch: () -> Unit,
+    private val onExpandPhotos: () -> Unit,
+    private val onCollapsePhotos: () -> Unit,
 ) {
     private val density = activity.resources.displayMetrics.density
     private val landscape = !television && activity.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
@@ -36,6 +38,10 @@ class LibraryBrowserChrome(
         setTextColor(activity.pluxyColor(R.color.text_secondary))
         setPadding(2, dp(6), 0, dp(2))
         accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
+    }
+    private val photoCommands = LinearLayout(activity).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
     }
     private fun button(label: String, action: (View) -> Unit): Button = Button(activity, null, 0, R.style.Btn_TopBarChoice).apply {
         text = label
@@ -64,6 +70,12 @@ class LibraryBrowserChrome(
             commands.addView(it, params.apply { marginEnd = dp(if (television) 6 else 3) })
         }
         rows.addView(commands)
+        listOf(button("Tout déplier") { onExpandPhotos() }, button("Tout replier") { onCollapsePhotos() }).forEach {
+            it.textSize = 13f
+            photoCommands.addView(it, (if (television) LinearLayout.LayoutParams(-2, -2)
+                else LinearLayout.LayoutParams(0, -2, 1f)).apply { marginEnd = dp(4); topMargin = dp(4) })
+        }
+        rows.addView(photoCommands)
         rows.addView(chips)
         rows.addView(count)
         val safe = activity.resources.getDimensionPixelSize(R.dimen.screen_pad)
@@ -95,6 +107,7 @@ class LibraryBrowserChrome(
         val video = if (searchText.isNotBlank()) query.searchScope in setOf("all", "movie", "series", "clip")
             else kind in setOf("movie", "series", "clip")
         rows.visibility = if (kind == "home" && searchText.isBlank()) View.GONE else View.VISIBLE
+        photoCommands.visibility = if (kind == "photo" && query.photoView == "folders" && searchText.isBlank()) View.VISIBLE else View.GONE
         destination.visibility = if (kind == "home" || searchText.isNotBlank()) View.GONE else View.VISIBLE
         destination.text = when (kind) { "movie" -> "Films"; "series" -> "Séries"; "clip" -> "Vidéos"; "photo" -> "Photos"; "audio" -> "Musique"; else -> "Médias" }
         destination.setCompoundDrawablesRelativeWithIntrinsicBounds(0, 0, R.drawable.ic_library_dropdown, 0)

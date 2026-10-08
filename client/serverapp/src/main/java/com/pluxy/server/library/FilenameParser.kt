@@ -19,6 +19,7 @@ object FilenameParser {
     )
     private val looseEpisodePattern = Regex("(?i)\\b(?:episode|épisode|ep)[ ._-]?(\\d{1,3})\\b")
     private val seasonFolderPattern = Regex("(?i)^(?:season|saison|s)[ ._-]?(\\d{1,3})$")
+    private val seasonPackPattern = Regex("(?i)(?:^|[ ._-])(?:season|saison|s)[ ._-]?(\\d{1,3})(?=$|[ ._-])")
     private val seriesRoots = setOf("series", "série", "séries", "serie", "tv", "shows", "tvshows", "tv shows")
     private val yearPattern = Regex("(?<!\\d)(19\\d{2}|20[0-2]\\d)(?!\\d)")
     private val parenthesizedYear = Regex("[\\(\\[]\\s*(19\\d{2}|20[0-2]\\d)\\s*[\\)\\]]")
@@ -36,7 +37,7 @@ object FilenameParser {
         val episodeMatch = episodePattern.find(stem)
         val looseEpisode = looseEpisodePattern.find(stem)
         val pathSuggestsSeries = ancestors.any { name ->
-            name.lowercase() in seriesRoots || seasonFolderPattern.matches(name.trim())
+            name.lowercase() in seriesRoots || seasonPackPattern.containsMatchIn(name.trim())
         }
         val isSeries = episodeMatch != null || looseEpisode != null || pathSuggestsSeries
 
@@ -44,7 +45,7 @@ object FilenameParser {
             val season = episodeMatch?.let { match ->
                 (match.groups[1]?.value ?: match.groups[3]?.value)?.toIntOrNull()
             } ?: ancestors.asReversed().firstNotNullOfOrNull {
-                seasonFolderPattern.matchEntire(it.trim())?.groupValues?.getOrNull(1)?.toIntOrNull()
+                seasonPackPattern.find(it.trim())?.groupValues?.getOrNull(1)?.toIntOrNull()
             }
             val episode = episodeMatch?.let { match ->
                 (match.groups[2]?.value ?: match.groups[4]?.value)?.toIntOrNull()
@@ -93,7 +94,9 @@ object FilenameParser {
     }
 
     private fun cleanSeries(value: String): String {
-        var cleaned = value.replace(Regex("[._]+"), " ")
+        val marker = seasonPackPattern.find(value)
+        var cleaned = (if (marker != null && marker.range.first > 0) value.substring(0, marker.range.first) else value)
+            .replace(Regex("[._]+"), " ")
         cleaned = cleanupTags.replace(cleaned, "")
         cleaned = cleaned.replace(
             Regex("(?i)[ ._-]+(?:season|saison|part|partie|volume|vol|s)\\s*\\d{1,3}\\s*$"),

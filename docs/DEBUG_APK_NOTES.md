@@ -1,4 +1,4 @@
-# APK de test — Pluxy 1.7.4 (58)
+# APK de test — Pluxy 1.7.5 (59)
 
 Une seule APK Android TV/mobile avec les modes Lecteur et Serveur, hors Google Play.
 Les images des cartes suivent leurs coins arrondis, même avec le contour de sélection.

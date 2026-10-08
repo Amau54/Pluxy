@@ -103,7 +103,7 @@ function renderFolders() {
     };
     const category = document.createElement('select');
     category.setAttribute('aria-label', 'Catégorie du dossier ' + path);
-    [['auto', 'Détection automatique'], ['movie', 'Films'], ['series', 'Séries'], ['clip', 'Vidéos personnelles / autres']].forEach(([value, text]) => {
+    [['auto', 'Détection automatique'], ['movie', 'Films'], ['series', 'Séries'], ['clip', 'Vidéos personnelles / autres'], ['photo', 'Photos'], ['audio', 'Musique']].forEach(([value, text]) => {
       const option = document.createElement('option');
       option.value = value;
       option.textContent = text;

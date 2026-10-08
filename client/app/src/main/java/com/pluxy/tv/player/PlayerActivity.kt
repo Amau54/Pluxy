@@ -138,6 +138,7 @@ class PlayerActivity : ThemedActivity() {
     private var modeLabel = ""
     private var activeStrategy = PlaybackStrategy.AUTO
     private var transcodingAvailable = false
+    private var directStreamSeekAvailable = false
     private var serverKind = "pc"
     private var reinforcedBufferActive = false
     private var networkLimitWarned = false
@@ -195,9 +196,11 @@ class PlayerActivity : ThemedActivity() {
     // valeur mémorisée pour TOUTE reprise/repli/seek -> plus de retour au début parasite.
     private var lastGoodPositionMs = 0L
     private var lastBuildAtMs = 0L
+    private var streamPositionOffsetMs = 0L
 
     // La playlist VOD couvre tout le film : position et durée sont absolues.
-    private fun absolutePositionMs(): Long = player?.currentPosition ?: 0L
+    private fun absolutePositionMs(): Long = PlaybackSeekPolicy.absolutePosition(
+        streamPositionOffsetMs, player?.currentPosition ?: 0L)
     private val durationMs get() = (item.duration * 1000).toLong()
 
     /** Position FIABLE pour reprendre/recharger/seeker : la position courante si elle est
@@ -208,7 +211,7 @@ class PlayerActivity : ThemedActivity() {
         if (SystemClock.elapsedRealtime() - lastSeekAtMs <= SEEK_GRACE_MS) {
             return maxOf(lastGoodPositionMs, savedPositionMs)
         }
-        val cur = player?.currentPosition ?: -1L
+        val cur = if (player != null) absolutePositionMs() else -1L
         return if (cur > 1_000L) cur else maxOf(lastGoodPositionMs, savedPositionMs)
     }
 
@@ -217,7 +220,7 @@ class PlayerActivity : ThemedActivity() {
         override fun run() {
             val p = player
             if (p != null && p.playbackState != Player.STATE_IDLE) {
-                val pos = p.currentPosition
+                val pos = absolutePositionMs()
                 if (pos > 0 && SystemClock.elapsedRealtime() - lastSeekAtMs > SEEK_GRACE_MS) {
                     lastGoodPositionMs = pos
                 }
@@ -981,7 +984,7 @@ class PlayerActivity : ThemedActivity() {
         val position = positionMs.coerceIn(0L, safeDuration.takeIf { it > 0L } ?: Long.MAX_VALUE)
         timeline.setDuration(safeDuration)
         timeline.setPosition(position)
-        val buffered = (player?.bufferedPosition ?: position).coerceAtLeast(position)
+        val buffered = PlaybackSeekPolicy.absolutePosition(streamPositionOffsetMs, player?.bufferedPosition ?: 0L).coerceAtLeast(position)
             .let { if (safeDuration > 0L) it.coerceAtMost(safeDuration) else it }
         timeline.setBufferedPosition(buffered)
         timePositionView.text = fmtPlayerTime(position)
@@ -1063,7 +1066,7 @@ class PlayerActivity : ThemedActivity() {
                 .setActions(actions)
                 .setState(
                     state,
-                    p?.currentPosition?.coerceAtLeast(0L) ?: 0L,
+                    absolutePositionMs(),
                     if (p?.isPlaying == true) p.playbackParameters.speed else 0f,
                     SystemClock.elapsedRealtime(),
                 )
@@ -1398,6 +1401,7 @@ class PlayerActivity : ThemedActivity() {
                     }
 
                     transcodingAvailable = runtime.transcodingAvailable
+                    directStreamSeekAvailable = runtime.directStreamSeekAvailable
                     serverKind = runtime.serverKind
                     decisionToneMapped = decision.toneMap
                     reinforcedBufferActive = PlaybackPlanner.shouldStartWithReinforcedBuffer(
@@ -1538,13 +1542,41 @@ class PlayerActivity : ThemedActivity() {
     /** Va à une position ABSOLUE. Seek natif : la playlist VOD couvre tout le film,
      *  ExoPlayer demande le segment cible (transcodé à la demande) -> lecture. */
     private fun goToAbsolute(targetMs: Long) {
-        val t = targetMs.coerceIn(0, if (durationMs > 0) durationMs else Long.MAX_VALUE)
+        val t = targetMs.coerceIn(0, if (durationMs > 0) (durationMs - 250).coerceAtLeast(0) else Long.MAX_VALUE)
+        val currentAttempt = attempts.getOrNull(attemptIdx)
+        if (currentAttempt != null && PlaybackSeekPolicy.isRemux(currentAttempt.url) && !directStreamSeekAvailable) {
+            Toast.makeText(this, "Mettez à jour le serveur PC pour naviguer dans ce flux.", Toast.LENGTH_LONG).show()
+            return
+        }
+        if (currentAttempt?.delivery == "direct" && player?.playbackState == Player.STATE_READY &&
+            player?.isCurrentMediaItemSeekable == false && !directStreamSeekAvailable) {
+            val message = if (serverKind == "pc") "Ce fichier n'a pas d'index de navigation. Mettez à jour le serveur PC."
+                else "Ce fichier n'a pas d'index de navigation. Utilisez un fichier MKV/MP4 indexé."
+            Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+            return
+        }
         lastSeekAtMs = SystemClock.elapsedRealtime()
         // La cible EXPLICITE devient la position fiable : après un seek (surtout vers ~0),
         // currentPosition reste masqué à l'ancienne valeur pendant tout le buffering ;
         // sans ça un repli rétablirait l'ANCIENNE position (et annulerait le retour début).
         markSeekTarget(t)
         player?.let { p ->
+            val attempt = attempts.getOrNull(attemptIdx)
+            if (attempt != null && PlaybackSeekPolicy.isRemux(attempt.url)) {
+                loadAttempt(attemptIdx, restorePos = t)
+                saveProgress()
+                return
+            }
+            if (attempt?.delivery == "direct" && p.playbackState == Player.STATE_READY && !p.isCurrentMediaItemSeekable) {
+                if (serverKind == "pc" && transcodingAvailable && directStreamSeekAvailable) {
+                    attempts[attemptIdx] = attempt.copy(url = "/stream/remux/${item.id}?copy_audio=true",
+                        label = "Direct Stream · vidéo originale")
+                    loadAttempt(attemptIdx, restorePos = t)
+                } else {
+                    Toast.makeText(this, "Ce fichier ne fournit pas d'index de navigation. Essayez un fichier MKV/MP4 indexé.", Toast.LENGTH_LONG).show()
+                }
+                return
+            }
             // EXACT uniquement pour l'action explicite de l'utilisateur. On revient
             // aussitôt au point de synchro proche pour ne pas ralentir les reprises,
             // reconstructions et replis automatiques ultérieurs.
@@ -1564,10 +1596,15 @@ class PlayerActivity : ThemedActivity() {
     private fun buildMediaItem(url: String, delivery: String): MediaItem {
         val b = MediaItem.Builder().setUri(Uri.parse(api.abs(url)))
         if (delivery == "hls") b.setMimeType(MimeTypes.APPLICATION_M3U8)
+        fun subtitleUri(index: Int): Uri {
+            val uri = Uri.parse(api.abs("/stream/subs/${item.id}/$index"))
+            return if (streamPositionOffsetMs > 0) uri.buildUpon()
+                .appendQueryParameter("start_ms", streamPositionOffsetMs.toString()).build() else uri
+        }
         val subs = item.subtitles
         if (subs.isNotEmpty()) {
             b.setSubtitleConfigurations(subs.mapIndexed { i, t ->
-                MediaItem.SubtitleConfiguration.Builder(Uri.parse(api.abs("/stream/subs/${item.id}/${t.index}")))
+                MediaItem.SubtitleConfiguration.Builder(subtitleUri(t.index))
                     .setMimeType(subMime(t.format))
                     .setLanguage(t.lang ?: "und")
                     .setLabel(t.label.ifBlank { t.lang?.uppercase() ?: "Sous-titres" })
@@ -1578,7 +1615,7 @@ class PlayerActivity : ThemedActivity() {
         } else if (item.externalSubs.isNotEmpty()) {
             // Repli ancien format (chemins seuls) : on suppose SRT.
             b.setSubtitleConfigurations(item.externalSubs.indices.map { idx ->
-                MediaItem.SubtitleConfiguration.Builder(Uri.parse(api.abs("/stream/subs/${item.id}/$idx")))
+                MediaItem.SubtitleConfiguration.Builder(subtitleUri(idx))
                     .setMimeType(MimeTypes.APPLICATION_SUBRIP).setLanguage("und")
                     .setSelectionFlags(0).build()
             })
@@ -2291,9 +2328,18 @@ class PlayerActivity : ThemedActivity() {
             "attempt",
             "index=$idx tier=${attempt.tier} delivery=${attempt.delivery} url=${attempt.url}",
         )
-        p.setMediaItem(buildMediaItem(attempt.url, attempt.delivery))
+        val temporal = PlaybackSeekPolicy.isRemux(attempt.url)
+        streamPositionOffsetMs = if (temporal && directStreamSeekAvailable) restorePos.coerceAtLeast(0L) else 0L
+        if (temporal && restorePos > 0 && !directStreamSeekAvailable) {
+            setStatus("Mettez à jour le serveur PC pour reprendre ce flux.")
+            setLoadingVisible(false)
+            return
+        }
+        val url = if (temporal) Uri.parse(attempt.url).buildUpon()
+            .appendQueryParameter("start_ms", streamPositionOffsetMs.toString()).build().toString() else attempt.url
+        Logger.log("seek", "load absolute=$restorePos offset=$streamPositionOffsetMs temporal=$temporal")
+        p.setMediaItem(buildMediaItem(url, attempt.delivery), if (temporal) 0L else restorePos.coerceAtLeast(0L))
         p.prepare()
-        if (restorePos > 0) p.seekTo(restorePos)
         p.playWhenReady = playWhenReady
     }
 

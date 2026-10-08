@@ -92,6 +92,4 @@ internal fun stableLongId(value: String): Long {
 }
 
 /** Identité de série commune à la grille et à l'écran d'épisodes, anciens serveurs inclus. */
-internal fun mediaSeriesIdentity(item: MediaItem): String =
-    item.seriesKey?.trim()?.takeIf { it.isNotEmpty() }?.let(LibraryOrganizer::searchKey)
-        ?: LibraryOrganizer.searchKey(item.seriesName ?: item.title)
+internal fun mediaSeriesIdentity(item: MediaItem): String = SeriesIdentity.key(item)

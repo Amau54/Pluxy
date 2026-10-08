@@ -102,6 +102,7 @@ class MainActivity : ThemedActivity() {
      * d'une réponse provisoirement incomplète du serveur. */
     private val discoveredKinds = mutableSetOf<String>()
     private val collapsedPhotoFolders = mutableSetOf<String>()
+    private val knownPhotoFolders = mutableSetOf<String>()
     private var gridSpan = 3
     private var selectedKind = "home"
     private var advancedMode = false
@@ -198,6 +199,8 @@ class MainActivity : ThemedActivity() {
             onHome = { selectDestination("home") },
             onLibrary = ::openLastLibrary,
             onSearch = ::openSearch,
+            onExpandPhotos = { setPhotoFoldersExpanded(true) },
+            onCollapsePhotos = { setPhotoFoldersExpanded(false) },
         )
         if (usesRail()) grid.viewTreeObserver.addOnGlobalFocusChangeListener { _, focused ->
             val compact = focused?.let(::isInGrid) == true
@@ -240,6 +243,7 @@ class MainActivity : ThemedActivity() {
             discoveredKinds.clear()
             focusByDestination.clear()
             collapsedPhotoFolders.clear()
+            knownPhotoFolders.clear()
             loadedOnce = false
             contentJob?.cancel()
             contentRevision++
@@ -796,6 +800,7 @@ class MainActivity : ThemedActivity() {
             val snapshot = requireNotNull(fresh)
             if (!isCurrentServer(serverUrl) || requestRevision != fetchRevision || key != queryKey()) return false
             allItems = snapshot.items
+            if (query.destination == "photo" && query.search.isBlank()) syncPhotoFolders()
             pageTotal = snapshot.total
             nextPageOffset = snapshot.next
             pageRevision = snapshot.revision
@@ -983,7 +988,28 @@ class MainActivity : ThemedActivity() {
         focusByDestination[focusStateKey()] = LibraryFocusTarget(null, header.stableKey)
         val folder = header.id.removePrefix("photo:")
         if (!collapsedPhotoFolders.add(folder)) collapsedPhotoFolders.remove(folder)
+        LibraryPreferences.savePhotoFolders(this, knownPhotoFolders, collapsedPhotoFolders)
         applyAndShow(restoreFocus = true)
+    }
+
+    private fun syncPhotoFolders() {
+        if (knownPhotoFolders.isEmpty()) {
+            val saved = LibraryPreferences.photoFolders(this)
+            knownPhotoFolders += saved.first
+            collapsedPhotoFolders += saved.second
+        }
+        PhotoFolderTree.rows(allItems.filter { it.kind == "photo" }).filterIsInstance<LibRow.Header>().filter { it.collapsible }.forEach {
+            if (knownPhotoFolders.add(it.id) && it.depth > 0) collapsedPhotoFolders += it.id
+        }
+        LibraryPreferences.savePhotoFolders(this, knownPhotoFolders, collapsedPhotoFolders)
+    }
+
+    private fun setPhotoFoldersExpanded(expanded: Boolean) {
+        collapsedPhotoFolders.clear()
+        if (!expanded) collapsedPhotoFolders += PhotoFolderTree.rows(allItems.filter { it.kind == "photo" })
+            .filterIsInstance<LibRow.Header>().filter { it.collapsible }.map { it.id }
+        LibraryPreferences.savePhotoFolders(this, knownPhotoFolders, collapsedPhotoFolders)
+        applyAndShow(restoreFocus = false)
     }
 
     /** Un aperçu ne s'affiche que sur les grands écrans : sur téléphone, il volerait
@@ -1324,6 +1350,7 @@ class MainActivity : ThemedActivity() {
             discoveredKinds.clear()
             focusByDestination.clear()
             collapsedPhotoFolders.clear()
+            knownPhotoFolders.clear()
             selectedCollection = null
             selectedKind = PluxyApplication.libraryTab(this)
             searchQuery = ""
@@ -1405,13 +1432,10 @@ class MainActivity : ThemedActivity() {
             selectedValue = PluxyApplication.photoFolder(this),
             actions = listOf(
                 CompactChoiceMenu.Action(getString(R.string.photo_collapse_all)) {
-                    collapsedPhotoFolders.clear()
-                    collapsedPhotoFolders += PhotoFolderTree.rows(photos).filterIsInstance<LibRow.Header>().map { it.id }
-                    applyAndShow(restoreFocus = false)
+                    setPhotoFoldersExpanded(false)
                 },
                 CompactChoiceMenu.Action(getString(R.string.photo_expand_all)) {
-                    collapsedPhotoFolders.clear()
-                    applyAndShow(restoreFocus = false)
+                    setPhotoFoldersExpanded(true)
                 },
             ),
             onSelect = { folder ->

@@ -12,6 +12,30 @@ from types import SimpleNamespace
 import httpx
 import pytest
 
+def test_dirty_season_packs_share_identity_and_keep_season_numbers():
+    from pluxy.library import _parse_series
+    seasons = [_parse_series(Path(f"SERIES/Boreal.2013.MULTI.1080p.WEB-DL.H264-GROUP/Boreal.S{s:02}.MULTI.1080p.WEB-DL.H264-GROUP/Boreal.S{s:02}E01.mkv")) for s in range(1, 9)]
+    assert {name for name, _, _, _ in seasons} == {"Boreal"}
+    assert {key for _, key, _, _ in seasons} == {"boreal"}
+    assert [season for _, _, season, _ in seasons] == list(range(1, 9))
+
+def test_explicit_photo_and_music_roots_scan_only_their_media_even_with_video_extensions(tmp_path, monkeypatch):
+    from pluxy.config import ServerCfg
+    state, root, _ = make_state(tmp_path, monkeypatch)
+    (root / "image.png").write_bytes(b"not-a-real-image")
+    (root / "cover.jpg").write_bytes(b"album-art-in-explicit-photo-folder")
+    (root / "music.mp3").write_bytes(b"audio")
+    (root / "film.mkv").write_bytes(b"film")
+    state.cfgm.cfg.server.scan_extensions = [".mkv"]
+    state.cfgm.cfg.server.media_dir_types[str(root)] = "photo"
+    state.library.scan()
+    assert {item.title for item in state.library.all()} == {"image", "cover"}
+    assert {item.kind for item in state.library.all()} == {"photo"}
+    state.cfgm.cfg.server.media_dir_types[str(root)] = "audio"
+    state.library.scan()
+    assert [item.kind for item in state.library.all()] == ["audio"]
+    assert ServerCfg(media_dir_types={"photos":"photo", "music":"audio"}).media_dir_types["photos"] == "photo"
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 

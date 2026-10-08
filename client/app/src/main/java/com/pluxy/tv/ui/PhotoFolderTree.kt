@@ -37,8 +37,11 @@ object PhotoFolderTree {
                 add(LibRow.Header(node.id, "${node.name}  ·  ${node.count} ${if (node.count == 1) "photo" else "photos"}",
                     collapsible = true, expanded = expanded, depth = node.depth))
                 if (!expanded) return
-                addAll(TvLibraryContent.sortMedia(node.photos, query).map { LibRow.MediaRow(it) })
                 node.children.values.sortedBy { LibraryOrganizer.searchKey(it.name) }.forEach(::visit)
+                if (node.children.isNotEmpty() && node.photos.isNotEmpty()) {
+                    add(LibRow.Header("${node.id}:files", "Images de ${node.name}", depth = node.depth))
+                }
+                addAll(TvLibraryContent.sortMedia(node.photos, query).map { LibRow.MediaRow(it) })
             }
             roots.values.sortedBy { LibraryOrganizer.searchKey(it.name) }.forEach(::visit)
         }
