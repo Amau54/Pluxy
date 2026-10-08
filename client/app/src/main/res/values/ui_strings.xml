@@ -83,6 +83,8 @@
     <string name="server_connection_failed">Impossible de joindre %1$s. Vérifiez l’IP et le port.</string>
     <string name="server_connected">Connecté à %1$s</string>
     <string name="server_unreachable">Serveur injoignable.\n%1$s</string>
+    <string name="server_reconnecting">Serveur injoignable. Recherche automatique en cours…</string>
+    <string name="server_multiple_available">Plusieurs serveurs disponibles. Choisissez votre bibliothèque.</string>
 
     <string name="playback_error">Lecture impossible : %1$s</string>
     <string name="photo_index">%1$d / %2$d</string>

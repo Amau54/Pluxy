@@ -1,36 +1,46 @@
 package com.pluxy.tv.ui
 
 import com.pluxy.tv.api.ServerInfo
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
+import com.pluxy.tv.api.ApiException
+import org.junit.Assert.*
 import org.junit.Test
+import java.net.ConnectException
+import java.net.SocketTimeoutException
 
 class ServerReconnectPolicyTest {
     private val selected = ServerInfo(name = "Salon", ip = "192.168.1.20")
     private val other = ServerInfo(name = "Bureau", ip = "192.168.1.21")
 
-    @Test fun `discovery order cannot select a different library`() {
-        assertEquals(selected, ServerReconnectPolicy.select(listOf(other, selected), selected.baseUrl, selected.name))
+    @Test fun `one available server connects even when its identity changed`() {
+        assertEquals(other, ServerReconnectPolicy.select(listOf(other)))
     }
 
-    @Test fun `exact address wins even when names are duplicated`() {
-        assertEquals(selected, ServerReconnectPolicy.select(listOf(other.copy(name = "Salon"), selected), selected.baseUrl, "Salon"))
+    @Test fun `multiple servers always require a choice in either discovery order`() {
+        assertNull(ServerReconnectPolicy.select(listOf(selected, other)))
+        assertNull(ServerReconnectPolicy.select(listOf(other, selected)))
     }
 
-    @Test fun `unique custom name can recover a changed address`() {
-        val moved = selected.copy(ip = "192.168.1.30")
-        assertEquals(moved, ServerReconnectPolicy.select(listOf(other, moved), selected.baseUrl, selected.name))
+    @Test fun `duplicate announcements do not create a false choice`() {
+        assertEquals(selected, ServerReconnectPolicy.select(listOf(selected, selected)))
     }
 
-    @Test fun `ambiguous custom name requires explicit selection`() {
-        assertNull(ServerReconnectPolicy.select(listOf(selected.copy(ip = "192.168.1.30"), other.copy(name = "Salon")), selected.baseUrl, "Salon"))
+    @Test fun `identical names on different addresses still require a choice`() {
+        assertNull(ServerReconnectPolicy.select(listOf(selected, other.copy(name = "Salon"))))
     }
 
-    @Test fun `default name never authorizes a switch to another server`() {
-        assertNull(ServerReconnectPolicy.select(listOf(other.copy(name = "Pluxy")), selected.baseUrl, "Pluxy"))
+    @Test fun `default name is allowed when only one server is available`() {
+        assertEquals(other.copy(name = "Pluxy"), ServerReconnectPolicy.select(listOf(other.copy(name = "Pluxy"))))
     }
 
-    @Test fun `absent selected server never falls back to first result`() {
-        assertNull(ServerReconnectPolicy.select(listOf(other), selected.baseUrl, selected.name))
+    @Test fun `no available server keeps discovery running`() {
+        assertNull(ServerReconnectPolicy.select(emptyList()))
+    }
+
+    @Test fun `network failures trigger recovery but HTTP and catalogue errors do not`() {
+        assertTrue(ServerReconnectPolicy.isConnectionFailure(ConnectException()))
+        assertTrue(ServerReconnectPolicy.isConnectionFailure(SocketTimeoutException()))
+        assertFalse(ServerReconnectPolicy.isConnectionFailure(ApiException(503, "Busy")))
+        assertFalse(ServerReconnectPolicy.isConnectionFailure(ApiException(409, "Changed")))
+        assertFalse(ServerReconnectPolicy.isConnectionFailure(IllegalStateException("Invalid catalogue")))
     }
 }

@@ -14,8 +14,8 @@ import androidx.lifecycle.lifecycleScope
 import com.pluxy.tv.PluxyApplication
 import com.pluxy.tv.R
 import com.pluxy.tv.api.Discovery
-import com.pluxy.tv.api.PluxyApi
 import com.pluxy.tv.api.ServerInfo
+import com.pluxy.tv.api.ServerAvailability
 import com.pluxy.tv.api.LanUrlPolicy
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -79,17 +79,17 @@ class ServerSetupActivity : ThemedActivity() {
         status.setText(R.string.server_setup_scanning)
         discoveryJob = lifecycleScope.launch {
             while (isActive) {
-                val servers = Discovery.discover(
+                val servers = ServerAvailability.available(Discovery.discover(
                     this@ServerSetupActivity,
                     timeoutMs = DISCOVERY_WINDOW_MS,
-                )
+                ))
                 progress.visibility = View.GONE
                 when {
                     servers.isEmpty() -> {
                         status.setText(R.string.server_none_found)
                         // Reste silencieux après le premier message : la recherche continue
                         // en arrière-plan et la TV se connecte dès que le serveur apparaît.
-                        delay(DISCOVERY_RETRY_MS - DISCOVERY_WINDOW_MS.toLong())
+                        delay(DISCOVERY_RETRY_MS)
                     }
                     servers.size == 1 -> {
                         status.text = getString(R.string.server_one_found, servers[0].name)
@@ -132,14 +132,23 @@ class ServerSetupActivity : ThemedActivity() {
     }
 
     private fun select(info: ServerInfo) {
-        PluxyApplication.setServer(this, info.baseUrl, info.name)
-        Toast.makeText(
-            this,
-            getString(R.string.server_connected, info.name),
-            Toast.LENGTH_SHORT,
-        ).show()
-        setResult(RESULT_OK)
-        finish()
+        discoveryJob?.cancel()
+        connectionJob?.cancel()
+        progress.visibility = View.VISIBLE
+        status.text = getString(R.string.server_connecting, info.name)
+        connectionJob = lifecycleScope.launch {
+            val available = ServerAvailability.probe(info.baseUrl)
+            progress.visibility = View.GONE
+            if (available == null) {
+                status.text = getString(R.string.server_connection_failed, info.baseUrl)
+                runDiscovery()
+            } else {
+                PluxyApplication.setServer(this@ServerSetupActivity, available.baseUrl, available.name)
+                Toast.makeText(this@ServerSetupActivity, getString(R.string.server_connected, available.name), Toast.LENGTH_SHORT).show()
+                setResult(RESULT_OK)
+                finish()
+            }
+        }
     }
 
     private fun connectManual() {
@@ -160,14 +169,10 @@ class ServerSetupActivity : ThemedActivity() {
                 return@launch
             }
             status.text = getString(R.string.server_connecting, url)
-            val info = withContext(Dispatchers.IO) {
-                val client = PluxyApi(url)
-                try { client.serverInfo() } finally { client.close() }
-            }
+            val info = ServerAvailability.probe(url)
             progress.visibility = View.GONE
             if (info != null) {
-                val parsed = java.net.URI(url)
-                select(ServerInfo(name = info.name.take(60), ip = parsed.host, port = parsed.port))
+                select(info)
             } else {
                 status.text = getString(R.string.server_connection_failed, url)
             }

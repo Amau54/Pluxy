@@ -1,4 +1,4 @@
-# APK de test — Pluxy 1.7.0 (54)
+# APK de test — Pluxy 1.7.1 (55)
 
 Une seule APK Android TV/mobile avec les modes Lecteur et Serveur, hors Google Play.
 Choisissez le mode au premier lancement ; il se change ensuite dans les options.

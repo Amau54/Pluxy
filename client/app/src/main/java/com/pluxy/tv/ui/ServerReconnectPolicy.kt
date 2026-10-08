@@ -1,14 +1,12 @@
 package com.pluxy.tv.ui
 
 import com.pluxy.tv.api.ServerInfo
+import com.pluxy.tv.api.ApiException
+import java.io.IOException
 
-/** Discovery must never silently replace the selected library with an arbitrary server. */
+/** Un seul serveur disponible se connecte automatiquement ; plusieurs laissent le choix. */
 internal object ServerReconnectPolicy {
-    fun select(servers: List<ServerInfo>, selectedUrl: String, selectedName: String): ServerInfo? {
-        servers.firstOrNull { it.baseUrl.trimEnd('/') == selectedUrl.trimEnd('/') }?.let { return it }
-        // Older servers expose a name, not a stable ID. A default name is not an identity.
-        val name = selectedName.trim()
-        if (name.isBlank() || name.equals("Pluxy", ignoreCase = true)) return null
-        return servers.filter { it.name.trim() == name }.singleOrNull()
-    }
+    fun select(servers: List<ServerInfo>): ServerInfo? = servers.distinctBy { it.baseUrl }.singleOrNull()
+
+    fun isConnectionFailure(error: Exception): Boolean = error is IOException && error !is ApiException
 }

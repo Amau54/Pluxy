@@ -27,7 +27,7 @@ import java.util.UUID
 class ApiException(val code: Int, message: String) : IOException(message)
 
 /** Client réseau Pluxy (OkHttp + Moshi). Toutes les méthodes sont suspend. */
-class PluxyApi(val baseUrl: String, val sessionId: String = UUID.randomUUID().toString()) {
+class PluxyApi(val baseUrl: String, val sessionId: String = UUID.randomUUID().toString(), timeoutMs: Long? = null) {
 
     init { require(sessionId.matches(Regex("[A-Za-z0-9_-]{8,64}"))) }
 
@@ -56,6 +56,14 @@ class PluxyApi(val baseUrl: String, val sessionId: String = UUID.randomUUID().to
         .connectTimeout(8, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .retryOnConnectionFailure(true)
+        .apply {
+            if (timeoutMs != null) {
+                require(timeoutMs > 0)
+                connectTimeout(timeoutMs, TimeUnit.MILLISECONDS)
+                readTimeout(timeoutMs, TimeUnit.MILLISECONDS)
+                callTimeout(timeoutMs, TimeUnit.MILLISECONDS)
+            }
+        }
         .build()
 
     private val moshi = Moshi.Builder().add(KotlinJsonAdapterFactory()).build()

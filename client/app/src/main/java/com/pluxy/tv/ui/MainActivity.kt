@@ -48,6 +48,8 @@ import com.pluxy.tv.api.ApiException
 import com.pluxy.tv.api.PluxyApi
 import com.pluxy.tv.api.networkOrNull
 import com.pluxy.tv.api.Discovery
+import com.pluxy.tv.api.ServerInfo
+import com.pluxy.tv.api.ServerAvailability
 import com.pluxy.tv.player.PlayerActivity
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
@@ -83,6 +85,10 @@ class MainActivity : ThemedActivity() {
 
     private var loadJob: Job? = null
     private var autoRefreshJob: Job? = null
+    private var reconnectJob: Job? = null
+    private var reconnectRevision = 0L
+    private var serverChoiceDialog: AlertDialog? = null
+    private var dismissedServerChoices: Set<String>? = null
     private var contentJob: Job? = null
     private var contentRevision = 0L
     private var fetchRevision = 0L
@@ -256,6 +262,11 @@ class MainActivity : ThemedActivity() {
         horizontalFocus.cancel()
         consumedNavigationKeys.clear()
         autoRefreshJob?.cancel()
+        reconnectRevision++
+        reconnectJob?.cancel()
+        reconnectJob = null
+        serverChoiceDialog?.dismiss()
+        serverChoiceDialog = null
         loadJob?.cancel()
         pageJob?.cancel()
         swipe.isRefreshing = false
@@ -622,27 +633,27 @@ class MainActivity : ThemedActivity() {
         if (advancedMode || !PluxyApplication.isConfigured(this)) return
         autoRefreshJob = lifecycleScope.launch {
             var apiUrl = PluxyApplication.serverBaseUrl(this@MainActivity)
-            var api = withContext(Dispatchers.IO) { PluxyApi(apiUrl) }
+            var api = withContext(Dispatchers.IO) { PluxyApi(apiUrl, timeoutMs = ServerAvailability.TIMEOUT_MS) }
             var sawScan = false
             try {
                 while (isActive) {
                     delay(AUTO_REFRESH_MS)
-                    if (loadJob?.isActive == true) continue
+                    if (reconnectJob?.isActive == true || serverChoiceDialog?.isShowing == true) continue
                     val currentUrl = PluxyApplication.serverBaseUrl(this@MainActivity)
                     if (currentUrl != apiUrl) {
                         api.close()
                         apiUrl = currentUrl
-                        api = withContext(Dispatchers.IO) { PluxyApi(apiUrl) }
+                        api = withContext(Dispatchers.IO) { PluxyApi(apiUrl, timeoutMs = ServerAvailability.TIMEOUT_MS) }
                     }
                     val status = networkOrNull { api.scanStatus() }
                     if (!isCurrentServer(api.baseUrl)) continue
                     if (status == null) {
-                        reconnectFromLanDiscovery()
+                        requestReconnect(api.baseUrl)
                         continue
                     }
                     if (status.scanning) {
                         sawScan = true
-                    } else if (sawScan || (serverCatalogueCount >= 0 && status.count != serverCatalogueCount)) {
+                    } else if (loadJob?.isActive != true && (!loadedOnce || sawScan || (serverCatalogueCount >= 0 && status.count != serverCatalogueCount))) {
                         sawScan = false
                         fetchAndShow(api.baseUrl, showBlockingState = false)
                     }
@@ -800,10 +811,13 @@ class MainActivity : ThemedActivity() {
                 focusFirst = firstAtRequest && usesRail() && navigationAtRequest == focusNavigationRevision)
             true
         } catch (cancelled: CancellationException) { throw cancelled }
-        catch (_: Exception) {
+        catch (error: Exception) {
             if (allItems.isEmpty() && isCurrentServer(serverUrl) && requestRevision == fetchRevision) showServerError()
             else if (key != catalogueQueryKey) {
                 showEmpty("Impossible de charger cette bibliothèque.", "Réessayer", false) { loadItems() }
+            }
+            if (isCurrentServer(serverUrl) && requestRevision == fetchRevision && ServerReconnectPolicy.isConnectionFailure(error)) {
+                requestReconnect(serverUrl)
             }
             false
         } finally { if (requestRevision == fetchRevision) showLoading(false) }
@@ -833,6 +847,7 @@ class MainActivity : ThemedActivity() {
                     if (error is ApiException && error.code == 409) loadItems()
                     else android.widget.Toast.makeText(this@MainActivity, "Chargement interrompu · faites défiler pour réessayer", android.widget.Toast.LENGTH_SHORT).show()
                 }
+                if (isCurrentServer(server) && ServerReconnectPolicy.isConnectionFailure(error)) requestReconnect(server)
             } finally { api.close() }
         }
     }
@@ -1236,45 +1251,101 @@ class MainActivity : ThemedActivity() {
         }
     }
 
-    /** Le serveur peut changer d'adresse après une veille ou un redémarrage. Quand
-     * celui choisi devient injoignable, on redécouvre discrètement le LAN au lieu de
-     * laisser l'utilisateur ouvrir le réglage ou relancer manuellement l'application. */
-    private suspend fun reconnectFromLanDiscovery() {
-        val navigationAtRequest = focusNavigationRevision
-        val restoreAtRequest = currentFocus?.let(::isInGrid) == true
-        val originalUrl = PluxyApplication.serverBaseUrl(this)
-        val originalName = PluxyApplication.serverName(this)
-        val servers = Discovery.discover(this, timeoutMs = DISCOVERY_WINDOW_MS)
-        if (originalUrl != PluxyApplication.serverBaseUrl(this)) return
-        val server = ServerReconnectPolicy.select(servers, originalUrl, originalName)
-            ?: return
-        if (server.baseUrl != originalUrl) {
-            val fresh = networkOrNull {
-                loadCatalogue(server.baseUrl, currentQuery(), viewMode(), selectedCollection)
-            } ?: return
-            if (originalUrl != PluxyApplication.serverBaseUrl(this)) return
-            val folder = PluxyApplication.photoFolder(this)
-            PluxyApplication.setServer(this, server.baseUrl, server.name)
-            PluxyApplication.setPhotoFolder(this, folder)
-            grid.visibility = View.INVISIBLE
-            lanImages = LanMediaImages.loader(this)
-            allItems = fresh.items
-            pageTotal = fresh.total
-            nextPageOffset = fresh.next
-            pageRevision = fresh.revision
-            pagedMovies = fresh.paged
-            facets = fresh.facets
-            serverCatalogueCount = facets.counts.values.sum().takeIf { it > 0 } ?: allItems.size
-            catalogueQueryKey = queryKey()
-            catalogueServerUrl = server.baseUrl
-            discoveredKinds.clear()
-            discoveredKinds += fresh.items.map { it.kind } + fresh.facets.counts.filterValues { it > 0 }.keys
-            updateAvailableDestinations()
-            loadedOnce = true
-            applyAndShow(restoreFocus = restoreAtRequest && navigationAtRequest == focusNavigationRevision)
-            return
+    private fun requestReconnect(originalUrl: String) {
+        if (!isCurrentServer(originalUrl) || reconnectJob?.isActive == true || serverChoiceDialog?.isShowing == true) return
+        val revision = ++reconnectRevision
+        reconnectJob = lifecycleScope.launch {
+            try {
+                // Une erreur de catalogue ne signifie pas forcément que le serveur a disparu.
+                if (ServerAvailability.probe(originalUrl) != null) {
+                    if (isCurrentServer(originalUrl) && (!loadedOnce || catalogueQueryKey != queryKey())) loadItems()
+                    return@launch
+                }
+                if (!isCurrentServer(originalUrl)) return@launch
+                if (allItems.isEmpty()) showEmpty(getString(R.string.server_reconnecting), getString(R.string.action_change_server), false, ::openSetup)
+                val servers = ServerAvailability.available(Discovery.discover(this@MainActivity, timeoutMs = DISCOVERY_WINDOW_MS))
+                if (!isCurrentServer(originalUrl)) return@launch
+                val single = ServerReconnectPolicy.select(servers)
+                when {
+                    single != null -> connectDiscoveredServer(single, originalUrl)
+                    servers.isNotEmpty() -> showServerChoices(servers, originalUrl)
+                    else -> dismissedServerChoices = null
+                }
+            } finally { if (revision == reconnectRevision) reconnectJob = null }
         }
-        fetchAndShow(originalUrl, showBlockingState = allItems.isEmpty())
+    }
+
+    private fun showServerChoices(servers: List<ServerInfo>, originalUrl: String, force: Boolean = false) {
+        val signature = servers.map { it.baseUrl }.toSet()
+        if (allItems.isEmpty()) showEmpty(getString(R.string.server_multiple_available), getString(R.string.action_change_server), false) {
+            showServerChoices(servers, originalUrl, force = true)
+        }
+        if (!isCurrentServer(originalUrl) || serverChoiceDialog?.isShowing == true || (!force && dismissedServerChoices == signature)) return
+        serverChoiceDialog = AlertDialog.Builder(this)
+            .setTitle(R.string.action_change_server)
+            .setItems(servers.map { getString(R.string.server_choice, it.name, it.ip, it.port) }.toTypedArray()) { _, position ->
+                val server = servers[position]
+                val revision = ++reconnectRevision
+                reconnectJob?.cancel()
+                reconnectJob = lifecycleScope.launch {
+                    try {
+                        val available = ServerAvailability.probe(server.baseUrl)
+                        if (available != null) connectDiscoveredServer(available, originalUrl)
+                        else {
+                            dismissedServerChoices = null
+                            android.widget.Toast.makeText(this@MainActivity, getString(R.string.server_connection_failed, server.baseUrl), android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    } finally { if (revision == reconnectRevision) reconnectJob = null }
+                }
+            }
+            .setNegativeButton("Plus tard", null)
+            .create().apply {
+                setOnDismissListener {
+                    dismissedServerChoices = signature
+                    serverChoiceDialog = null
+                }
+                show()
+                listView.requestFocus()
+            }
+    }
+
+    private fun connectDiscoveredServer(server: ServerInfo, originalUrl: String) {
+        if (!isCurrentServer(originalUrl)) return
+        dismissedServerChoices = null
+        if (server.baseUrl != originalUrl) {
+            PluxyApplication.setServer(this, server.baseUrl, server.name)
+            // Les identifiants, collections et filtres de deux bibliothèques peuvent se recouper.
+            fetchRevision++
+            contentRevision++
+            contentJob?.cancel()
+            pageJob?.cancel()
+            loadJob?.cancel()
+            allItems = emptyList()
+            discoveredKinds.clear()
+            focusByDestination.clear()
+            collapsedPhotoFolders.clear()
+            selectedCollection = null
+            selectedKind = PluxyApplication.libraryTab(this)
+            searchQuery = ""
+            searchScope = "all"
+            catalogueServerUrl = null
+            catalogueQueryKey = ""
+            nextPageOffset = null
+            pageRevision = null
+            pageTotal = 0
+            serverCatalogueCount = -1
+            facets = LibraryFacets()
+            loadedOnce = false
+            lanImages = LanMediaImages.loader(this)
+            grid.visibility = View.INVISIBLE
+            homeAdapter.submitList(emptyList())
+            libraryAdapter.submitList(emptyList())
+            updateSearchButton()
+            updateAvailableDestinations()
+            selectedTabView().requestFocus()
+        }
+        android.widget.Toast.makeText(this, getString(R.string.server_connected, server.name), android.widget.Toast.LENGTH_SHORT).show()
+        loadItems()
     }
 
     private fun isCurrentServer(serverUrl: String): Boolean =
