@@ -663,6 +663,8 @@ class MainActivity : ThemedActivity() {
         this, if (searchQuery.isNotBlank()) searchScope else selectedKind,
     ).copy(
         destination = selectedKind, search = searchQuery, searchScope = searchScope,
+        photoFolder = if (selectedKind == "photo") PluxyApplication.photoFolder(this) else "",
+        collapsedPhotoFolders = collapsedPhotoFolders.toSet(),
     )
 
     private fun usesRail(): Boolean = isTelevision() || resources.getBoolean(R.bool.show_library_hero)
@@ -684,7 +686,8 @@ class MainActivity : ThemedActivity() {
     private suspend fun loadCatalogue(serverUrl: String, query: TvLibraryContent.Query, view: String, collection: LibraryCollection?): BrowserSnapshot {
         val api = PluxyApi(serverUrl)
         try {
-            val available = networkOrNull { api.libraryFacets() } ?: LibraryFacets()
+            val facetKind = if (query.search.isNotBlank()) query.searchScope else query.destination
+            val available = networkOrNull { api.libraryFacets(facetKind.takeIf { it != "home" } ?: "all") } ?: LibraryFacets()
             if (!available.querySupported) return BrowserSnapshot(api.listItems(), 0, facets = available)
             if (query.destination == "home" && query.search.isBlank()) {
                 val overview = api.libraryOverview()
@@ -1563,6 +1566,11 @@ class MainActivity : ThemedActivity() {
         val intent = when (item.kind) {
             "photo" -> Intent(this, PhotoActivity::class.java)
                 .putExtra(PhotoActivity.EXTRA_ITEM, json)
+                .putExtra(PhotoActivity.EXTRA_ALBUM_KEY, if (selectedKind == "photo" && selectedCollection == null &&
+                    searchQuery.isBlank() && currentQuery().photoView == "folders") LibraryOrganizer.photoAlbumKey(item) else "")
+                .putExtra(PhotoActivity.EXTRA_SORT, if (selectedKind == "photo" && selectedCollection == null &&
+                    searchQuery.isBlank() && currentQuery().photoView == "folders") currentQuery().sort else "")
+                .putExtra(PhotoActivity.EXTRA_DESCENDING, currentQuery().descending ?: (currentQuery().sort != "title"))
                 .putExtra(PhotoActivity.EXTRA_COLLECTION_ID, selectedCollection?.id.orEmpty())
             "audio" -> Intent(this, AudioPlayerActivity::class.java)
                 .putExtra(AudioPlayerActivity.EXTRA_ITEM, json)

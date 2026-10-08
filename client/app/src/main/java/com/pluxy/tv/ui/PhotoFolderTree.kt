@@ -10,7 +10,8 @@ object PhotoFolderTree {
         var count = 0
     }
 
-    fun rows(items: List<MediaItem>, collapsed: Set<String> = emptySet()): List<LibRow> {
+    fun rows(items: List<MediaItem>, collapsed: Set<String> = emptySet(),
+             query: TvLibraryContent.Query = TvLibraryContent.Query("photo", sort = "title")): List<LibRow> {
         val roots = linkedMapOf<String, Node>()
         items.forEach { item ->
             val relative = item.relativePath?.replace('\\', '/')
@@ -36,7 +37,7 @@ object PhotoFolderTree {
                 add(LibRow.Header(node.id, "${node.name}  ·  ${node.count} ${if (node.count == 1) "photo" else "photos"}",
                     collapsible = true, expanded = expanded, depth = node.depth))
                 if (!expanded) return
-                addAll(LibraryOrganizer.sortedBySearchKey(node.photos) { it.title }.map { LibRow.MediaRow(it) })
+                addAll(TvLibraryContent.sortMedia(node.photos, query).map { LibRow.MediaRow(it) })
                 node.children.values.sortedBy { LibraryOrganizer.searchKey(it.name) }.forEach(::visit)
             }
             roots.values.sortedBy { LibraryOrganizer.searchKey(it.name) }.forEach(::visit)

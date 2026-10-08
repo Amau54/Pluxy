@@ -42,7 +42,7 @@ object LibraryFilterDialog {
                     button.text = "Lecture · ${watched.first { pair -> pair.second == it }.first}"
                 }
             }
-            row("Genres", { if (draft.genres.isEmpty()) "Tous" else draft.genres.joinToString(", ") }) { button ->
+            if (original.destination != "clip") row("Genres", { if (draft.genres.isEmpty()) "Tous" else draft.genres.joinToString(", ") }) { button ->
                 val genres = (facets.genres + draft.genres).distinct().sorted()
                 if (genres.isEmpty()) {
                     AlertDialog.Builder(context).setMessage("Les genres apparaîtront après l’identification des films et séries.").setPositiveButton("Fermer", null).show()
@@ -59,13 +59,15 @@ object LibraryFilterDialog {
                         }.setNegativeButton("Annuler", null).show()
                 }
             }
-            row("Année", { draft.year?.toString() ?: "Toutes" }) { button ->
+            if (original.destination != "clip") row("Année", { draft.year?.toString() ?: "Toutes" }) { button ->
                 val years = listOf("Toutes" to "") + (facets.years + listOfNotNull(draft.year)).distinct().sortedDescending().map { it.toString() to it.toString() }
                 choose("Année", years, draft.year?.toString().orEmpty()) {
                     draft = draft.copy(year = it.toIntOrNull()); button.text = "Année · ${it.ifBlank { "Toutes" }}"
                 }
             }
-            val durations = listOf("Toutes" to "", "Moins de 90 min" to "90", "Moins de 2 h" to "120", "Moins de 3 h" to "180")
+            val durations = if (original.destination == "clip") listOf("Toutes" to "", "Moins de 1 min" to "1",
+                "Moins de 5 min" to "5", "Moins de 15 min" to "15", "Moins de 30 min" to "30")
+                else listOf("Toutes" to "", "Moins de 90 min" to "90", "Moins de 2 h" to "120", "Moins de 3 h" to "180")
             row("Durée", { durations.firstOrNull { it.second == draft.durationMaxMinutes?.toString().orEmpty() }?.first ?: "Toutes" }) { button ->
                 choose("Durée", durations, draft.durationMaxMinutes?.toString().orEmpty()) {
                     draft = draft.copy(durationMaxMinutes = it.toIntOrNull()); button.text = "Durée · ${durations.first { pair -> pair.second == it }.first}"

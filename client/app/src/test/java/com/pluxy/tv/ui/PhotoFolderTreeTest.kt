@@ -34,4 +34,11 @@ class PhotoFolderTreeTest {
         assertEquals(listOf("video"), rows.filterIsInstance<LibRow.MediaRow>().map { it.item.id })
         assertEquals(ArtworkPolicy.Aspect.LANDSCAPE, ArtworkPolicy.plan("clip").fallbackAspect)
     }
+
+    @Test fun `les photos suivent le tri choisi a l interieur du dossier`() {
+        val photos = listOf(photo("alpha", "one", "Voyage/alpha.jpg").copy(addedAt = 1.0),
+            photo("beta", "one", "Voyage/beta.jpg").copy(addedAt = 2.0))
+        val rows = PhotoFolderTree.rows(photos, query = TvLibraryContent.Query("photo", sort = "added"))
+        assertEquals(listOf("beta", "alpha"), rows.filterIsInstance<LibRow.MediaRow>().map { it.item.id })
+    }
 }

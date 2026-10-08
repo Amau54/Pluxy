@@ -1,6 +1,6 @@
-# Pluxy 1.6.1
+# Pluxy 1.6.2
 
-Lecteur et serveur Android : **version 1.6.1, versionCode 52**.
+Lecteur et serveur Android : **version 1.6.2, versionCode 53**.
 
 - Photos en arborescence : racines distinctes, sous-dossiers en cascade et images visibles par défaut. Albums et chronologie restent disponibles.
 - Films, séries et vidéos personnelles séparés. Chaque dossier du serveur PC ou Android peut être classé automatiquement ou recevoir un type choisi.

@@ -66,6 +66,8 @@ class PhotoActivity : ThemedActivity() {
     private var chromeVisible = true
     private var selectedFolder = ""
     private var selectedAlbumKey = ""
+    private var folderSort = ""
+    private var folderDescending = false
     private var collectionId = ""
     private var activityStarted = false
     private var imageDisplayed = false
@@ -113,6 +115,8 @@ class PhotoActivity : ThemedActivity() {
         photos = listOf(initial)
         selectedFolder = savedInstanceState?.getString(STATE_FOLDER) ?: intent.getStringExtra(EXTRA_FOLDER).orEmpty()
         selectedAlbumKey = savedInstanceState?.getString(STATE_ALBUM_KEY) ?: intent.getStringExtra(EXTRA_ALBUM_KEY).orEmpty()
+        folderSort = savedInstanceState?.getString(EXTRA_SORT) ?: intent.getStringExtra(EXTRA_SORT).orEmpty()
+        folderDescending = savedInstanceState?.getBoolean(EXTRA_DESCENDING) ?: intent.getBooleanExtra(EXTRA_DESCENDING, false)
         collectionId = savedInstanceState?.getString(STATE_COLLECTION_ID) ?: intent.getStringExtra(EXTRA_COLLECTION_ID).orEmpty()
         slideshowRunning = savedInstanceState?.getBoolean(STATE_SLIDESHOW) ?: false
 
@@ -166,11 +170,14 @@ class PhotoActivity : ThemedActivity() {
                     LibraryPreferences.collections(this@PhotoActivity, api.baseUrl).firstOrNull { it.id == collectionId }
                         ?.let { TvLibraryContent.collectionItems(snapshot.items, it) }.orEmpty()
                 }
-                allowed.filter { it.kind == "photo" }
+                val selected = allowed.filter { it.kind == "photo" }
                     .filter { if (selectedAlbumKey.isNotBlank()) LibraryOrganizer.photoAlbumKey(it) == selectedAlbumKey
                         else valid.isBlank() || TvLibraryContent.photoFolderLabel(it) == valid }
-                    .sortedWith(compareByDescending<MediaItem> { LibraryOrganizer.captureTime(it) ?: -1.0 }
-                        .thenByDescending { it.addedAt }) to valid
+                val ordered = if (folderSort.isNotBlank()) TvLibraryContent.sortMedia(selected,
+                    TvLibraryContent.Query("photo", sort = folderSort, descending = folderDescending))
+                    else selected.sortedWith(compareByDescending<MediaItem> { LibraryOrganizer.captureTime(it) ?: -1.0 }
+                        .thenByDescending { it.addedAt })
+                ordered to valid
             }
             selectedFolder = validFolder
             if (fresh.isNotEmpty()) {
@@ -437,6 +444,8 @@ class PhotoActivity : ThemedActivity() {
         photos.getOrNull(index)?.let { outState.putString(STATE_ITEM, moshi.adapter(MediaItem::class.java).toJson(it)) }
         outState.putString(STATE_FOLDER, selectedFolder)
         outState.putString(STATE_ALBUM_KEY, selectedAlbumKey)
+        outState.putString(EXTRA_SORT, folderSort)
+        outState.putBoolean(EXTRA_DESCENDING, folderDescending)
         outState.putString(STATE_COLLECTION_ID, collectionId)
         outState.putBoolean(STATE_SLIDESHOW, slideshowRunning)
         outState.putBoolean(STATE_CHROME, chromeVisible)
@@ -453,6 +462,8 @@ class PhotoActivity : ThemedActivity() {
     }
 
     companion object {
+        const val EXTRA_SORT = "extra_photo_folder_sort"
+        const val EXTRA_DESCENDING = "extra_photo_folder_descending"
         const val EXTRA_ITEM = "extra_photo_item_json"
         const val EXTRA_FOLDER = "extra_photo_folder"
         const val EXTRA_ALBUM_KEY = "extra_photo_album_key"

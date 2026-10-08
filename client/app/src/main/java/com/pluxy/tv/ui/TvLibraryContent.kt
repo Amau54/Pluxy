@@ -197,7 +197,7 @@ object TvLibraryContent {
 
     private fun photoRows(items: List<MediaItem>, query: Query): List<LibRow> {
         val selected = items.filter { query.photoFolder.isBlank() || photoFolderLabel(it) == query.photoFolder }
-        if (query.photoView == "folders") return PhotoFolderTree.rows(selected, query.collapsedPhotoFolders)
+        if (query.photoView == "folders") return PhotoFolderTree.rows(selected, query.collapsedPhotoFolders, query)
         if (query.photoView != "timeline") return albumRows(selected, "photo", query)
         val grouped = selected.groupBy(LibraryOrganizer::photoMonthKey).entries
         val dated = grouped.filter { entry -> entry.value.any { LibraryOrganizer.captureTime(it) != null } }.sortedWith(
@@ -256,7 +256,7 @@ object TvLibraryContent {
         else -> true
     }
 
-    private fun sortMedia(items: List<MediaItem>, query: Query): List<MediaItem> {
+    internal fun sortMedia(items: List<MediaItem>, query: Query): List<MediaItem> {
         val sorted = when (query.sort) {
             "year" -> items.sortedByDescending { it.year ?: 0 }
             "duration" -> items.sortedByDescending { it.duration }
