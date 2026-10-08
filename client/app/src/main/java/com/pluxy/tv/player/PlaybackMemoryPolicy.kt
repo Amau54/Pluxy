@@ -26,6 +26,7 @@ internal object PlaybackMemoryPolicy {
         memoryClassMb: Int,
         isTelevision: Boolean,
         isLowRamDevice: Boolean,
+        sourceBitrateBps: Long = 0L,
     ): RuntimeBuffer {
         val durationFloorMs = when {
             isLowRamDevice -> 15_000
@@ -58,11 +59,14 @@ internal object PlaybackMemoryPolicy {
             bufferForPlaybackAfterRebufferMs = requested.bufferForPlaybackAfterRebufferMs
                 .coerceIn(afterRebufferFloorMs, minBufferMs),
             targetBufferBytes = targetMb * MEBIBYTE,
-            backBufferMs = requested.backBufferMs.coerceIn(
-                0,
-                if (isLowRamDevice) 5_000 else 30_000,
-            ),
-            retainBackBufferFromKeyframe = !isLowRamDevice,
+            // La vidéo déjà lue partage le même budget que les images à venir.
+            // Réserver 30 s derrière consommait tout le tampon d'un gros fichier.
+            backBufferMs = if (isLowRamDevice) 0 else requested.backBufferMs.coerceIn(0,
+                if (sourceBitrateBps > 0L) {
+                    (targetMb * MEBIBYTE * 8.0 * 0.1 / (sourceBitrateBps * 1.5) * 1000)
+                        .toInt().coerceIn(0, 10_000)
+                } else 2_000),
+            retainBackBufferFromKeyframe = false,
         )
     }
 

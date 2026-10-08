@@ -6,7 +6,7 @@
 
 Vos films, séries, photos et musique sur la TV.
 
-**Android 1.7.6 · Windows 1.8.1**
+**Android 1.7.7 · Windows 1.8.2**
 
 [Application Android](https://github.com/Amau54/Pluxy/releases/download/dev-latest/Pluxy-debug.apk)
 · [Application PC](https://github.com/Amau54/Pluxy/releases/download/pc-latest/Pluxy-Setup.exe)
@@ -63,6 +63,9 @@ Le lecteur conserve la résolution d'origine. Le HDR et le passthrough Dolby/DTS
 dépendent également de l'écran, de la sortie Windows et de l'ampli. La sortie audio
 se choisit dans les réglages du lecteur. Maintenir gauche/droite accélère la navigation
 jusqu'à ×64 ; relâcher applique le déplacement.
+
+Sur les vidéos lourdes, le tampon privilégie les images à venir et augmente la réserve
+après une coupure réseau. En Direct Play, la qualité originale reste conservée.
 
 Pour développer le serveur depuis les sources, [Pluxy-Server.bat](Pluxy-Server.bat)
 reste disponible. L'accélération NVENC nécessite un GPU NVIDIA compatible et ses pilotes.

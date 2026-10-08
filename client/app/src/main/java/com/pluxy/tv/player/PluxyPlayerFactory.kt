@@ -41,6 +41,7 @@ object PluxyPlayerFactory {
         buffer: BufferConfig,
         baseUrl: String = PluxyApplication.serverBaseUrl(context),
         sessionId: String? = null,
+        sourceBitrateBps: Long = 0L,
         onBytesTransferred: ((Int) -> Unit)? = null,
     ): ExoPlayer {
         // ---- 1. LoadControl : tampon adapté à la mémoire réelle ------------ //
@@ -51,6 +52,7 @@ object PluxyPlayerFactory {
             memoryClassMb = activityManager.memoryClass,
             isTelevision = isTelevision(context),
             isLowRamDevice = activityManager.isLowRamDevice,
+            sourceBitrateBps = sourceBitrateBps,
         )
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(
@@ -189,7 +191,7 @@ object PluxyPlayerFactory {
         }
 
         return ExoPlayer.Builder(context, renderers)
-            .setLoadControl(loadControl)
+            .setLoadControl(AdaptiveLoadControl(loadControl, runtimeBuffer, sourceBitrateBps))
             .setMediaSourceFactory(mediaSourceFactory)
             .setTrackSelector(trackSelector)
             // Saut avant/arrière de 10 s (boutons natifs du PlayerView).

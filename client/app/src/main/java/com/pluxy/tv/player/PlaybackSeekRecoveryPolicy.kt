@@ -19,6 +19,6 @@ internal object PlaybackSeekRecoveryPolicy {
         ))
 
     fun renderedBufferStuck(elapsedMs: Long, bufferedMs: Long, direct: Boolean,
-                            recentSeek: Boolean): Boolean =
-        direct && recentSeek && elapsedMs >= 6_000L && bufferedMs >= 5_000L
+                            recentSeek: Boolean, networkLoading: Boolean = false): Boolean =
+        direct && recentSeek && !networkLoading && elapsedMs >= 6_000L && bufferedMs >= 5_000L
 }

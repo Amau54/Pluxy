@@ -32,6 +32,12 @@ namespace Pluxy {
             Check(Native.Quote("C:\\Photos de famille\\")=="\"C:\\Photos de famille\\\\\"","Arguments Windows avec espaces et antislash final");
             Check(File.Exists(Path.Combine(Native.Root,"ui","reader.js")),"Interface du lecteur présente");
             Check(SeekAcceleration.Distance(0)==10 && SeekAcceleration.Distance(12000)==1024 && SeekAcceleration.Speed(18000)=="×64","Avance progressive de dix secondes à ×64");
+            var buffering=new PlaybackBufferPolicy();
+            Check(buffering.ResumeSeconds==3 && !buffering.Observe(true,false,true),"Chargement initial et seek exclus de l'adaptation réseau");
+            buffering.Observe(false,false,false);
+            Check(buffering.Observe(true,false,false) && buffering.ResumeSeconds==6 && !buffering.Observe(true,false,false),"Une coupure augmente la réserve une seule fois");
+            for(int i=0;i<10;i++) { buffering.Observe(false,false,false); buffering.Observe(true,false,false); }
+            Check(buffering.ResumeSeconds==20,"Réserve Windows progressive et bornée");
             if(Array.IndexOf(args,"--test-bootstrap")>=0) {
                 using(var controller=new ServerController()) {
                     await controller.Start(message=>{});
@@ -52,6 +58,9 @@ namespace Pluxy {
             if(url!=null) {
                 using(var player=new MpvSession()) {
                     await player.Start(url,IntPtr.Zero,"auto",0,true);
+                    Check(Convert.ToInt64(await player.Command("get_property","demuxer-max-bytes"))==256L*1024*1024,"Cache vidéo Windows plafonné à 256 MiB");
+                    await player.Command("set_property","cache-pause-wait",buffering.ResumeSeconds);
+                    Check(Convert.ToInt32(await player.Command("get_property","cache-pause-wait"))==20,"Réserve de reprise modifiable pendant la lecture");
                     double duration=0; for(int i=0;i<60;i++) { try { duration=Convert.ToDouble(await player.Command("get_property","duration")); if(duration>0) break; } catch(IOException) { } await Task.Delay(250); }
                     Check(duration>5,"Vidéo originale ouverte par le moteur natif");
                     await player.Command("set_property","pause",true);

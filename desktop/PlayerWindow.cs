@@ -22,6 +22,9 @@ namespace Pluxy {
         private double position,duration;
         private bool dragging,ticking,ready,full,closing;
         private int ticks;
+        private readonly PlaybackBufferPolicy bufferPolicy=new PlaybackBufferPolicy();
+        private DateTime seekGraceUntil=DateTime.MinValue;
+        private bool restoreReserveAfterSeek;
         private Button pause;
         private Task saveObserver;
         private readonly string progressSession=Guid.NewGuid().ToString("N");
@@ -82,7 +85,16 @@ namespace Pluxy {
             }
             return base.ProcessCmdKey(ref message,keyData);
         }
-        private async Task Run(params object[] command) { if(!ready || closing) return; try { await mpv.Command(command); } catch(Exception error) { Native.Log(error); status.Visible=true; status.Text="La lecture a été interrompue. Fermez le lecteur et réessayez."; } }
+        private async Task Run(params object[] command) {
+            if(!ready || closing) return;
+            try {
+                if(command.Length>0 && Convert.ToString(command[0])=="seek") {
+                    seekGraceUntil=DateTime.UtcNow.AddSeconds(5); restoreReserveAfterSeek=true;
+                    await mpv.Command("set_property","cache-pause-wait",3);
+                }
+                await mpv.Command(command);
+            } catch(Exception error) { Native.Log(error); status.Visible=true; status.Text="La lecture a été interrompue. Fermez le lecteur et réessayez."; }
+        }
         private void StartSeek(int direction) { if(!ready || closing || duration<=0 || seekDirection!=0) return; seekDirection=direction; seekBase=position; seekClock.Restart(); UpdateSeek(); seekTimer.Start(); }
         private void UpdateSeek() { if(seekDirection==0) return; double delta=SeekAcceleration.Distance(seekClock.ElapsedMilliseconds)*seekDirection; seekTarget=Math.Max(0,Math.Min(duration-.25,seekBase+delta)); status.Visible=true; status.Text=(delta>0?"+":"−")+Clock(Math.Abs(delta))+" · "+SeekAcceleration.Speed(seekClock.ElapsedMilliseconds)+" · "+Clock(seekTarget); }
         private string Clock(double value) { var t=TimeSpan.FromSeconds(Math.Max(0,value)); return (t.TotalHours>=1?t.Hours.ToString("00")+":":"")+t.Minutes.ToString("00")+":"+t.Seconds.ToString("00"); }
@@ -90,9 +102,17 @@ namespace Pluxy {
             if(ticking || closing) return; ticking=true;
             try {
                 var pos=await mpv.Command("get_property","time-pos"); var dur=await mpv.Command("get_property","duration"); var paused=await mpv.Command("get_property","pause");
+                bool buffering=Convert.ToBoolean(await mpv.Command("get_property","paused-for-cache"));
+                if(bufferPolicy.Observe(buffering,Convert.ToBoolean(paused),DateTime.UtcNow<seekGraceUntil || ticks==0))
+                    await mpv.Command("set_property","cache-pause-wait",bufferPolicy.ResumeSeconds);
+                if(restoreReserveAfterSeek && !buffering && DateTime.UtcNow>=seekGraceUntil) {
+                    await mpv.Command("set_property","cache-pause-wait",bufferPolicy.ResumeSeconds);
+                    restoreReserveAfterSeek=false;
+                }
                 position=Convert.ToDouble(pos,CultureInfo.InvariantCulture); duration=Convert.ToDouble(dur,CultureInfo.InvariantCulture);
                 if(!dragging && duration>0) timeline.Value=(int)Math.Max(0,Math.Min(10000,position/duration*10000));
-                time.Text=Clock(position)+" / "+Clock(duration); pause.Text=Convert.ToBoolean(paused)?"Lire":"Pause"; if(seekDirection==0) status.Visible=false;
+                time.Text=Clock(position)+" / "+Clock(duration); pause.Text=Convert.ToBoolean(paused)?"Lire":"Pause";
+                if(seekDirection==0) { status.Visible=buffering; if(buffering) status.Text="Chargement en avance…"; }
                 if(++ticks%20==0) { try { await api.SaveProgress(server,id,position,duration,progressSession,++progressSequence); } catch(Exception error) { Native.Log(error); } }
             } catch(Exception error) { if(!closing) { Native.Log(error); status.Visible=true; status.Text="Chargement…"; } }
             finally { ticking=false; }

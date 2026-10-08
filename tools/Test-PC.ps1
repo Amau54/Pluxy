@@ -4,6 +4,8 @@ Set-StrictMode -Version Latest
 $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 if (-not $AppDirectory) { $AppDirectory = Join-Path $repo 'dist-pc\app' }
 if (-not $OutputDirectory) { $OutputDirectory = Join-Path $repo 'artifacts\desktop-tests' }
+$AppDirectory = [IO.Path]::GetFullPath($AppDirectory)
+$OutputDirectory = [IO.Path]::GetFullPath($OutputDirectory)
 New-Item -ItemType Directory -Force -Path $OutputDirectory | Out-Null
 . (Join-Path $PSScriptRoot 'PC-Launcher.ps1')
 . (Join-Path $PSScriptRoot 'Media-Runtime.ps1')

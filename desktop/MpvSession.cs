@@ -20,7 +20,7 @@ namespace Pluxy {
             var executable=Path.Combine(Native.Root,"media","mpv.exe");
             if(!File.Exists(executable)) throw new IOException("Le moteur de lecture manque. Réinstallez Pluxy.");
             var name="pluxy-"+Guid.NewGuid().ToString("N");
-            var arguments=new List<string>{"--no-config","--no-terminal","--idle=yes","--keep-open=yes","--osc=no","--input-default-bindings=no","--input-ipc-server=\\\\.\\pipe\\"+name,"--hwdec=auto-safe","--vo=gpu-next","--gpu-api=d3d11","--target-colorspace-hint=yes","--cache=yes","--demuxer-max-bytes=128MiB","--demuxer-max-back-bytes=32MiB","--volume-max=100"};
+            var arguments=new List<string>{"--no-config","--no-terminal","--idle=yes","--keep-open=yes","--osc=no","--input-default-bindings=no","--input-ipc-server=\\\\.\\pipe\\"+name,"--hwdec=auto-safe","--vo=gpu-next","--gpu-api=d3d11","--target-colorspace-hint=yes","--cache=yes","--cache-secs=120","--cache-pause=yes","--cache-pause-initial=yes","--cache-pause-wait=3","--demuxer-max-bytes=256MiB","--demuxer-max-back-bytes=16MiB","--volume-max=100"};
             if(headless) { arguments.Add("--vo=null"); arguments.Add("--ao=null"); arguments.Add("--pause=yes"); }
             else { arguments.Add("--wid="+unchecked((uint)host.ToInt64())); arguments.Add("--ao=wasapi"); }
             if(audio=="passthrough") { arguments.Add("--audio-spdif=ac3,dts,dts-hd,eac3,truehd"); arguments.Add("--audio-exclusive=yes"); }

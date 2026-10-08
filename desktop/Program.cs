@@ -15,7 +15,7 @@ using Microsoft.Web.WebView2.WinForms;
 [assembly: System.Reflection.AssemblyDescription("Lecteur et serveur multimédia Pluxy")]
 [assembly: System.Reflection.AssemblyCompany("Pluxy")]
 [assembly: System.Reflection.AssemblyProduct("Pluxy")]
-[assembly: System.Reflection.AssemblyVersion("1.8.1.0")]
+[assembly: System.Reflection.AssemblyVersion("1.8.2.0")]
 
 namespace Pluxy {
     internal static class Program {

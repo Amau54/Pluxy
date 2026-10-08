@@ -1515,7 +1515,8 @@ class PlayerActivity : ThemedActivity() {
         setLoadingVisible(true)
         val currentBytes = java.util.concurrent.atomic.AtomicLong()
         transferBytes = currentBytes
-        val exo = PluxyPlayerFactory.build(this, buffer!!, api.baseUrl, api.sessionId) {
+        val exo = PluxyPlayerFactory.build(this, buffer!!, api.baseUrl, api.sessionId,
+            sourceBitrateBps = if (isTranscode) 0L else (sourceBitrateMbps() * 1_000_000).toLong()) {
             currentBytes.addAndGet(it.toLong())
         }
         player = exo
@@ -2342,6 +2343,7 @@ class PlayerActivity : ThemedActivity() {
             if (PlaybackSeekRecoveryPolicy.renderedBufferStuck(
                     now - bufWatchStartedAtMs, p.totalBufferedDuration,
                     !isTranscode, now - lastSeekAtMs < 60_000L,
+                    networkLoading = p.isLoading,
                 ) || PlaybackBufferWatchPolicy.isStuck(
                     now - bufWatchStartedAtMs, now - bufWatchProgressAtMs, isTranscode,
                 )) { onLoadStuck(); return }
@@ -2477,6 +2479,10 @@ class PlayerActivity : ThemedActivity() {
      *  Direct Play -> « main » (HEVC/HDR plafonné) -> « compat » (1080p). Au plus bas
      *  palier, on ne fait rien (le compat 1080p tient sur n'importe quel réseau). */
     private fun maybeDownshift(learnNetworkConstraint: Boolean = true): Boolean {
+        if (activeStrategy == PlaybackStrategy.DIRECT) {
+            if (learnNetworkConstraint) warnNetworkLimitOnce()
+            return false
+        }
         if (activeStrategy != PlaybackStrategy.AUTO) return false
         val target = PlaybackPlanner.nextAdaptiveIndex(attempts, attemptIdx)
         if (target <= attemptIdx) {
@@ -2604,7 +2610,9 @@ class PlayerActivity : ThemedActivity() {
     private fun warnNetworkLimitOnce() {
         if (networkLimitWarned) return
         networkLimitWarned = true
-        val msg = if (!transcodingAvailable) {
+        val msg = if (activeStrategy == PlaybackStrategy.DIRECT) {
+            "Le débit reste insuffisant. Direct Play conservé : privilégiez Ethernet ou essayez le mode Automatique."
+        } else if (!transcodingAvailable) {
             "Le fichier reste trop lourd pour ce réseau. Un serveur PC Pluxy peut réduire le débit."
         } else {
             "Le réseau reste insuffisant au palier compatible. Vérifiez le Wi-Fi ou l'Ethernet."

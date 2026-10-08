@@ -20,7 +20,7 @@ class PlaybackMemoryPolicyTest {
         assertEquals(45_000, policy.minBufferMs)
         assertEquals(45_000, policy.maxBufferMs)
         assertEquals(16 * 1024 * 1024, policy.targetBufferBytes)
-        assertEquals(5_000, policy.backBufferMs)
+        assertEquals(0, policy.backBufferMs)
         assertFalse(policy.retainBackBufferFromKeyframe)
     }
 
@@ -36,8 +36,8 @@ class PlaybackMemoryPolicyTest {
         assertEquals(60_000, policy.minBufferMs)
         assertEquals(120_000, policy.maxBufferMs)
         assertEquals(85 * 1024 * 1024, policy.targetBufferBytes)
-        assertEquals(30_000, policy.backBufferMs)
-        assertTrue(policy.retainBackBufferFromKeyframe)
+        assertEquals(2_000, policy.backBufferMs)
+        assertFalse(policy.retainBackBufferFromKeyframe)
     }
 
     @Test
@@ -63,6 +63,16 @@ class PlaybackMemoryPolicyTest {
         )
 
         assertEquals(21 * 1024 * 1024, policy.targetBufferBytes)
+    }
+
+    @Test
+    fun `heavy video leaves at least ninety percent of its byte budget ahead`() {
+        val bitrate = 120_000_000L
+        val policy = PlaybackMemoryPolicy.resolve(requestedBuffer(), 256, true, false, bitrate)
+        val retainedBytes = policy.backBufferMs / 1000.0 * bitrate / 8 * 1.5
+        assertTrue(retainedBytes <= policy.targetBufferBytes * 0.1)
+        assertTrue(policy.backBufferMs < 500)
+        assertFalse(policy.retainBackBufferFromKeyframe)
     }
 
     private fun requestedBuffer() = BufferConfig(

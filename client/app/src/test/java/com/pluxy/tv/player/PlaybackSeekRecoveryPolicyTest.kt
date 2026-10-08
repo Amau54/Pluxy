@@ -16,6 +16,7 @@ class PlaybackSeekRecoveryPolicyTest {
         assertFalse(PlaybackSeekRecoveryPolicy.renderedBufferStuck(5_000,45_000,true,true))
         assertFalse(PlaybackSeekRecoveryPolicy.renderedBufferStuck(20_000,500,true,true))
         assertFalse(PlaybackSeekRecoveryPolicy.renderedBufferStuck(20_000,45_000,false,true))
+        assertFalse(PlaybackSeekRecoveryPolicy.renderedBufferStuck(20_000,6_000,true,true,networkLoading=true))
     }
     @Test fun `recovery is bounded and never selects a video conversion`() {
         val policy=PlaybackSeekRecoveryPolicy
