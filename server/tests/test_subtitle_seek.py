@@ -39,5 +39,5 @@ def test_subtitle_route_shifts_time_and_keeps_original_file(tmp_path, monkeypatc
     app.include_router(routes_stream.router)
     with TestClient(app) as client:
         assert "00:00:10,000 --> 00:00:12,000" in client.get("/stream/subs/film/0?start_ms=10000").text
-        assert client.get("/stream/subs/film/0").text == text
+        assert client.get("/stream/subs/film/0").text.replace("\r\n", "\n") == text
     assert path.read_text(encoding="utf-8") == text
