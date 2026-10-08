@@ -17,6 +17,7 @@ import com.pluxy.tv.PluxyApplication
 import com.pluxy.tv.R
 import com.pluxy.tv.api.PluxyApi
 import com.pluxy.tv.player.PlaybackStrategy
+import com.pluxy.tv.player.AudioOutputMode
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
@@ -136,6 +137,9 @@ class SettingsActivity : ThemedActivity() {
             playbackStrategy.description,
             showHint = true,
         ).setOnClickListener { anchor -> pickPlaybackStrategy(anchor, playbackStrategy) }
+        val output = AudioOutputMode.fromKey(PluxyApplication.audioOutputMode(this))
+        rowButton("Sortie audio", output.title, output.description, showHint = true)
+            .setOnClickListener { anchor -> pickAudioOutput(anchor) }
         val autoNext = PluxyApplication.autoPlayNextEpisode(this)
         localSwitchRow("Épisode suivant automatique", autoNext) {
             PluxyApplication.setAutoPlayNextEpisode(this, !autoNext)
@@ -349,6 +353,17 @@ class SettingsActivity : ThemedActivity() {
         outState.putString("settings_focus", currentFocus?.tag as? String)
         outState.putInt("settings_scroll", scroll.scrollY)
         super.onSaveInstanceState(outState)
+    }
+
+    private fun pickAudioOutput(anchor: View) {
+        CompactChoiceMenu.show(this, anchor, "Sortie audio",
+            AudioOutputMode.entries.map { CompactChoiceMenu.Choice(it.title, it.key, it.description) },
+            PluxyApplication.audioOutputMode(this),
+            onSelect = { value ->
+                PluxyApplication.setAudioOutputMode(this, value)
+                restoredFocusTag = anchor.tag as? String
+                render()
+            })
     }
 
     private fun pickAudioLanguage(anchor: View) {

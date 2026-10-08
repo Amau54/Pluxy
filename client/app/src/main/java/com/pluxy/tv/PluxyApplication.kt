@@ -50,6 +50,7 @@ class PluxyApplication : Application() {
         private const val KEY_AUDIO_LANG = "pref_audio_lang"
         private const val KEY_SUBS_MODE = "pref_subs_mode"   // auto | off
         private const val KEY_PLAYBACK_STRATEGY = "playback_strategy"
+        private const val KEY_AUDIO_OUTPUT_MODE = "audio_output_mode"
         private const val KEY_AUTO_PLAY_NEXT = "auto_play_next_episode"
 
         fun audioLang(ctx: Context): String =
@@ -78,6 +79,15 @@ class PluxyApplication : Application() {
 
         fun autoPlayNextEpisode(ctx: Context): Boolean =
             prefs(ctx).getBoolean(KEY_AUTO_PLAY_NEXT, true)
+
+        fun audioOutputMode(ctx: Context): String =
+            prefs(ctx).getString(KEY_AUDIO_OUTPUT_MODE, "auto")
+                ?.takeIf { it in setOf("auto", "passthrough", "compatible") } ?: "auto"
+
+        fun setAudioOutputMode(ctx: Context, value: String) {
+            if (value in setOf("auto", "passthrough", "compatible"))
+                prefs(ctx).edit().putString(KEY_AUDIO_OUTPUT_MODE, value).apply()
+        }
 
         fun setAutoPlayNextEpisode(ctx: Context, enabled: Boolean) = prefs(ctx).edit()
             .putBoolean(KEY_AUTO_PLAY_NEXT, enabled)

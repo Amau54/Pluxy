@@ -1,4 +1,5 @@
 <resources>
+    <string name="player_audio_output_action">Changer la sortie audio</string>
     <string name="app_name">Pluxy</string>
     <string name="destination_videos">Vidéos</string>
 </resources>

@@ -377,9 +377,19 @@
                 android:layout_marginTop="20dp"
                 android:nextFocusLeft="@id/btnRetryPlayback"
                 android:nextFocusRight="@id/btnRetryPlayback"
-                android:nextFocusDown="@id/btnLeavePlayback"
+                android:nextFocusDown="@id/btnAudioOutputError"
                 android:nextFocusUp="@id/btnLeavePlayback"
                 android:text="@string/player_retry_action" />
+            <Button
+                android:id="@+id/btnAudioOutputError"
+                style="@style/PlayerDeck.Action"
+                android:layout_width="match_parent"
+                android:layout_marginTop="8dp"
+                android:nextFocusLeft="@id/btnAudioOutputError"
+                android:nextFocusRight="@id/btnAudioOutputError"
+                android:nextFocusUp="@id/btnRetryPlayback"
+                android:nextFocusDown="@id/btnLeavePlayback"
+                android:text="@string/player_audio_output_action" />
             <Button
                 android:id="@+id/btnLeavePlayback"
                 style="@style/PlayerDeck.Action"
@@ -387,7 +397,7 @@
                 android:layout_marginTop="10dp"
                 android:nextFocusLeft="@id/btnLeavePlayback"
                 android:nextFocusRight="@id/btnLeavePlayback"
-                android:nextFocusUp="@id/btnRetryPlayback"
+                android:nextFocusUp="@id/btnAudioOutputError"
                 android:nextFocusDown="@id/btnRetryPlayback"
                 android:text="@string/player_leave_action" />
         </LinearLayout>

@@ -42,7 +42,10 @@ object DeviceProfile {
             screenWidth = displaySize(ctx).first,
             screenHeight = displaySize(ctx).second,
         )
-        return TvProfileStore(ctx).applyTo(detected)
+        return com.pluxy.tv.player.AudioOutputPolicy.capabilities(
+            TvProfileStore(ctx).applyTo(detected),
+            com.pluxy.tv.player.AudioOutputMode.fromKey(PluxyApplication.audioOutputMode(ctx)),
+        )
     }
 
     /**
@@ -78,7 +81,9 @@ object DeviceProfile {
         // 2) Passthrough bitstream vers l'ampli (HDMI/eARC).
         var maxCh = 2
         try {
-            val caps = AudioCapabilities.getCapabilities(ctx)
+            val attrs = androidx.media3.common.AudioAttributes.Builder()
+                .setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build()
+            val caps = AudioCapabilities.getCapabilities(ctx, attrs, null)
             fun pt(enc: Int, name: String) { if (caps.supportsEncoding(enc)) codecs.add(name) }
             pt(C.ENCODING_AC3, "ac3"); pt(C.ENCODING_E_AC3, "eac3")
             pt(C.ENCODING_E_AC3_JOC, "eac3")

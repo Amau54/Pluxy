@@ -183,8 +183,8 @@ class PluxyApi(val baseUrl: String, val sessionId: String = UUID.randomUUID().to
         withContext(Dispatchers.IO) { networkOrNull { getJson<ServerInfo>("/api/server/info") } }
 
     @OptIn(UnstableApi::class)
-    suspend fun decide(itemId: String, compatibleAudio: Boolean = false): PlaybackDecision = withContext(Dispatchers.IO) {
-        requestDecision("/api/playback/decide", itemId, compatibleAudio)
+    suspend fun decide(itemId: String, audioFallbackLevel: Int = 0, failedAudioCodec: String? = null, originalVideo: Boolean = false): PlaybackDecision = withContext(Dispatchers.IO) {
+        requestDecision("/api/playback/decide", itemId, audioFallbackLevel, failedAudioCodec, originalVideo)
     }
 
     suspend fun diagnose(itemId: String): PlaybackDecision = withContext(Dispatchers.IO) {
@@ -192,9 +192,12 @@ class PluxyApi(val baseUrl: String, val sessionId: String = UUID.randomUUID().to
     }
 
     @OptIn(UnstableApi::class)
-    private suspend fun requestDecision(path: String, itemId: String, compatibleAudio: Boolean = false): PlaybackDecision {
+    private suspend fun requestDecision(path: String, itemId: String, audioFallbackLevel: Int = 0, failedAudioCodec: String? = null, originalVideo: Boolean = false): PlaybackDecision {
         val detected = DeviceProfile.capabilities()
-        val capabilities = if (compatibleAudio) detected.copy(supportedAudioCodecs = listOf("aac"), maxAudioChannels = 2) else detected
+        val audio = com.pluxy.tv.player.AudioOutputPolicy.capabilities(detected,
+            com.pluxy.tv.player.AudioOutputMode.fromKey(PluxyApplication.audioOutputMode(PluxyApplication.instance)),
+            audioFallbackLevel, failedAudioCodec)
+        val capabilities = if (originalVideo) com.pluxy.tv.player.AudioOutputPolicy.originalVideoCapabilities(audio) else audio
         val payload = DecideRequest(itemId, capabilities)
         val json = moshi.adapter(DecideRequest::class.java).toJson(payload)
         val req = Request.Builder()

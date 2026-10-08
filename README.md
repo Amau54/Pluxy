@@ -6,7 +6,7 @@
 
 Vos films, séries, photos et musique sur la TV.
 
-**1.7.2 · Android TV et Android 6.0+**
+**1.7.3 · Android TV et Android 6.0+**
 
 [Application Android](https://github.com/Amau54/Pluxy/releases/download/dev-latest/Pluxy-debug.apk)
 · [Serveur PC](https://github.com/Amau54/Pluxy/archive/refs/heads/main.zip)
@@ -23,11 +23,18 @@ Aucun compte ni abonnement n'est nécessaire. Pluxy ne fournit pas de contenu.
 Dans le lecteur, **Réglages → Thème** propose Corail, Océan et Minuit. Le choix
 est conservé sur cet appareil et s'applique aussi aux commandes vidéo.
 
-Pour conserver le fichier 4K/HDR, choisissez **Mode de lecture → Direct Play uniquement**
-dans le lecteur. Ce mode ne réduit pas la résolution. L'appareil et sa sortie audio
-doivent accepter les formats du fichier. En mode automatique, le serveur PC peut
-adapter seulement le son en gardant la vidéo originale : le lecteur affiche alors
-« Direct Stream ». Le HDR dépend aussi des capacités de l'écran et de son décodeur.
+Pour conserver la vidéo 4K/HDR, choisissez **Mode de lecture → Vidéo originale (4K/HDR)**.
+Le lecteur ne réduit alors pas la résolution et n'accepte aucun réencodage vidéo.
+Le HDR dépend aussi de l'écran et de son décodeur.
+
+**Sortie audio** se règle séparément, dans les réglages ou le menu du lecteur.
+Automatique utilise les capacités annoncées par la sortie audio et adapte le son
+sur le serveur PC en cas d'échec, avec du surround quand il est accepté.
+Passthrough forcé tente de transmettre Dolby/DTS à l'ampli en conservant le son
+original, même si la TV annonce mal ses capacités. Audio compatible demande du
+AAC stéréo au serveur PC. Une adaptation du son avec vidéo inchangée s'affiche
+comme « Direct Stream ». La TV, la liaison et l'ampli doivent pouvoir transporter
+le format choisi ; le mode forcé ne change pas les limites physiques des ports.
 
 ## Démarrer sur PC
 

@@ -72,7 +72,36 @@ object PluxyPlayerFactory {
         // ---- 2. Renderers : MATÉRIEL d'abord, logiciel en REPLI ------------ //
         // Les décodeurs matériels restent prioritaires. Les extensions ne sont
         // disponibles que si elles sont effectivement incluses dans l'application.
-        val renderers = DefaultRenderersFactory(context)
+        val audioMode = AudioOutputMode.fromKey(PluxyApplication.audioOutputMode(context))
+        val renderers = object : DefaultRenderersFactory(context) {
+            @Suppress("DEPRECATION")
+            override fun buildAudioSink(context: Context, enableFloatOutput: Boolean, enableAudioOutputPlaybackParams: Boolean): androidx.media3.exoplayer.audio.AudioSink? {
+                if (audioMode != AudioOutputMode.PASSTHROUGH)
+                    return super.buildAudioSink(context, enableFloatOutput, enableAudioOutputPlaybackParams)
+                // With Context, Media3 ignores static capabilities. Its legacy builder
+                // without Context deliberately keeps the user-requested override.
+                return androidx.media3.exoplayer.audio.DefaultAudioSink.Builder()
+                    .setAudioCapabilities(androidx.media3.exoplayer.audio.AudioCapabilities(intArrayOf(
+                        C.ENCODING_PCM_16BIT, C.ENCODING_AC3, C.ENCODING_E_AC3, C.ENCODING_E_AC3_JOC,
+                        C.ENCODING_DTS, C.ENCODING_DTS_HD, C.ENCODING_DOLBY_TRUEHD, C.ENCODING_AC4,
+                    ), 8))
+                    .setEnableFloatOutput(enableFloatOutput)
+                    .setEnableAudioOutputPlaybackParameters(enableAudioOutputPlaybackParams)
+                    .build().also { sink ->
+                        val manager = context.getSystemService(Context.AUDIO_SERVICE) as? android.media.AudioManager
+                        val priorities = buildList {
+                            if (android.os.Build.VERSION.SDK_INT >= 31) add(android.media.AudioDeviceInfo.TYPE_HDMI_EARC)
+                            add(android.media.AudioDeviceInfo.TYPE_HDMI_ARC)
+                            add(android.media.AudioDeviceInfo.TYPE_HDMI)
+                            add(android.media.AudioDeviceInfo.TYPE_LINE_DIGITAL)
+                        }
+                        val digital = manager?.getDevices(android.media.AudioManager.GET_DEVICES_OUTPUTS)
+                            ?.filter { it.type in priorities }?.minByOrNull { priorities.indexOf(it.type) }
+                        if (digital != null) sink.setPreferredDevice(digital)
+                        com.pluxy.tv.util.Logger.log("audio", "passthrough statique Dolby/DTS, sortie préférée=${digital?.type ?: "système"}")
+                    }
+            }
+        }
             .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
             .setEnableDecoderFallback(true)
 
@@ -145,6 +174,7 @@ object PluxyPlayerFactory {
                     // tunneling : la dalle bascule en HDR via les métadonnées couleur du
                     // décodeur vers la Surface. On privilégie donc la FIABILITÉ du son.
                     .setTunnelingEnabled(false)
+                    .setConstrainAudioChannelCountToDeviceCapabilities(audioMode != AudioOutputMode.PASSTHROUGH)
                     .setPreferredVideoMimeType(MimeTypes.VIDEO_H265)
                     // Langue audio préférée = réglage utilisateur (fiche film).
                     .setPreferredAudioLanguage(

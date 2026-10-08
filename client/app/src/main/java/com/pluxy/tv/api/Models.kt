@@ -169,6 +169,10 @@ data class PlaybackDecision(
     val playable: Boolean = true,
     val severity: String = "success",
     val summary: String = "",
+    @Json(name = "video_action") val videoAction: String = "copy",
+    @Json(name = "audio_action") val audioAction: String = "copy",
+    @Json(name = "target_audio_codec") val targetAudioCodec: String? = null,
+    @Json(name = "target_audio_channels") val targetAudioChannels: Int? = null,
     @Json(name = "profile_id") val profileId: String? = null,
     @Json(name = "profile_name") val profileName: String? = null,
 )

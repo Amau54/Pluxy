@@ -20,8 +20,8 @@ enum class PlaybackStrategy(
     ),
     DIRECT(
         key = "direct",
-        title = "Direct Play uniquement",
-        description = "Conserve le fichier original, sans conversion, avec un tampon renforcé.",
+        title = "Vidéo originale (4K/HDR)",
+        description = "Aucune conversion vidéo. Le son suit le choix de sortie audio, avec un tampon renforcé.",
     ),
     COMPATIBILITY(
         key = "compatibility",
@@ -65,6 +65,7 @@ object PlaybackPlanner {
         decision: PlaybackDecision,
         transcodingAvailable: Boolean,
         supportsHevc: Boolean = true,
+        preserveAudio: Boolean = false,
     ): List<PlaybackAttempt> {
         val directUrl = "/stream/direct/$itemId"
         val mainUrl = "/stream/hls/$itemId/main/index.m3u8"
@@ -99,10 +100,15 @@ object PlaybackPlanner {
         )
 
         when (strategy) {
-            PlaybackStrategy.DIRECT -> add(rawDirect("Direct Play forcé"))
+            PlaybackStrategy.DIRECT -> {
+                if (decision.mode == "direct_stream" && preservesOriginalVideo(decision)) {
+                    add(PlaybackAttempt(decision.streamUrl, "direct", PlaybackTier.ORIGINAL,
+                        "Direct Stream · vidéo originale"))
+                } else add(rawDirect())
+            }
 
             PlaybackStrategy.COMPATIBILITY -> {
-                if (transcodingAvailable) {
+                if (transcodingAvailable && !preserveAudio) {
                     add(compatHls(adaptive = false))
                     add(
                         rawDirect("Direct Play de secours").copy(
@@ -130,7 +136,7 @@ object PlaybackPlanner {
                             },
                         ),
                     )
-                    if (transcodingAvailable && !initialIsCompat) add(compatHls())
+                    if (transcodingAvailable && !initialIsCompat && !preserveAudio) add(compatHls())
                     add(
                         rawDirect("Direct Play de secours").copy(
                             tier = PlaybackTier.EMERGENCY,
@@ -152,13 +158,17 @@ object PlaybackPlanner {
                         // Le palier principal est encodé en HEVC. Une TV H.264-only
                         // saute directement au profil compatible au lieu d'échouer.
                         if (supportsHevc) add(mainHls())
-                        add(compatHls())
+                        if (!preserveAudio) add(compatHls())
                     }
                 }
             }
         }
         return attempts
     }
+
+    fun preservesOriginalVideo(decision: PlaybackDecision): Boolean =
+        decision.videoAction == "copy" && !decision.toneMap && decision.delivery == "direct" &&
+            !decision.streamUrl.contains("/hls/") && !decision.streamUrl.endsWith(".m3u8", true)
 
     /** Prochain palier de débit inférieur, en ignorant les secours non adaptatifs. */
     fun nextAdaptiveIndex(attempts: List<PlaybackAttempt>, currentIndex: Int): Int =

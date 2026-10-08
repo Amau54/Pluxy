@@ -116,7 +116,8 @@ class PlayerActivity : ThemedActivity() {
     private lateinit var item: PluxyItem
     private val tvProfileStore by lazy { TvProfileStore(this) }
     private var forceDirectForLaunch = false
-    private var compatibleAudio = false
+    private var audioFallbackLevel = 0
+    private var failedAudioCodec: String? = null
     private var audioAdaptationPending = false
     private var startFromBeginning = false
     private var autoResume = false
@@ -257,7 +258,9 @@ class PlayerActivity : ThemedActivity() {
         if (!isFinishing && player != null) {
             Logger.log("audio", "changement de sortie audio -> recréation du lecteur (son)")
             audioRecreateTimes.addLast(SystemClock.elapsedRealtime())
-            recreatePlayer()
+            audioFallbackLevel = 0
+            failedAudioCodec = null
+            reprepareForStrategy(activeStrategy)
         }
     }
 
@@ -281,17 +284,6 @@ class PlayerActivity : ThemedActivity() {
         }
         handler.removeCallbacks(audioRecoverRunnable)
         handler.postDelayed(audioRecoverRunnable, 500)
-    }
-
-    /** Recrée le lecteur à la position fiable (récupération audio / route changée). */
-    private fun recreatePlayer() {
-        savedPositionMs = reliablePositionMs()
-        savedPlayWhenReady = player?.playWhenReady ?: savedPlayWhenReady
-        handler.removeCallbacks(bufferWatchdog)
-        cancelPendingSeek()
-        player?.release()
-        player = null
-        buildPlayer()
     }
 
     private val aspectModes = listOf(
@@ -424,6 +416,11 @@ class PlayerActivity : ThemedActivity() {
      */
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (!::controlsOverlay.isInitialized) return super.dispatchKeyEvent(event)
+        if (terminalPlaybackError && !playerChoiceMenuShowing) {
+            // Error actions use ordinary button navigation, not playback/seek shortcuts.
+            if (!playbackErrorPanel.hasFocus()) retryPlaybackButton.requestFocus()
+            return super.dispatchKeyEvent(event)
+        }
         val key = event.toPlaybackRemoteKey()
         val phase = when (event.action) {
             KeyEvent.ACTION_DOWN -> TvPlaybackKeyRouter.Phase.DOWN
@@ -544,7 +541,9 @@ class PlayerActivity : ThemedActivity() {
         subtitleChoice = restored?.subtitleChoice
         aspectIdx = (restored?.aspectIndex ?: 0).coerceIn(aspectModes.indices)
         forceDirectForLaunch = restored?.forceDirect ?: intent.getBooleanExtra(EXTRA_FORCE_DIRECT, false)
-        compatibleAudio = restored?.compatibleAudio ?: false
+        audioFallbackLevel = restored?.audioFallbackLevel?.takeIf { it > 0 }
+            ?: if (restored?.compatibleAudio == true) 2 else 0
+        failedAudioCodec = restored?.failedAudioCodec
         if (restored != null) {
             savedPositionMs = restored.positionMs.coerceAtLeast(0L)
             lastGoodPositionMs = savedPositionMs
@@ -591,7 +590,8 @@ class PlayerActivity : ThemedActivity() {
                 else player?.playWhenReady ?: savedPlayWhenReady
             outState.putString(STATE_SESSION, sessionAdapter.toJson(PlaybackSessionState(
                 item, api.baseUrl, reliablePositionMs(), playIntent, playbackSpeed,
-                subtitlesDisabled, audioChoice, subtitleChoice, aspectIdx, forceDirectForLaunch, compatibleAudio,
+                subtitlesDisabled, audioChoice, subtitleChoice, aspectIdx, forceDirectForLaunch,
+                audioFallbackLevel > 0, audioFallbackLevel, failedAudioCodec,
             )))
         }
         super.onSaveInstanceState(outState)
@@ -640,6 +640,7 @@ class PlayerActivity : ThemedActivity() {
             openMenu()
         }
         retryPlaybackButton.setOnClickListener { retryPlayback() }
+        findViewById<Button>(R.id.btnAudioOutputError).setOnClickListener { pickAudioOutput(it) }
         findViewById<Button>(R.id.btnLeavePlayback).setOnClickListener { finish() }
         playerView.setOnClickListener {
             if (controlsOverlay.visibility == View.VISIBLE) hideControls()
@@ -677,6 +678,9 @@ class PlayerActivity : ThemedActivity() {
         panel.addOnLayoutChangeListener(update)
         val television = resources.configuration.uiMode and Configuration.UI_MODE_TYPE_MASK ==
             Configuration.UI_MODE_TYPE_TELEVISION
+        for (id in listOf(R.id.btnRetryPlayback, R.id.btnAudioOutputError, R.id.btnLeavePlayback)) {
+            findViewById<Button>(id).isFocusableInTouchMode = television
+        }
         findViewById<ImageButton>(R.id.btnExitPlayback).apply {
             visibility = if (television) View.GONE else View.VISIBLE
             setOnClickListener { finish() }
@@ -1181,6 +1185,7 @@ class PlayerActivity : ThemedActivity() {
             "Vitesse" to { pickSpeed() },
             "Format de l’image" to { cycleAspect() },
             "Compatibilité de lecture" to { pickPlaybackStrategy() },
+            "Sortie audio" to { pickAudioOutput(findViewById(R.id.btnGear)) },
             getString(R.string.player_information_action) to { showDiagnostics() },
         )
         showPlayerChoices(
@@ -1225,6 +1230,19 @@ class PlayerActivity : ThemedActivity() {
             if (selected == activeStrategy) return@showPlayerChoices
             PluxyApplication.setPlaybackStrategy(this, selected.key)
             reprepareForStrategy(selected)
+        }
+    }
+
+    private fun pickAudioOutput(anchor: View) {
+        showPlayerChoices(anchor, "Sortie audio",
+            AudioOutputMode.entries.map { CompactChoiceMenu.Choice(it.title, it.key, it.description) },
+            PluxyApplication.audioOutputMode(this)) { value ->
+            PluxyApplication.setAudioOutputMode(this, value)
+            audioFallbackLevel = 0
+            failedAudioCodec = null
+            audioChoice = audioChoice?.copy(mimeType = null, channels = -1, trackId = null)
+            if (AudioOutputMode.fromKey(value) == AudioOutputMode.PASSTHROUGH) playbackSpeed = 1f
+            reprepareForStrategy(activeStrategy)
         }
     }
 
@@ -1354,10 +1372,22 @@ class PlayerActivity : ThemedActivity() {
         prepareJob = lifecycleScope.launch {
             repeat(PREPARE_ATTEMPTS) { attempt ->
                 try {
-                    val decision = if (strategy == PlaybackStrategy.DIRECT) PlaybackDecision(
+                    val audioMode = AudioOutputMode.fromKey(PluxyApplication.audioOutputMode(this@PlayerActivity))
+                    val decision = if (strategy == PlaybackStrategy.DIRECT && audioFallbackLevel == 0 && audioMode != AudioOutputMode.COMPATIBLE) PlaybackDecision(
                         mode = "direct_play", streamUrl = "/stream/direct/${item.id}", delivery = "direct",
                         reasons = listOf("Lecture du fichier original demandée, sans conversion."),
-                    ) else api.decide(item.id, compatibleAudio)
+                    ) else api.decide(item.id, audioFallbackLevel, failedAudioCodec, strategy == PlaybackStrategy.DIRECT)
+                    if (audioMode == AudioOutputMode.PASSTHROUGH &&
+                        (decision.audioAction != "copy" || strategy == PlaybackStrategy.COMPATIBILITY)) {
+                        showTerminalPlaybackError("Ce flux demande une conversion audio. Le passthrough forcé conserve le son original. " +
+                            "Choisissez une autre sortie audio ou le mode Vidéo originale.")
+                        return@launch
+                    }
+                    if (strategy == PlaybackStrategy.DIRECT && !PlaybackPlanner.preservesOriginalVideo(decision)) {
+                        showTerminalPlaybackError("Le serveur propose une conversion vidéo. Le mode Vidéo originale conserve la 4K/HDR. " +
+                            "Vérifiez les réglages de transcodage du serveur ou choisissez le mode automatique.")
+                        return@launch
+                    }
                     val runtime = api.clientRuntime()
                     val progress = ProgressOutbox.pendingResume(api.baseUrl, item.id)
                         ?: api.getProgress(item.id)
@@ -1390,6 +1420,7 @@ class PlayerActivity : ThemedActivity() {
                         decision = decision,
                         transcodingAvailable = runtime.transcodingAvailable,
                         supportsHevc = DeviceProfile.capabilities().supportsHevc,
+                        preserveAudio = audioMode == AudioOutputMode.PASSTHROUGH,
                     )
                     attemptIdx = 0
                     modeLabel = describeAttempt(attempts.first(), 0)
@@ -1704,6 +1735,7 @@ class PlayerActivity : ThemedActivity() {
             if (transcodingAvailable) "conversion disponible" else "Direct Play uniquement"
         val info = buildString {
             appendLine("Serveur : ${PluxyApplication.serverBaseUrl(this@PlayerActivity)}")
+            appendLine("Sortie audio : ${AudioOutputMode.fromKey(PluxyApplication.audioOutputMode(this@PlayerActivity)).title} · repli $audioFallbackLevel")
             appendLine("Film    : ${item.title}")
             appendLine("Choix   : ${activeStrategy.title}")
             appendLine("Moteur  : ${if (serverKind == "android") "Android" else "PC"} · $conversionLabel")
@@ -1781,9 +1813,9 @@ class PlayerActivity : ThemedActivity() {
             if (audio.isNotEmpty() && audio.none { group -> (0 until group.length).any { group.isTrackSupported(it) } }) {
                 val mime = audio.first().getTrackFormat(0).sampleMimeType
                 if (tryAudioAdaptation(mime)) return
-                if (activeStrategy == PlaybackStrategy.DIRECT || !transcodingAvailable || compatibleAudio) {
+                if (audioFallbackLevel >= 2 || !transcodingAvailable || AudioOutputMode.fromKey(PluxyApplication.audioOutputMode(this@PlayerActivity)) != AudioOutputMode.AUTO) {
                     showTerminalPlaybackError("La piste audio n'est pas prise en charge par cet appareil ou sa sortie HDMI. " +
-                        "Essayez le mode automatique sur un serveur PC, ou un autre lecteur.")
+                        "Choisissez Automatique ou Audio compatible dans Sortie audio, ou essayez un autre lecteur.")
                     return
                 }
             }
@@ -1948,13 +1980,14 @@ class PlayerActivity : ThemedActivity() {
     }
 
     private fun tryAudioAdaptation(mimeType: String?): Boolean {
-        if (attempts.getOrNull(attemptIdx)?.tier != PlaybackTier.ORIGINAL ||
-            !PlaybackFailurePolicy.canAdaptAudio(activeStrategy, transcodingAvailable, compatibleAudio, mimeType)
+        if (!AudioOutputPolicy.canAdapt(activeStrategy,
+                AudioOutputMode.fromKey(PluxyApplication.audioOutputMode(this)), transcodingAvailable, audioFallbackLevel, mimeType)
         ) return false
         val owner = player ?: return false
         val ownerItem = item.id
         val ownerApi = api
-        compatibleAudio = true
+        audioFallbackLevel++
+        failedAudioCodec = AudioOutputPolicy.codecForMime(mimeType)
         audioAdaptationPending = true
         // Keep the language choice, but don't force the failed TrueHD/DTS format again.
         audioChoice = audioChoice?.copy(mimeType = null, channels = -1, trackId = null)
@@ -1966,7 +1999,7 @@ class PlayerActivity : ThemedActivity() {
             audioAdaptationPending = false
             if (activityStarted && !isFinishing && !isDestroyed &&
                 player === owner && item.id == ownerItem && api === ownerApi
-            ) reprepareForStrategy(PlaybackStrategy.AUTO)
+            ) reprepareForStrategy(activeStrategy)
         }
         return true
     }
@@ -2127,7 +2160,8 @@ class PlayerActivity : ThemedActivity() {
         ioScope.launch { previousApi.stopHls(previousId) }
 
         item = next
-        compatibleAudio = false
+        audioFallbackLevel = 0
+        failedAudioCodec = null
         intent.putExtra(EXTRA_ITEM, itemAdapter.toJson(next))
         api = PluxyApi(serverUrl)
         progressSequence = 0L

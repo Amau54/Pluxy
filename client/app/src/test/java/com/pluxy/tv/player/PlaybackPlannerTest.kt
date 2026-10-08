@@ -8,6 +8,21 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PlaybackPlannerTest {
+    @Test fun originalVideoCanAdaptAudioWithoutAnyVideoFallback() {
+        val stream = decision("/stream/remux/film", "direct_stream").copy(audioAction = "transcode", targetAudioCodec = "eac3")
+        val plan = PlaybackPlanner.build(PlaybackStrategy.DIRECT, "film", stream, true)
+        assertEquals(listOf("/stream/remux/film"), plan.map { it.url })
+        assertEquals(-1, PlaybackPlanner.nextAdaptiveIndex(plan, 0))
+        assertFalse(PlaybackPlanner.preservesOriginalVideo(stream.copy(videoAction = "transcode")))
+        assertFalse(PlaybackPlanner.preservesOriginalVideo(stream.copy(toneMap = true)))
+    }
+
+    @Test fun passthroughPlanCannotSilentlyChooseAacCompatibility() {
+        val plan = PlaybackPlanner.build(PlaybackStrategy.AUTO, "film", decision("/stream/direct/film"), true, preserveAudio = true)
+        assertTrue(plan.none { it.tier == PlaybackTier.COMPATIBILITY })
+        assertTrue(plan.none { "/compat/" in it.url })
+    }
+
 
     @Test
     fun `auto starts direct then offers two adaptive tiers`() {

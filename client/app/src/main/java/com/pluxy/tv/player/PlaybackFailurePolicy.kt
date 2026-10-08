@@ -5,9 +5,6 @@ package com.pluxy.tv.player
 internal object PlaybackFailurePolicy {
     fun isVideoRenderer(mimeType: String?): Boolean = mimeType?.startsWith("video/") == true
 
-    fun canAdaptAudio(strategy: PlaybackStrategy, transcodingAvailable: Boolean, alreadyAdapted: Boolean, mimeType: String?): Boolean =
-        strategy == PlaybackStrategy.AUTO && transcodingAvailable && !alreadyAdapted && mimeType?.startsWith("audio/") == true
-
     fun requiresUserActionForPath(path: String?, httpStatus: Int?): Boolean =
         requiresUserAction(if (path?.startsWith("/stream/direct/") == true) "direct" else null, httpStatus)
 

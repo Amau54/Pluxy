@@ -15,6 +15,8 @@ data class PlaybackSessionState(
     val aspectIndex: Int = 0,
     val forceDirect: Boolean = false,
     val compatibleAudio: Boolean = false,
+    val audioFallbackLevel: Int = 0,
+    val failedAudioCodec: String? = null,
 )
 
 data class PlaybackTrackChoice(
