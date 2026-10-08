@@ -6,7 +6,7 @@
 
 Vos films, séries, photos et musique sur la TV.
 
-**Android 1.7.6 · Windows 1.8.0**
+**Android 1.7.6 · Windows 1.8.1**
 
 [Application Android](https://github.com/Amau54/Pluxy/releases/download/dev-latest/Pluxy-debug.apk)
 · [Application PC](https://github.com/Amau54/Pluxy/releases/download/pc-latest/Pluxy-Setup.exe)
@@ -51,6 +51,9 @@ En mode Serveur, Python, FFmpeg et les dépendances manquantes sont préparés
 automatiquement, avec une progression dans l'application. La première préparation
 nécessite Internet. Aucune fenêtre de commande ni droits administrateur ne sont requis.
 Le composant d'affichage Microsoft est aussi installé s'il manque.
+
+Si l'ancien serveur Pluxy tourne déjà, quittez-le depuis son icône près de
+l'horloge avant d'ouvrir le mode Serveur de cette version. Vos réglages sont retrouvés.
 
 Fermer la fenêtre d'un serveur démarré par Pluxy le laisse disponible près de
 l'horloge. **Quitter Pluxy** l'arrête. Vos dossiers, réglages et reprises restent

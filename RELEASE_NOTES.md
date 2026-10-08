@@ -1,4 +1,4 @@
-## Windows 1.8.0 · Android 1.7.6
+## Windows 1.8.1 · Android 1.7.6
 
 - Windows : une application unique avec choix Lecteur ou Serveur, mémorisé et modifiable dans les options.
 - Téléchargement PC : installateur graphique, raccourci et désinstallation ; le dépôt complet n'est plus nécessaire.
@@ -7,6 +7,8 @@
 - Android : reprise du rendu Dolby/DTS après déplacement, cible conservée pendant le chargement et secours temporel en copie vidéo/audio sur serveur PC.
 - Navigation : maintien gauche/droite progressif jusqu'à ×64, sans multiplier les ouvertures de flux pendant le maintien.
 - Android : Media3 1.11.1, avec les correctifs récents de navigation Matroska et de rendu.
+- Serveur PC : les flux abandonnés après un déplacement libèrent immédiatement FFmpeg et leur place réservée, pour éviter les erreurs 503 après plusieurs reprises.
+- Windows : changement de mode rafraîchi même depuis le lecteur déjà ouvert ; les flèches du clavier restent utilisables depuis les commandes vidéo.
 
 # Pluxy 1.7.5
 

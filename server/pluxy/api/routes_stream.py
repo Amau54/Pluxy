@@ -19,6 +19,7 @@ import subprocess
 import threading
 from pathlib import Path
 
+import anyio
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import (
     FileResponse,
@@ -55,6 +56,63 @@ class _LeasedSegmentResponse(FileResponse):
             await super().__call__(scope, receive, send)
         finally:
             await asyncio.to_thread(self.vod.release_segment, self.segment_path)
+
+
+class _RemuxResponse(StreamingResponse):
+    """Un flux interrompu libère son processus et sa place, même sans premier octet."""
+    def __init__(self, proc, slots, start_ms: int):
+        self.proc = proc
+        self.slots = slots
+        self._closed = False
+        self._close_lock = threading.Lock()
+        super().__init__(self._pump(), media_type="video/x-matroska",
+                         headers={"Accept-Ranges": "none", "X-Pluxy-Start-Ms": str(start_ms)})
+
+    def _close(self):
+        with self._close_lock:
+            if self._closed:
+                return
+            self._closed = True
+            try:
+                if self.proc.poll() is None:
+                    self.proc.terminate()
+                    try:
+                        self.proc.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        self.proc.kill()
+                        try:
+                            self.proc.wait(timeout=2)
+                        except subprocess.TimeoutExpired:
+                            pass
+            except OSError:
+                # Un handle déjà fermé ne doit pas garder le quota réservé.
+                pass
+            finally:
+                try:
+                    self.proc.stdout.close()
+                finally:
+                    self.slots.release()
+
+    async def _cleanup(self):
+        with anyio.CancelScope(shield=True):
+            await asyncio.to_thread(self._close)
+
+    async def _pump(self):
+        try:
+            while not self._closed:
+                data = await asyncio.to_thread(self.proc.stdout.read, 256 * 1024)
+                if not data:
+                    break
+                yield data
+        finally:
+            await self._cleanup()
+
+    async def __call__(self, scope, receive, send):
+        try:
+            await super().__call__(scope, receive, send)
+        finally:
+            await self._cleanup()
+            await self.body_iterator.aclose()
 
 
 def _parse_range(value: str, file_size: int) -> tuple[int, int]:
@@ -299,33 +357,7 @@ def stream_remux(item_id: str, request: Request,
         st.remux_slots.release()
         raise
 
-    def pump(chunk: int = 256 * 1024):
-        try:
-            while True:
-                data = proc.stdout.read(chunk)
-                if not data:
-                    break
-                yield data
-        finally:
-            # Nettoyage complet : terminate -> wait -> kill de secours -> close.
-            if proc.poll() is None:
-                proc.terminate()
-                try:
-                    proc.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    proc.kill()
-                    try:
-                        proc.wait(timeout=2)
-                    except subprocess.TimeoutExpired:
-                        pass
-            try:
-                proc.stdout.close()
-            except Exception:
-                pass
-            st.remux_slots.release()
-
-    return StreamingResponse(pump(), media_type="video/x-matroska",
-                             headers={"Accept-Ranges": "none", "X-Pluxy-Start-Ms": str(start_ms)})
+    return _RemuxResponse(proc, st.remux_slots, start_ms)
 
 
 # --------------------------------------------------------------------------- #
