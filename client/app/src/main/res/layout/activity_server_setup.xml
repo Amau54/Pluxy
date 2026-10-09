@@ -106,5 +106,10 @@
             style="@style/Btn.Primary"
             android:layout_marginTop="10dp"
             android:text="@string/action_connect" />
+        <Button
+            android:id="@+id/setupChangeMode"
+            style="@style/Btn.Secondary"
+            android:layout_marginTop="18dp"
+            android:text="Changer de mode · Lecteur / Serveur" />
     </LinearLayout>
 </ScrollView>

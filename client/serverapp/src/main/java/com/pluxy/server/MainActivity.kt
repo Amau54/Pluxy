@@ -165,8 +165,9 @@ class MainActivity : AppCompatActivity() {
         }
 
         findViewById<Button>(R.id.changeApplicationMode).setOnClickListener {
-            packageManager.getLaunchIntentForPackage(packageName)?.let {
-                startActivity(it.putExtra(ApplicationMode.EXTRA_CHOOSE_MODE, true))
+            packageManager.getLaunchIntentForPackage(packageName)?.component?.let { launcher ->
+                startActivity(Intent().setComponent(launcher)
+                    .putExtra(ApplicationMode.EXTRA_CHOOSE_MODE, true))
             }
         }
         optionsToggle.setOnClickListener {

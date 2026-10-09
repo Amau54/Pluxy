@@ -2,9 +2,10 @@
 'use strict';
 const $ = id => document.getElementById(id);
 const pending = new Map();
-let sequence = 0, prefs = {}, connection = null, kind = 'movie', items = [], next = null, revision = '', generation = 0;
+let sequence = 0, prefs = {}, connection = null, kind = 'home', items = [], next = null, revision = '', generation = 0;
 let reconnecting = false, toastTimer, searchTimer, slideTimer, photos = [], photoIndex = 0, groups = [];
-const labels = {movie: 'Films', series: 'Séries', clip: 'Vidéos', photo: 'Photos', audio: 'Musique'};
+let fullscreen = false;
+const labels = {home: 'Accueil', movie: 'Films', series: 'Séries', clip: 'Vidéos', photo: 'Photos', audio: 'Musique'};
 const iconNames = {movie: 'film', series: 'series', clip: 'play', photo: 'photos', audio: 'music'};
 function call(method, args = {}) {
   return new Promise((resolve, reject) => {
@@ -15,6 +16,11 @@ function call(method, args = {}) {
   });
 }
 window.chrome.webview.addEventListener('message', ({data}) => {
+  if (data.eventName === 'fullscreen') {
+    fullscreen=Boolean(data.data); prefs.fullscreen=fullscreen; $('fullscreen').setAttribute('aria-pressed',fullscreen);
+    $('fullscreen').setAttribute('aria-label',fullscreen?'Quitter le plein écran':'Plein écran');
+    $('fullscreen').title=fullscreen?'Quitter le plein écran · Échap':'Plein écran · F11'; return;
+  }
   if (data.eventName === 'status') { $('loading-text').textContent = data.data; return; }
   if (data.eventName === 'progressUpdated') { if (prefs.mode === 'reader') load(); return; }
   const task = pending.get(data.id); if (!task) return;
@@ -43,6 +49,8 @@ function title(item) { return item.metadata_title || item.title || 'Sans titre';
 function minutes(item) { return item.duration ? Math.round(item.duration / 60) + ' min' : ''; }
 function folded(value) { return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); }
 function applyPreferences() {
+  fullscreen=Boolean(prefs.fullscreen);
+  $('fullscreen').setAttribute('aria-pressed',fullscreen);
   document.documentElement.dataset.theme = ['coral','ocean','midnight'].includes(prefs.theme) ? prefs.theme : 'coral';
   $('theme').value = prefs.theme || 'coral'; $('audio').value = prefs.audio || 'auto';
 }
@@ -81,13 +89,32 @@ async function discover(automatic = false) {
   } catch (error) { $('connection-status').textContent = error.message; showDialog('connection'); }
   finally { reconnecting = false; }
 }
-function filters() { return {kind, q: $('search').value.trim(), genre: $('genre').value, sort: $('sort').value, descending: $('sort').value !== 'title'}; }
+function filters() { return {kind: kind === 'home' ? 'all' : kind, q: $('search').value.trim(), genre: $('genre').value, watched: $('watched').value, resolution: $('resolution').value, sort: $('sort').value, descending: $('sort').value !== 'title'}; }
+function updateToolbar() {
+  const home = kind === 'home' && !$('search').value.trim();
+  hidden('library-toolbar',home); hidden('photo-commands',kind !== 'photo');
+  const video = !['photo','audio'].includes(kind);
+  $('watched').hidden = !video; $('resolution').hidden = !video; $('genre').hidden = !video || kind === 'home';
+  $('section-label').textContent = kind === 'home' ? 'VOTRE MÉDIATHÈQUE' : 'BIBLIOTHÈQUE';
+  $('heading').textContent = kind === 'home' && !home ? 'Résultats de recherche' : labels[kind];
+  hidden('clear-filters',!$('search').value && !$('genre').value && $('watched').value === 'all' && $('resolution').value === 'all');
+}
+function skeleton() {
+  const grid = node('div','media-grid skeleton'); grid.setAttribute('aria-label','Chargement de la bibliothèque');
+  for (let i=0;i<12;i++) { const e=node('div','skeleton-card'); e.append(node('div','poster'),node('div','skeleton-line')); grid.append(e); }
+  return grid;
+}
 async function load(append = false, retry = true) {
+  updateToolbar();
   if (!connection) { $('content').replaceChildren(node('p','empty','Choisissez un serveur pour ouvrir votre bibliothèque.')); return; }
   const version = ++generation; const selectedKind = kind; const query = filters();
-  if (!append) { items = []; next = null; revision = ''; $('content').replaceChildren(node('p','empty','Chargement de la bibliothèque…')); }
+  if (!append) { items = []; next = null; revision = ''; $('content').replaceChildren(skeleton()); }
   hidden('more', true);
   try {
+    if (selectedKind === 'home' && !query.q) {
+      const home = await call('home'); if (version !== generation) return;
+      items = home.items || []; renderHome(home.counts || {}); return;
+    }
     let page = await call('page', {...query, offset: append ? next : 0, revision: append ? revision : ''});
     if (version !== generation) return;
     items = append ? [...items, ...page.items] : page.items; revision = page.revision; next = page.next_offset;
@@ -102,7 +129,7 @@ async function load(append = false, retry = true) {
     if (version !== generation) return;
     $('count').textContent = page.total + (selectedKind === 'series' ? ' épisodes' : selectedKind === 'photo' ? ' photos' : ' éléments');
     render(); hidden('more', next == null);
-    if (!append) {
+    if (!append && selectedKind !== 'home') {
       const facets = await call('facets', {kind: selectedKind});
       if (version !== generation) return;
       const value = $('genre').value; $('genre').replaceChildren(new Option('Tous les genres', ''), ...(facets.genres || []).map(g => new Option(g, g))); $('genre').value = value;
@@ -117,21 +144,60 @@ async function load(append = false, retry = true) {
 }
 function card(item, action, subtitle) {
   const e = button('', action, 'media-card');
+  e.classList.toggle('is-watched',Boolean(item.watched));
   const poster = node('div','poster'); poster.append(icon(iconNames[item.kind] || 'film'), image(item));
   const quality = [item.width >= 3840 || item.height >= 2160 ? '4K' : '', item.is_hdr ? 'HDR' : ''].filter(Boolean).join(' · ');
   if (quality) poster.append(node('span','quality',quality));
   if (item.watched) poster.append(node('span','watched','Vu'));
+  const hover = node('span','card-play'); hover.append(icon(item.kind === 'photo' ? 'photos' : 'play')); poster.append(hover);
+  if (item.in_progress && item.duration > 0) {
+    const progress=node('progress','watch-progress'); progress.max=1; progress.value=Math.max(0,Math.min(1,item.progress || 0)); progress.setAttribute('aria-label','Progression de lecture'); poster.append(progress);
+  }
   e.append(poster, node('strong','media-title',title(item)), node('span','media-subtitle',subtitle == null ? [item.year, minutes(item)].filter(Boolean).join(' · ') : subtitle));
   e.title = title(item); return e;
 }
 function render() {
   hidden('photo-commands', kind !== 'photo'); $('genre').hidden = kind === 'photo' || kind === 'audio';
-  if (!items.length) { $('content').replaceChildren(node('p','empty',$('search').value ? 'Aucun résultat pour cette recherche.' : 'Cette rubrique est vide. Ajoutez des dossiers dans le serveur.')); return; }
+  if (!items.length) { const empty=node('div','empty'); empty.append(icon(iconNames[kind] || 'search'),node('h2','',$('search').value ? 'Aucun résultat' : 'Aucun média à afficher'),node('p','', $('search').value || $('genre').value || $('watched').value !== 'all' || $('resolution').value !== 'all' ? 'Essayez un autre filtre ou une recherche plus courte.' : 'Ajoutez un dossier dans les options de votre serveur.')); if (!$('clear-filters').classList.contains('hidden')) empty.append(button('Effacer les filtres',resetFilters,'primary')); $('content').replaceChildren(empty); return; }
   if (kind === 'photo') { renderPhotos(); return; }
   if (kind === 'series') { renderSeries(); return; }
   if (kind === 'audio') { renderMusic(); return; }
   const grid = node('div', 'media-grid ' + (kind === 'clip' ? 'clips' : ''));
-  grid.append(...items.map(item => card(item, () => kind === 'clip' ? play(item) : showMovie(item)))); $('content').replaceChildren(grid);
+  grid.append(...items.map(item => card(item, () => openItem(item)))); $('content').replaceChildren(grid);
+}
+function openItem(item) {
+  if (item.kind === 'photo') { if (kind !== 'photo') groups = [items.filter(e=>e.kind === 'photo')]; openPhoto(item); }
+  else if (item.kind === 'clip' || item.kind === 'audio') play(item);
+  else if (item.kind === 'series') showSeries(items.filter(e=>e.kind === 'series' && seriesKey(e) === seriesKey(item)));
+  else showMovie(item);
+}
+function renderHome(counts) {
+  $('count').textContent = 'Vos médias, à portée de main';
+  const content=$('content'); content.replaceChildren();
+  if (!items.length) { render(); return; }
+  const recent=(a,b)=>(b.added_at || 0)-(a.added_at || 0);
+  const started=items.filter(e=>e.in_progress && !e.watched).sort((a,b)=>(b.last_played_at || 0)-(a.last_played_at || 0)).slice(0,12);
+  function shelf(name,values,target,landscape=false) {
+    if (!values.length) return;
+    const section=node('section','shelf'), header=node('div','shelf-heading'); header.append(node('h2','',name));
+    if(target) header.append(button('Tout voir',()=>selectKind(target),'text-button'));
+    const grid=node('div','shelf-items'+(landscape?' landscape':''));
+    grid.append(...values.map(e=>card(e,()=>landscape?play(e):openItem(e),e.kind==='series'?'S'+(e.season || 0)+' · E'+(e.episode || 0)+(landscape?' · '+title(e):''):undefined)));
+    section.append(header,grid); content.append(section);
+  }
+  shelf('Continuer à regarder',started,null,true);
+  shelf('Films récemment ajoutés',items.filter(e=>e.kind==='movie').sort(recent).slice(0,20),'movie');
+  const series=new Map(); for(const item of items.filter(e=>e.kind==='series').sort(recent)) if(!series.has(seriesKey(item))) series.set(seriesKey(item),{...item,metadata_title:item.series_name || title(item)});
+  shelf('Vos séries', [...series.values()].slice(0,20),'series');
+  const shortcuts=node('div','home-shortcuts');
+  for (const type of ['clip','photo','audio']) { const e=button('',()=>selectKind(type),'home-shortcut'); e.append(icon(iconNames[type]),node('strong','',labels[type]),node('span','muted',(counts[type] || 0)+' éléments'),icon('chevron')); shortcuts.append(e); }
+  content.append(shortcuts);
+}
+function resetFilters() { $('genre').value=''; $('search').value=''; $('watched').value='all'; $('resolution').value='all'; load(); }
+function selectKind(value) {
+  kind=value; $('genre').value=''; $('search').value=''; $('watched').value='all'; $('resolution').value='all';
+  document.querySelectorAll('[data-kind]').forEach(b=>{ b.classList.toggle('active',b.dataset.kind===kind); if(b.dataset.kind===kind) b.setAttribute('aria-current','page'); else b.removeAttribute('aria-current'); });
+  window.scrollTo(0,0); load();
 }
 async function play(item, resume = true) {
   try {
@@ -232,14 +298,27 @@ function stepFolder(delta) {
 function stopSlideshow() { clearInterval(slideTimer); slideTimer = null; $('slideshow').textContent = 'Diaporama'; }
 document.querySelectorAll('[data-mode]').forEach(e => e.addEventListener('click',() => chooseMode(e.dataset.mode)));
 document.querySelectorAll('[data-kind]').forEach(e => e.addEventListener('click',() => {
-  kind = e.dataset.kind; $('heading').textContent = labels[kind]; $('genre').value = ''; $('search').value = '';
-  document.querySelectorAll('[data-kind]').forEach(b => b.classList.toggle('active',b === e)); load();
+  selectKind(e.dataset.kind);
 }));
-document.querySelector('[data-kind="movie"]').classList.add('active');
+document.querySelector('[data-kind="home"]').classList.add('active');
 $('connect-manual').addEventListener('submit',async event => { event.preventDefault(); try { await connect($('address').value); } catch (error) { $('connection-status').textContent = error.message; } });
 $('server-choice').addEventListener('click',() => { showDialog('connection'); discover(); }); $('discover').addEventListener('click',() => discover());
 $('more').addEventListener('click',() => load(true)); $('refresh').addEventListener('click',() => load());
-['genre','sort'].forEach(id => $(id).addEventListener('change',() => load()));
+['genre','sort','watched','resolution'].forEach(id => $(id).addEventListener('change',() => load()));
+$('clear-filters').addEventListener('click',resetFilters);
+$('fullscreen').addEventListener('click',()=>call('fullscreen').catch(fail));
+document.addEventListener('keydown',event=>{
+  if(event.key==='F11') { event.preventDefault(); call('fullscreen').catch(fail); }
+  else if(event.key==='Escape' && fullscreen && !document.querySelector('dialog[open]')) { event.preventDefault(); call('fullscreen',{enabled:false}).catch(fail); }
+});
+function setView(value) {
+  document.documentElement.dataset.view=value;
+  $('view-grid').setAttribute('aria-pressed',value==='grid'); $('view-list').setAttribute('aria-pressed',value==='list');
+  try { localStorage.setItem('library-view',value); } catch (_) { }
+}
+$('view-grid').addEventListener('click',()=>setView('grid')); $('view-list').addEventListener('click',()=>setView('list'));
+try { setView(localStorage.getItem('library-view')==='list'?'list':'grid'); } catch (_) { setView('grid'); }
+document.addEventListener('keydown',event=>{ if((event.ctrlKey || event.metaKey) && event.key.toLowerCase()==='k') { event.preventDefault(); $('search').focus(); } });
 $('search').addEventListener('input',() => { clearTimeout(searchTimer); searchTimer = setTimeout(() => load(),250); });
 $('preferences').addEventListener('click',() => showDialog('settings'));
 ['theme','audio'].forEach(id => $(id).addEventListener('change',async () => { try { await call('preferences',{theme:$('theme').value,audio:$('audio').value}); prefs.theme = $('theme').value; prefs.audio = $('audio').value; applyPreferences(); } catch (error) { fail(error); } }));

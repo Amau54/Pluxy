@@ -15,7 +15,7 @@ using Microsoft.Web.WebView2.WinForms;
 [assembly: System.Reflection.AssemblyDescription("Lecteur et serveur multimédia Pluxy")]
 [assembly: System.Reflection.AssemblyCompany("Pluxy")]
 [assembly: System.Reflection.AssemblyProduct("Pluxy")]
-[assembly: System.Reflection.AssemblyVersion("1.8.5.0")]
+[assembly: System.Reflection.AssemblyVersion("1.8.6.0")]
 
 namespace Pluxy {
     internal static class Program {
@@ -37,6 +37,7 @@ namespace Pluxy {
     internal sealed class MainWindow : Form {
         private const string Origin="https://pluxy.app/";
         private readonly WebView2 browser=new WebView2 { Dock=DockStyle.Fill,DefaultBackgroundColor=Color.FromArgb(11,15,22) };
+        private readonly Panel header=new Panel { Dock=DockStyle.Top,Height=36,BackColor=Color.FromArgb(23,24,29) };
         private readonly Preferences prefs=Preferences.Load();
         private readonly LibraryClient api=new LibraryClient();
         private readonly ServerController server=new ServerController();
@@ -46,6 +47,9 @@ namespace Pluxy {
         private bool quitting,choosing,busy,started,balloon,background,shutdownComplete,shuttingDown;
         private Task showSignal;
         private readonly string screenshot;
+        private bool fullscreen;
+        private Rectangle restoreBounds;
+        private FormWindowState restoreState;
         private readonly Label modeLabel=new Label { Dock=DockStyle.Left,Width=230,TextAlign=ContentAlignment.MiddleLeft,Padding=new Padding(16,0,0,0),ForeColor=Color.FromArgb(180,193,213),Text="Pluxy",Font=new Font("Segoe UI",10) };
         public MainWindow(string[] args) {
             Text="Pluxy"; Size=new Size(1280,860); MinimumSize=new Size(860,620); BackColor=Color.FromArgb(11,15,22); StartPosition=FormStartPosition.CenterScreen;
@@ -53,7 +57,7 @@ namespace Pluxy {
             background=args.Contains("--background");
             int shot=Array.IndexOf(args,"--screenshot"); if(shot>=0 && shot+1<args.Length) screenshot=args[shot+1];
             if(args.Contains("--server")) { prefs.mode="server"; prefs.Save(); }
-            var header=new Panel { Dock=DockStyle.Top,Height=43,BackColor=Color.FromArgb(17,23,32) };
+            header.Visible=prefs.mode=="server";
             var menu=Native.Button("Options",(s,e)=>Options()); menu.Dock=DockStyle.Right; menu.Width=110;
             header.Controls.Add(modeLabel); header.Controls.Add(menu); Controls.Add(browser); Controls.Add(header);
             if(screenshot!=null) { StartPosition=FormStartPosition.Manual; Location=new Point(-30000,-30000); }
@@ -123,20 +127,38 @@ namespace Pluxy {
         }
         private void Options() {
             var menu=new ContextMenuStrip(); menu.Items.Add("Changer de mode…",null,(s,e)=>ChooseMode());
+            menu.Items.Add(fullscreen?"Quitter le plein écran":"Plein écran · F11",null,(s,e)=>ToggleFullscreen());
             menu.Items.Add("Afficher le dossier des réglages",null,(s,e)=> { Directory.CreateDirectory(Native.Data); Process.Start(new ProcessStartInfo(Native.Data) { UseShellExecute=true }); });
             menu.Items.Add("Quitter Pluxy",null,(s,e)=>Quit()); menu.Show(Cursor.Position);
         }
         private void Event(string name,object data) { if(browser.CoreWebView2!=null && !quitting) browser.CoreWebView2.PostWebMessageAsJson(Native.Json.Serialize(new{eventName=name,data=data})); }
+        private void ToggleFullscreen() {
+            if(!fullscreen) {
+                restoreBounds=WindowState==FormWindowState.Normal?Bounds:RestoreBounds; restoreState=WindowState;
+                fullscreen=true; WindowState=FormWindowState.Normal; FormBorderStyle=FormBorderStyle.None; Bounds=Screen.FromControl(this).Bounds;
+            } else {
+                fullscreen=false; FormBorderStyle=FormBorderStyle.Sizable; Bounds=restoreBounds; WindowState=restoreState;
+            }
+            Event("fullscreen",fullscreen);
+        }
+        protected override void WndProc(ref System.Windows.Forms.Message message) {
+            if(message.Msg==0x112 && (message.WParam.ToInt64()&0xFFF0)==0xF030) { if(!fullscreen) ToggleFullscreen(); return; }
+            base.WndProc(ref message);
+        }
+        protected override bool ProcessCmdKey(ref System.Windows.Forms.Message message,Keys keyData) {
+            if(keyData==Keys.F11 || keyData==Keys.Escape && fullscreen) { ToggleFullscreen(); return true; }
+            return base.ProcessCmdKey(ref message,keyData);
+        }
         private async Task ChangeMode(string mode) {
             if(mode!="reader" && mode!="server") throw new ArgumentException("Choisissez Lecteur ou Serveur.");
             if(busy) throw new IOException("La préparation est déjà en cours."); busy=true;
             try {
                 if(mode=="server") {
                     await server.Start(message=> { modeLabel.Text="Pluxy · Préparation"; Event("status",message); });
-                    prefs.mode="server"; prefs.Save(); choosing=false; modeLabel.Text="Pluxy · Serveur"; browser.Source=new Uri(server.Address);
+                    prefs.mode="server"; prefs.Save(); choosing=false; header.Visible=true; modeLabel.Text="Pluxy · Serveur"; browser.Source=new Uri(server.Address);
                 } else {
                     foreach(var player in players.ToArray()) player.Close();
-                    await Task.Run(()=>server.Stop()); prefs.mode="reader"; prefs.Save(); choosing=false; modeLabel.Text="Pluxy · Lecteur";
+                    await Task.Run(()=>server.Stop()); prefs.mode="reader"; prefs.Save(); choosing=false; header.Visible=false; modeLabel.Text="Pluxy · Lecteur";
                     if(browser.Source==null || browser.Source.Host!="pluxy.app") browser.Source=new Uri(Origin+"index.html");
                 }
             } finally { busy=false; }
@@ -148,7 +170,8 @@ namespace Pluxy {
                 if(message.WebMessageAsJson.Length>1024*1024) return;
                 var payload=Native.Object(Native.Json.DeserializeObject(message.WebMessageAsJson)); id=Native.Text(payload,"id");
                 var method=Native.Text(payload,"method"); var args=Native.Object(payload.ContainsKey("args")?payload["args"]:null); object result;
-                if(method=="state") result=new{mode=choosing?"":prefs.mode,server=prefs.server,serverName=prefs.serverName,theme=prefs.theme,audio=prefs.audio,busy=busy};
+                if(method=="state") result=new{mode=choosing?"":prefs.mode,server=prefs.server,serverName=prefs.serverName,theme=prefs.theme,audio=prefs.audio,busy=busy,fullscreen=fullscreen};
+                else if(method=="fullscreen") { if(!args.ContainsKey("enabled") || Convert.ToBoolean(args["enabled"])!=fullscreen) ToggleFullscreen(); result=fullscreen; }
                 else if(method=="chooseMode") { ChooseMode(); result=true; }
                 else if(method=="mode") { await ChangeMode(Native.Text(args,"mode")); result=new{mode=prefs.mode}; }
                 else if(method=="connect") {

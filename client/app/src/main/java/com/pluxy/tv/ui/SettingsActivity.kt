@@ -101,7 +101,7 @@ class SettingsActivity : ThemedActivity() {
         statusView.text = if (configured) "Serveur configuré" else "Aucun serveur configuré"
 
         section("Application")
-        rowButton("Mode de l’application", "Lecteur", "Lire vos médias ou partager ceux de cet appareil.")
+        rowButton("Mode de l’application", "Lecteur ›", "Choisir Lecteur ou Serveur pour cet appareil.", showHint = true)
             .setOnClickListener { startActivity(Intent(this, ModeActivity::class.java)
                 .putExtra(com.pluxy.server.ApplicationMode.EXTRA_CHOOSE_MODE, true)) }
 

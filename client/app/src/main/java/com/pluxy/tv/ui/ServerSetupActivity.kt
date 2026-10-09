@@ -47,6 +47,10 @@ class ServerSetupActivity : ThemedActivity() {
 
         findViewById<Button>(R.id.rescan).setOnClickListener { runDiscovery() }
         findViewById<Button>(R.id.connectManual).setOnClickListener { connectManual() }
+        findViewById<Button>(R.id.setupChangeMode).setOnClickListener {
+            startActivity(android.content.Intent(this, ModeActivity::class.java)
+                .putExtra(com.pluxy.server.ApplicationMode.EXTRA_CHOOSE_MODE, true))
+        }
         findViewById<android.widget.EditText>(R.id.manualIp).setOnEditorActionListener { input, action, _ ->
             if (action == EditorInfo.IME_ACTION_GO || action == EditorInfo.IME_ACTION_DONE) {
                 (getSystemService(INPUT_METHOD_SERVICE) as? InputMethodManager)
