@@ -8,6 +8,8 @@ try {
     if (-not $env:LOCALAPPDATA) { throw 'Le dossier du compte Windows est introuvable.' }
     $server = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\server'))
     $runtime = Join-Path $env:LOCALAPPDATA 'Programs\Pluxy\Python314'
+    $dataBase = if ($env:PLUXY_DATA_DIR) { $env:PLUXY_DATA_DIR } else { $env:LOCALAPPDATA }
+    $environment = Join-Path $dataBase 'Pluxy\PythonEnv'
     # Copies in different folders share one Python runtime; lock that too.
     $hash = [Security.Cryptography.SHA256]::Create()
     try { $id = [BitConverter]::ToString($hash.ComputeHash([Text.Encoding]::UTF8.GetBytes($runtime.ToLowerInvariant()))).Replace('-', '') }
@@ -26,7 +28,7 @@ try {
         }
     }
     Write-Host '[Pluxy] Verification du serveur PC...'
-    $python = Initialize-PCEnvironment -ServerDirectory $server -RuntimeDirectory $runtime
+    $python = Initialize-PCEnvironment -ServerDirectory $server -RuntimeDirectory $runtime -EnvironmentDirectory $environment
     . (Join-Path $PSScriptRoot 'Media-Runtime.ps1')
     Initialize-PCMediaRuntime | Out-Null
     if ($PrepareOnly) { [pscustomobject]@{ Ready = $true; Python = $python } | ConvertTo-Json -Compress }

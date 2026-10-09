@@ -1,4 +1,4 @@
-param([string]$AppDirectory, [string]$OutputDirectory)
+param([string]$AppDirectory, [string]$OutputDirectory, [switch]$InstallFromSetup)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
@@ -9,6 +9,23 @@ $OutputDirectory = [IO.Path]::GetFullPath($OutputDirectory)
 New-Item -ItemType Directory -Force -Path $OutputDirectory | Out-Null
 . (Join-Path $PSScriptRoot 'PC-Launcher.ps1')
 . (Join-Path $PSScriptRoot 'Media-Runtime.ps1')
+if ($InstallFromSetup) {
+    $installer = Join-Path (Split-Path $AppDirectory -Parent) 'Pluxy-Setup.exe'
+    $installed = Join-Path $env:ProgramW6432 'Pluxy'
+    if (Test-Path -LiteralPath $installed) { throw 'Le test doit utiliser un PC sans installation Pluxy existante.' }
+    $result = Invoke-PCNative -FilePath $installer -Arguments @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/LOG=$(Join-Path $OutputDirectory 'install.log')") -TimeoutSeconds 180
+    if ($result.Code -ne 0 -or -not (Test-Path -LiteralPath (Join-Path $installed 'Pluxy.exe'))) { throw 'Installation dans Program Files impossible.' }
+    try {
+        & $PSCommandPath -AppDirectory $installed -OutputDirectory $OutputDirectory
+        if (Test-Path -LiteralPath (Join-Path $installed 'server\.venv')) { throw 'Python ne doit pas être créé dans Program Files.' }
+        if (-not (Test-Path -LiteralPath (Join-Path $OutputDirectory 'server-data\Pluxy\PythonEnv\Scripts\python.exe'))) { throw 'Environnement Python absent des données utilisateur.' }
+        Write-Output 'Installation dans Program Files et environnement Python séparé vérifiés'
+    } finally {
+        $uninstalled = Invoke-PCNative -FilePath (Join-Path $installed 'unins000.exe') -Arguments @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART') -TimeoutSeconds 120
+        if ($uninstalled.Code -ne 0 -or (Test-Path -LiteralPath (Join-Path $installed 'Pluxy.exe'))) { throw 'Désinstallation du paquet de test impossible.' }
+    }
+    return
+}
 $exe = Join-Path $AppDirectory 'Pluxy.exe'
 $binary = [IO.File]::ReadAllBytes($exe)
 $pe = [BitConverter]::ToInt32($binary,60)

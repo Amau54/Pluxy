@@ -1,14 +1,15 @@
-#define AppVersion "1.8.3"
+#define AppVersion "1.8.4"
 [Setup]
 AppId={{42602BFC-1295-4EA4-B419-808A2A4D09C0}
 AppName=Pluxy
 AppVersion={#AppVersion}
 AppPublisher=Pluxy
 AppPublisherURL=https://github.com/Amau54/Pluxy
-DefaultDirName={localappdata}\Programs\Pluxy\App
+DefaultDirName={autopf}\Pluxy
+DisableDirPage=no
 DefaultGroupName=Pluxy
 DisableProgramGroupPage=yes
-PrivilegesRequired=lowest
+PrivilegesRequired=admin
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0.17763
@@ -45,7 +46,7 @@ Name: "{group}\Pluxy"; Filename: "{app}\Pluxy.exe"
 Name: "{autodesktop}\Pluxy"; Filename: "{app}\Pluxy.exe"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\Pluxy.exe"; Description: "Ouvrir Pluxy"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\Pluxy.exe"; Description: "Ouvrir Pluxy"; Flags: nowait postinstall skipifsilent runasoriginaluser
 
 [Code]
 function WebViewInstalled(): Boolean;

@@ -348,14 +348,20 @@ def environment_results(
     result = _result(
         powershell,
         r"""
-$results = foreach ($case in @('missing_python', 'compatible_python', 'ready_venv', 'incomplete_venv', 'pip_failure', 'venv_failure', 'installation_failure')) {
+$results = foreach ($case in @('missing_python', 'compatible_python', 'ready_venv', 'incomplete_venv', 'pip_failure', 'venv_failure', 'installation_failure', 'external_environment', 'external_repair')) {
     $server = Join-Path $inputData.directory $case
     $runtime = Join-Path $server 'runtime'
-    $venvPython = Join-Path $server '.venv\Scripts\python.exe'
+    $external = $case -in @('external_environment', 'external_repair')
+    $environment = if ($external) { Join-Path $inputData.directory "User data\$case\PythonEnv" } else { Join-Path $server '.venv' }
+    $venvPython = Join-Path $environment 'Scripts\python.exe'
     $systemPython = Join-Path $server 'Existing Python\python.exe'
     New-Item -ItemType Directory -Path $server -Force | Out-Null
     [IO.File]::WriteAllText((Join-Path $server 'requirements.txt'), 'test-dependency==1.0')
     [IO.File]::WriteAllText((Join-Path $server 'config.json'), '{"keep":"user settings"}')
+    if ($case -eq 'external_repair') {
+        New-Item -ItemType Directory -Path $environment -Force | Out-Null
+        [IO.File]::WriteAllText((Join-Path $environment 'old-runtime.txt'), 'keep broken environment')
+    }
     $script:pcCase = $case
     $script:pcReady = $case -eq 'ready_venv'
     $script:pcInstalls = 0
@@ -411,14 +417,18 @@ $results = foreach ($case in @('missing_python', 'compatible_python', 'ready_ven
     $first = $null
     $second = $null
     try {
-        $first = Initialize-PCEnvironment -ServerDirectory $server -RuntimeDirectory $runtime
-        $second = Initialize-PCEnvironment -ServerDirectory $server -RuntimeDirectory $runtime
+        $options = @{ ServerDirectory = $server; RuntimeDirectory = $runtime }
+        if ($external) { $options.EnvironmentDirectory = $environment }
+        $first = Initialize-PCEnvironment @options
+        $second = Initialize-PCEnvironment @options
     } catch { $errorText = $_.Exception.Message }
     [pscustomobject]@{
         case = $case; first = $first; second = $second; expectedPython = $venvPython
         installs = $script:pcInstalls; creates = $script:pcCreates; pip = $script:pcPip
         ready = $script:pcReady; error = $errorText; calls = @($script:pcNativeCalls)
         config = [IO.File]::ReadAllText((Join-Path $server 'config.json'))
+        sourceVenv = Test-Path -LiteralPath (Join-Path $server '.venv')
+        backups = @(Get-ChildItem -LiteralPath (Split-Path $environment -Parent) -Filter 'PythonEnv-backup-*' -Directory -ErrorAction SilentlyContinue | ForEach-Object { [IO.File]::ReadAllText((Join-Path $_.FullName 'old-runtime.txt')) })
     }
 }
 ConvertTo-Json -InputObject @($results) -Depth 8 -Compress
@@ -426,6 +436,17 @@ ConvertTo-Json -InputObject @($results) -Depth 8 -Compress
         {"directory": str(directory)},
     )
     return {item["case"]: item for item in result}
+
+
+@pytest.mark.parametrize("case", ("external_environment", "external_repair"))
+def test_server_environment_can_live_outside_the_installation(environment_results: dict, case: str) -> None:
+    result = environment_results[case]
+    assert result["error"] is None
+    assert result["first"] == result["second"] == result["expectedPython"]
+    assert not result["sourceVenv"]
+    assert result["creates"] == result["pip"] == 1
+    assert result["config"] == '{"keep":"user settings"}'
+    assert result["backups"] == (["keep broken environment"] if case == "external_repair" else [])
 
 
 @pytest.mark.parametrize("case", ("missing_python", "compatible_python"))

@@ -6,7 +6,7 @@
 
 Vos films, séries, photos et musique sur la TV.
 
-**Android 1.7.8 · Windows 1.8.3**
+**Android 1.7.8 · Windows 1.8.4**
 
 [Application Android](https://github.com/Amau54/Pluxy/releases/download/dev-latest/Pluxy-debug.apk)
 · [Application PC](https://github.com/Amau54/Pluxy/releases/download/pc-latest/Pluxy-Setup.exe)
@@ -43,13 +43,17 @@ le format choisi ; le mode forcé ne change pas les limites physiques des ports.
 3. Choisissez **Lecteur** pour vous connecter à un serveur, ou **Serveur** pour partager vos dossiers.
 
 Le choix est mémorisé. **Options → Changer de mode** permet de le modifier.
+L'installation propose `C:\Program Files\Pluxy` par défaut, selon le disque de Windows.
+Windows demande les droits administrateur pour créer ce dossier. Vous pouvez choisir
+un autre emplacement ; l'application fonctionne ensuite sans élévation.
 Le lecteur présente les films, séries par saisons, vidéos, dossiers photos et albums
 musicaux. Il lit les fichiers originaux avec son moteur vidéo intégré ; Python
 n'est pas nécessaire pour ce mode.
 
 En mode Serveur, Python, FFmpeg et les dépendances manquantes sont préparés
 automatiquement, avec une progression dans l'application. La première préparation
-nécessite Internet. Aucune fenêtre de commande ni droits administrateur ne sont requis.
+nécessite Internet. Cette préparation ne demande ni fenêtre de commande ni droits
+administrateur : les composants Python et les réglages sont stockés dans votre compte Windows.
 Le composant d'affichage Microsoft est aussi installé s'il manque.
 
 Si l'ancien serveur Pluxy tourne déjà, quittez-le depuis son icône près de

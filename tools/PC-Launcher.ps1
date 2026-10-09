@@ -243,11 +243,11 @@ for name in ("fastapi", "uvicorn", "pydantic", "aiofiles", "multipart", "httpx",
 }
 
 function Initialize-PCEnvironment {
-    param([string]$ServerDirectory, [string]$RuntimeDirectory)
+    param([string]$ServerDirectory, [string]$RuntimeDirectory, [string]$EnvironmentDirectory)
     $ServerDirectory = [IO.Path]::GetFullPath($ServerDirectory)
     $requirements = Join-Path $ServerDirectory 'requirements.txt'
     if (-not (Test-Path -LiteralPath $requirements -PathType Leaf)) { throw 'Fichiers Pluxy manquants. Extrayez le ZIP complet avant de lancer Pluxy.' }
-    $environment = Join-Path $ServerDirectory '.venv'
+    $environment = if ($EnvironmentDirectory) { [IO.Path]::GetFullPath($EnvironmentDirectory) } else { Join-Path $ServerDirectory '.venv' }
     $python = Join-Path $environment 'Scripts\python.exe'
     if ($null -eq (Get-PCPythonInfo -Executable $python)) {
         $basePython = $null
@@ -257,10 +257,11 @@ function Initialize-PCEnvironment {
         }
         if (-not $basePython) { $basePython = Install-PCPython -InstallDirectory $RuntimeDirectory }
         if (Test-Path -LiteralPath $environment) {
-            $backup = Join-Path $ServerDirectory ('.venv-backup-' + [Guid]::NewGuid().ToString('N'))
-            $parent = (Resolve-Path -LiteralPath $ServerDirectory -ErrorAction Stop).ProviderPath.TrimEnd('\', '/')
+            $environmentParent = [IO.Path]::GetDirectoryName($environment)
+            $backup = Join-Path $environmentParent ([IO.Path]::GetFileName($environment) + '-backup-' + [Guid]::NewGuid().ToString('N'))
+            $parent = (Resolve-Path -LiteralPath $environmentParent -ErrorAction Stop).ProviderPath.TrimEnd('\', '/')
             $source = (Resolve-Path -LiteralPath $environment -ErrorAction Stop).ProviderPath
-            if ([IO.Path]::GetDirectoryName($source) -ne $parent -or [IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($backup)) -ne $ServerDirectory.TrimEnd('\', '/')) {
+            if ([IO.Path]::GetDirectoryName($source) -ne $parent -or [IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($backup)) -ne $environmentParent.TrimEnd('\', '/')) {
                 throw "Chemin de l'environnement Python inattendu. Reparation annulee."
             }
             Move-Item -LiteralPath $environment -Destination $backup -ErrorAction Stop
