@@ -41,6 +41,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var keepAwake: SwitchCompat
     private lateinit var autoStart: SwitchCompat
     private lateinit var serverToggle: Button
+    private lateinit var startProgress: View
     private lateinit var rescan: Button
     private lateinit var sendToTv: Button
     private lateinit var optionsContainer: View
@@ -82,6 +83,7 @@ class MainActivity : AppCompatActivity() {
         if (pendingStartAfterPermission) {
             pendingStartAfterPermission = false
             if (usable || preferences.hasManualMediaSource()) ServerService.start(this)
+            renderState(ServerRuntime.state.value)
         } else if (snapshot.running && usable) {
             ServerService.scan(this)
         }
@@ -122,6 +124,7 @@ class MainActivity : AppCompatActivity() {
         keepAwake = findViewById(R.id.keepAwake)
         autoStart = findViewById(R.id.autoStart)
         serverToggle = findViewById(R.id.serverToggle)
+        startProgress = findViewById(R.id.startProgress)
         rescan = findViewById(R.id.rescan)
         sendToTv = findViewById(R.id.sendToTv)
         optionsContainer = findViewById(R.id.optionsContainer)
@@ -200,6 +203,7 @@ class MainActivity : AppCompatActivity() {
                 ).show()
             } else if (preferences.autoDiscoverMedia && !hasAutomaticMediaPermissions()) {
                 pendingStartAfterPermission = true
+                renderState(snapshot)
                 mediaPermissions.launch(requiredMediaPermissions())
             } else {
                 ServerService.start(this)
@@ -270,12 +274,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun renderState(state: ServerSnapshot) {
+        val starting = state.starting || pendingStartAfterPermission
         val accent = ContextCompat.getColor(this, R.color.server_pluxy_accent)
         val success = ContextCompat.getColor(this, R.color.server_pluxy_success)
         val muted = ContextCompat.getColor(this, R.color.server_pluxy_muted)
         val error = ContextCompat.getColor(this, R.color.server_pluxy_error)
 
         statusPill.text = when {
+            starting -> "●  Démarrage"
             state.error != null -> "●  Erreur"
             state.running && !state.wifiConnected -> "●  Hors ligne"
             state.running && state.scanning -> "●  Analyse"
@@ -283,6 +289,7 @@ class MainActivity : AppCompatActivity() {
             else -> "●  Arrêté"
         }
         statusPill.setTextColor(when {
+            starting -> accent
             state.error != null -> error
             state.running && state.wifiConnected -> success
             state.running -> accent
@@ -291,15 +298,23 @@ class MainActivity : AppCompatActivity() {
 
         serverAddress.text = state.address ?: "Indisponible"
         serverSummary.text = when {
+            pendingStartAfterPermission -> "Autorisez l’accès aux médias pour continuer."
+            state.starting -> "Démarrage du serveur… chargement de la bibliothèque"
             state.error != null -> state.error
             state.running && state.scanning -> "${state.mediaCount} médias · analyse en cours"
             state.running && !state.wifiConnected -> "En attente du Wi-Fi"
             state.running -> "${state.mediaCount} médias disponibles"
             else -> "Prêt à démarrer"
         }
-        serverToggle.isEnabled = true
-        serverToggle.alpha = 1f
-        serverToggle.text = if (state.running) "Arrêter le serveur" else "Démarrer le serveur"
+        startProgress.visibility = if (starting) View.VISIBLE else View.GONE
+        serverToggle.isEnabled = !starting
+        serverToggle.alpha = if (starting) 0.7f else 1f
+        serverToggle.text = when {
+            pendingStartAfterPermission -> "Autorisation en attente…"
+            state.starting -> "Démarrage en cours…"
+            state.running -> "Arrêter le serveur"
+            else -> "Démarrer le serveur"
+        }
         serverToggle.setBackgroundResource(
             if (state.running) R.drawable.server_bg_button_secondary else R.drawable.server_bg_button_primary,
         )
@@ -307,7 +322,7 @@ class MainActivity : AppCompatActivity() {
             this,
             if (state.running) R.color.server_pluxy_text else R.color.server_pluxy_on_accent,
         ))
-        rescan.isEnabled = !state.scanning && preferences.hasMediaSource()
+        rescan.isEnabled = !starting && !state.scanning && preferences.hasMediaSource()
         rescan.alpha = if (rescan.isEnabled) 1f else 0.5f
         // Cast est aussi un point d'entrée pour choisir une TV et préparer la
         // diffusion ; il ne dépend pas du cycle de vie du serveur local.

@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.update
 
 data class ServerSnapshot(
     val running: Boolean = false,
+    val starting: Boolean = false,
     val scanning: Boolean = false,
     val mediaCount: Int = 0,
     val address: String? = null,

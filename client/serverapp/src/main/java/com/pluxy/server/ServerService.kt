@@ -65,6 +65,7 @@ class ServerService : Service() {
         super.onCreate()
         preferences = ServerPreferences(this)
         createNotificationChannel()
+        ServerRuntime.update { it.copy(starting = true, error = null) }
         foreground(buildNotification("Démarrage…"))
 
         commands = ServerCommandQueue(
@@ -274,6 +275,7 @@ class ServerService : Service() {
         ServerRuntime.update {
             it.copy(
                 running = actuallyRunning,
+                starting = !actuallyRunning && it.starting,
                 mediaCount = library.all().size,
                 address = address,
                 wifiConnected = wifi,
@@ -396,7 +398,7 @@ class ServerService : Service() {
         }
         RemotePlaybackRuntime.release()
         serviceScope.cancel()
-        ServerRuntime.update { it.copy(running = false, scanning = false) }
+        ServerRuntime.update { it.copy(running = false, starting = false, scanning = false) }
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         super.onDestroy()
     }
@@ -412,10 +414,17 @@ class ServerService : Service() {
         private const val NOTIFICATION_ID = 8420
 
         fun start(context: Context) {
-            ContextCompat.startForegroundService(
-                context,
-                Intent(context, ServerService::class.java).setAction(ACTION_START),
-            )
+            ServerRuntime.update { it.copy(starting = !it.running, error = null) }
+            try {
+                ContextCompat.startForegroundService(
+                    context,
+                    Intent(context, ServerService::class.java).setAction(ACTION_START),
+                )
+            } catch (e: Exception) {
+                ServerRuntime.update {
+                    it.copy(starting = false, error = e.message ?: "Impossible de démarrer le serveur.")
+                }
+            }
         }
 
         fun stop(context: Context) {

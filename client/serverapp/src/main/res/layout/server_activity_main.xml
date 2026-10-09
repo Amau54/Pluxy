@@ -103,12 +103,23 @@
 
                 <TextView
                     android:id="@+id/serverSummary"
+                    android:accessibilityLiveRegion="polite"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="5dp"
                     android:text="Prêt à démarrer"
                     android:textColor="@color/server_pluxy_muted"
                     android:textSize="13sp" />
+
+                <ProgressBar
+                    android:id="@+id/startProgress"
+                    style="?android:attr/progressBarStyleHorizontal"
+                    android:layout_width="match_parent"
+                    android:layout_height="3dp"
+                    android:layout_marginTop="10dp"
+                    android:indeterminate="true"
+                    android:indeterminateTint="@color/server_pluxy_accent"
+                    android:visibility="gone" />
 
                 <Button
                     android:id="@+id/serverToggle"
