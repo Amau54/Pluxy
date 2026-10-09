@@ -25,7 +25,15 @@ namespace Pluxy {
         }
         private static async Task Verify(string[] args) {
             Check(LibraryClient.NormalizeServer("192.168.1.20:8420")=="http://192.168.1.20:8420","Adresse du serveur normalisée");
-            foreach(string invalid in new[]{"file:///C:/secret","http://user:pass@localhost","http://localhost/private","http://localhost/?secret=1"}) {
+            Check(LibraryClient.NormalizeServer("192.168.1.20")=="http://192.168.1.20:8420" && LibraryClient.NormalizeServer("http://192.168.1.20")=="http://192.168.1.20:8420","Port Pluxy ajouté à une adresse IP seule");
+            Check(LibraryClient.NormalizeServer("http://192.168.1.20:80")=="http://192.168.1.20" && LibraryClient.NormalizeServer("https://192.168.1.20")=="https://192.168.1.20","Ports explicitement choisis conservés");
+            var lan=System.Net.IPAddress.Parse("192.168.1.70"); var mask=System.Net.IPAddress.Parse("255.255.255.0");
+            Check(LanDiscoveryTargets.SameSubnet(lan,mask,System.Net.IPAddress.Parse("192.168.1.104")) && !LanDiscoveryTargets.SameSubnet(lan,mask,System.Net.IPAddress.Parse("172.18.11.218")),"Découverte directe limitée au sous-réseau local");
+            var candidates=LanDiscoveryTargets.SubnetCandidates(lan,mask);
+            Check(candidates.Count==253 && candidates.Contains(System.Net.IPAddress.Parse("192.168.1.104")),"Découverte d'un Android absent du cache réseau");
+            Check(LanDiscoveryTargets.SubnetCandidates(lan,System.Net.IPAddress.Parse("255.255.255.224")).Count==29 && LanDiscoveryTargets.SubnetCandidates(System.Net.IPAddress.Parse("10.20.30.40"),System.Net.IPAddress.Parse("255.255.0.0")).Count<=256 && LanDiscoveryTargets.SubnetCandidates(System.Net.IPAddress.Parse("8.8.8.8"),mask).Count==0,"Recherche locale bornée et aucun balayage Internet");
+            foreach(var excluded in new[]{"192.168.1.0","192.168.1.255","192.168.1.70","127.0.0.1","224.0.0.1"}) Check(!LanDiscoveryTargets.SameSubnet(lan,mask,System.Net.IPAddress.Parse(excluded)),"Adresse exclue de la découverte directe : "+excluded);
+            foreach(string invalid in new[]{"file:///C:/secret","http://user:pass@localhost","http://localhost/private","http://localhost/?secret=1","8420"}) {
                 bool rejected=false; try { LibraryClient.NormalizeServer(invalid); } catch(ArgumentException) { rejected=true; } Check(rejected,"Adresse refusée : "+invalid);
             }
             bool badId=false; try { LibraryClient.ItemPath("../config.json"); } catch(ArgumentException) { badId=true; } Check(badId,"Chemin de média limité à un identifiant");
@@ -52,6 +60,13 @@ namespace Pluxy {
                 using(var api=new LibraryClient()) {
                     await api.Connect(server); var page=Native.Object(await api.Api("page",new Dictionary<string,object>{{"kind","movie"}}));
                     Check(page.ContainsKey("items"),"Connexion au serveur et catalogue paginé");
+                }
+            }
+            string discover=Argument(args,"--test-discovery");
+            if(discover!=null) {
+                using(var api=new LibraryClient()) {
+                    var found=Native.Json.DeserializeObject(Native.Json.Serialize(await api.Discover())) as object[];
+                    Check(found!=null && Array.Exists(found, item=>Native.Text(Native.Object(item),"url")==LibraryClient.NormalizeServer(discover)),"Serveur Android trouvé automatiquement sur le réseau local");
                 }
             }
             string url=Argument(args,"--video");

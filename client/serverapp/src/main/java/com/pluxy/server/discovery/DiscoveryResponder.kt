@@ -1,6 +1,7 @@
 package com.pluxy.server.discovery
 
 import android.content.Context
+import android.net.wifi.WifiManager
 import com.pluxy.server.serverApplicationVersion
 import com.pluxy.server.LanAddressPolicy
 import com.pluxy.server.NetworkUtils
@@ -19,6 +20,7 @@ class DiscoveryResponder(
     private val version = serverApplicationVersion(context)
     private var socket: DatagramSocket? = null
     private var thread: Thread? = null
+    private var multicastLock: WifiManager.MulticastLock? = null
 
     @Volatile
     private var running = false
@@ -33,6 +35,13 @@ class DiscoveryResponder(
             bind(InetSocketAddress("0.0.0.0", preferences.discoveryPort))
         }
         socket = datagram
+        multicastLock = runCatching {
+            (context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager)
+                .createMulticastLock("Pluxy:ServerDiscovery").apply {
+                    setReferenceCounted(false)
+                    acquire()
+                }
+        }.getOrNull()
         running = true
         thread = Thread({ loop(datagram) }, "pluxy-discovery").apply {
             isDaemon = true
@@ -45,6 +54,8 @@ class DiscoveryResponder(
         running = false
         runCatching { socket?.close() }
         socket = null
+        multicastLock?.let { if (it.isHeld) runCatching { it.release() } }
+        multicastLock = null
         thread?.interrupt()
         thread = null
     }

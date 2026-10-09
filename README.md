@@ -6,7 +6,7 @@
 
 Vos films, séries, photos et musique sur la TV.
 
-**Android 1.7.8 · Windows 1.8.4**
+**Android 1.7.9 · Windows 1.8.5**
 
 [Application Android](https://github.com/Amau54/Pluxy/releases/download/dev-latest/Pluxy-debug.apk)
 · [Application PC](https://github.com/Amau54/Pluxy/releases/download/pc-latest/Pluxy-Setup.exe)
@@ -85,6 +85,9 @@ Le passage en mode Lecteur arrête le serveur de cet appareil, tout en conservan
 ses réglages. Si vous utilisiez l’ancienne application Pluxy Serveur, arrêtez-la
 et sélectionnez de nouveau vos dossiers dans Pluxy : Android conserve les
 autorisations et réglages dans le package de chaque application.
+
+**Détecter mes médias** est activé par défaut ; vous pouvez le décocher dans les options.
+Avec un VPN, le serveur affiche l'adresse Wi-Fi ou Ethernet pour les connexions locales.
 
 Dans les photos, gauche/droite passe aux images et haut/bas change de dossier.
 Les images proches sont préchargées. Les vidéos personnelles se lancent directement ;

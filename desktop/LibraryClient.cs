@@ -19,9 +19,13 @@ namespace Pluxy {
             http.DefaultRequestHeaders.Add("X-Pluxy-Session", Session);
         }
         public static string NormalizeServer(string value) {
-            value = value.Trim(); if(!value.Contains("://")) value = "http://" + value;
+            value = (value ?? "").Trim(); if(!value.Contains("://")) value = "http://" + value;
             Uri uri;
             if(!Uri.TryCreate(value,UriKind.Absolute,out uri) || (uri.Scheme!="http" && uri.Scheme!="https") || !string.IsNullOrEmpty(uri.UserInfo) || uri.AbsolutePath!="/" || !string.IsNullOrEmpty(uri.Query) || !string.IsNullOrEmpty(uri.Fragment)) throw new ArgumentException("Saisissez l'adresse du serveur, par exemple 192.168.1.20:8420.");
+            var authority=value.Substring(value.IndexOf("://",StringComparison.Ordinal)+3).TrimEnd('/');
+            if(Regex.IsMatch(authority,"^[0-9]+$")) throw new ArgumentException("Saisissez l'adresse IP du serveur et non son port seul, par exemple 192.168.1.20:8420.");
+            bool explicitPort=authority.StartsWith("[",StringComparison.Ordinal)?authority.Contains("]:"):authority.Contains(":");
+            if(uri.Scheme=="http" && !explicitPort) uri=new UriBuilder(uri){Port=8420}.Uri;
             return uri.GetLeftPart(UriPartial.Authority).TrimEnd('/');
         }
         public static string ItemPath(string id) {
@@ -55,6 +59,7 @@ namespace Pluxy {
         public async Task<object> Discover() {
             var discovered = new Dictionary<string,object>();
             var addresses = new List<IPAddress> { IPAddress.Broadcast, IPAddress.Loopback };
+            addresses.AddRange(LanDiscoveryTargets.UnicastTargets());
             foreach(var adapter in System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces()) {
                 if(adapter.OperationalStatus != System.Net.NetworkInformation.OperationalStatus.Up) continue;
                 foreach(var address in adapter.GetIPProperties().UnicastAddresses) {
@@ -88,7 +93,7 @@ namespace Pluxy {
             using(var probe=new HttpClient(new HttpClientHandler{UseProxy=false,AllowAutoRedirect=false}){Timeout=TimeSpan.FromSeconds(3)}) {
                 var checks=new List<Task>();
                 foreach(var entry in discovered) { var candidate=entry; checks.Add(Task.Run(async()=> {
-                    try { var health=Native.Object(Native.Json.DeserializeObject(await probe.GetStringAsync(candidate.Key+"/health"))); if(Native.Text(health,"app")=="pluxy") lock(valid) valid.Add(candidate.Value); } catch { }
+                    try { var health=Native.Object(Native.Json.DeserializeObject(await probe.GetStringAsync(candidate.Key+"/health"))); if(Native.Text(health,"app")=="pluxy" && Native.Text(health,"status")=="ok") lock(valid) valid.Add(candidate.Value); } catch { }
                 })); }
                 await Task.WhenAll(checks);
             }

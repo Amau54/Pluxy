@@ -97,7 +97,7 @@ if ($result.Code -ne 0) { throw "Installateur PC impossible : $($result.Output) 
 $installer = Join-Path $output 'Pluxy-Setup.exe'
 $commit = (& git -C $repo rev-parse HEAD).Trim()
 $digest = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant()
-$manifest = [ordered]@{ version='1.8.4'; commit=$commit; sha256=$digest; size=(Get-Item -LiteralPath $installer).Length; webview2=$locked.webview2.version; mpv=$locked.mpv.url; bootstrapper_sha256=(Get-FileHash -LiteralPath $bootstrap -Algorithm SHA256).Hash.ToLowerInvariant() }
+$manifest = [ordered]@{ version='1.8.5'; commit=$commit; sha256=$digest; size=(Get-Item -LiteralPath $installer).Length; webview2=$locked.webview2.version; mpv=$locked.mpv.url; bootstrapper_sha256=(Get-FileHash -LiteralPath $bootstrap -Algorithm SHA256).Hash.ToLowerInvariant() }
 $manifest | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $output 'PC_BUILD_INFO.json') -Encoding UTF8
 "$digest  Pluxy-Setup.exe" | Set-Content -LiteralPath (Join-Path $output 'PC_SHA256SUMS.txt') -Encoding ASCII
 Write-Output "Installateur : $installer ($digest)"

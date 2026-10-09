@@ -62,9 +62,8 @@ class ServerPreferences(context: Context) {
         set(value) { audioFolders = value.map(::MediaFolder) }
 
     var autoDiscoverMedia: Boolean
-        // New installs should explicitly opt in before the app reads the whole
-        // MediaStore. Existing saved choices are preserved by SharedPreferences.
-        get() = prefs.getBoolean(KEY_AUTO_DISCOVER_MEDIA, false)
+        // Les choix déjà enregistrés restent prioritaires sur la valeur par défaut.
+        get() = prefs.getBoolean(KEY_AUTO_DISCOVER_MEDIA, true)
         set(value) = prefs.edit().putBoolean(KEY_AUTO_DISCOVER_MEDIA, value).apply()
 
     fun hasMediaSource(): Boolean = autoDiscoverMedia ||
