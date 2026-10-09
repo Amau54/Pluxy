@@ -32,6 +32,17 @@ namespace Pluxy {
             var candidates=LanDiscoveryTargets.SubnetCandidates(lan,mask);
             Check(candidates.Count==253 && candidates.Contains(System.Net.IPAddress.Parse("192.168.1.104")),"Découverte d'un Android absent du cache réseau");
             Check(LanDiscoveryTargets.SubnetCandidates(lan,System.Net.IPAddress.Parse("255.255.255.224")).Count==29 && LanDiscoveryTargets.SubnetCandidates(System.Net.IPAddress.Parse("10.20.30.40"),System.Net.IPAddress.Parse("255.255.0.0")).Count<=256 && LanDiscoveryTargets.SubnetCandidates(System.Net.IPAddress.Parse("8.8.8.8"),mask).Count==0,"Recherche locale bornée et aucun balayage Internet");
+            using(var receiver=LibraryClient.DiscoverySocket())
+            using(var peer=new System.Net.Sockets.UdpClient(new System.Net.IPEndPoint(System.Net.IPAddress.Loopback,0))) {
+                int closedPort;
+                using(var closed=new System.Net.Sockets.UdpClient(new System.Net.IPEndPoint(System.Net.IPAddress.Loopback,0))) closedPort=((System.Net.IPEndPoint)closed.Client.LocalEndPoint).Port;
+                var message=System.Text.Encoding.UTF8.GetBytes("PLUXY_DISCOVERY_V1");
+                await receiver.SendAsync(message,message.Length,new System.Net.IPEndPoint(System.Net.IPAddress.Loopback,closedPort));
+                await Task.Delay(100);
+                await peer.SendAsync(message,message.Length,new System.Net.IPEndPoint(System.Net.IPAddress.Loopback,((System.Net.IPEndPoint)receiver.Client.LocalEndPoint).Port));
+                var receive=receiver.ReceiveAsync();
+                Check(await Task.WhenAny(receive,Task.Delay(2000))==receive && System.Text.Encoding.UTF8.GetString((await receive).Buffer)=="PLUXY_DISCOVERY_V1","Un port UDP fermé n'interrompt pas la découverte Windows");
+            }
             foreach(var excluded in new[]{"192.168.1.0","192.168.1.255","192.168.1.70","127.0.0.1","224.0.0.1"}) Check(!LanDiscoveryTargets.SameSubnet(lan,mask,System.Net.IPAddress.Parse(excluded)),"Adresse exclue de la découverte directe : "+excluded);
             foreach(string invalid in new[]{"file:///C:/secret","http://user:pass@localhost","http://localhost/private","http://localhost/?secret=1","8420"}) {
                 bool rejected=false; try { LibraryClient.NormalizeServer(invalid); } catch(ArgumentException) { rejected=true; } Check(rejected,"Adresse refusée : "+invalid);

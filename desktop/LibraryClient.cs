@@ -56,6 +56,15 @@ namespace Pluxy {
             var settings=Native.Object(runtime.ContainsKey("server")?runtime["server"]:null);
             return new { url = candidate, name = Native.Text(runtime,"server_name",Native.Text(settings,"name","Pluxy")) };
         }
+        internal static UdpClient DiscoverySocket() {
+            var udp=new UdpClient(0);
+            try {
+                // Unrelated closed UDP ports must not abort discovery on Windows.
+                udp.Client.IOControl(unchecked((int)0x9800000C),new byte[4],null);
+                udp.EnableBroadcast=true;
+                return udp;
+            } catch { udp.Dispose(); throw; }
+        }
         public async Task<object> Discover() {
             var discovered = new Dictionary<string,object>();
             var addresses = new List<IPAddress> { IPAddress.Broadcast, IPAddress.Loopback };
@@ -68,14 +77,15 @@ namespace Pluxy {
                     for(int i=0;i<4;i++) bytes[i]=(byte)(bytes[i]|~mask[i]); addresses.Add(new IPAddress(bytes));
                 }
             }
-            using(var udp = new UdpClient(0)) {
-                udp.EnableBroadcast = true; var magic=Encoding.UTF8.GetBytes("PLUXY_DISCOVERY_V1");
+            using(var udp = DiscoverySocket()) {
+                var magic=Encoding.UTF8.GetBytes("PLUXY_DISCOVERY_V1");
                 foreach(var address in addresses) { try { await udp.SendAsync(magic,magic.Length,new IPEndPoint(address,8421)); } catch(SocketException) { } }
                 var deadline=DateTime.UtcNow.AddSeconds(2);
                 while(DateTime.UtcNow<deadline) {
-                    var receive=udp.ReceiveAsync(); var remaining=deadline-DateTime.UtcNow;
-                    if(await Task.WhenAny(receive,Task.Delay(remaining))!=receive) break;
                     try {
+                        var remaining=deadline-DateTime.UtcNow; if(remaining<=TimeSpan.Zero) break;
+                        var receive=udp.ReceiveAsync();
+                        if(await Task.WhenAny(receive,Task.Delay(remaining))!=receive) break;
                         var reply=await receive; if(reply.Buffer.Length>4096) continue;
                         var data=Native.Object(Native.Json.DeserializeObject(Encoding.UTF8.GetString(reply.Buffer)));
                         if(Native.Text(data,"app")!="pluxy") continue;
