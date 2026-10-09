@@ -1,6 +1,8 @@
 package com.pluxy.tv.ui
 
 import android.content.Intent
+import android.content.ActivityNotFoundException
+import android.net.Uri
 import android.content.res.Configuration
 import android.animation.AnimatorInflater
 import android.graphics.Typeface
@@ -57,6 +59,7 @@ class SeriesActivity : ThemedActivity() {
     private lateinit var adapter: EpisodeAdapter
     private lateinit var seasons: LinearLayout
     private lateinit var continueButton: Button
+    private lateinit var trailerButton: Button
     private var allEpisodes: List<MediaItem> = emptyList()
     private var selectedSeason: Int? = null
     private var unnumberedSeasonSelected = false
@@ -85,6 +88,11 @@ class SeriesActivity : ThemedActivity() {
         list = findViewById(R.id.episodes)
         seasons = findViewById(R.id.seasons)
         continueButton = findViewById(R.id.continueEpisode)
+        trailerButton = findViewById(R.id.seriesTrailer)
+        trailerButton.tag = "trailer"
+        trailerButton.setOnFocusChangeListener { _, focused ->
+            if (focused) focusedControlTag = "trailer"
+        }
         continueButton.tag = "continue"
         continueButton.setOnFocusChangeListener { _, focused ->
             if (focused) focusedControlTag = "continue"
@@ -243,6 +251,8 @@ class SeriesActivity : ThemedActivity() {
         val overview = findViewById<TextView>(R.id.seriesOverview)
         if (metadata == null) {
             overview.visibility = View.GONE
+            trailerButton.visibility = View.GONE
+            trailerButton.setOnClickListener(null)
             findViewById<LinearLayout>(R.id.seriesRatings).visibility = View.GONE
             return
         }
@@ -252,8 +262,22 @@ class SeriesActivity : ThemedActivity() {
             }
         }
         overview.text = metadata.overview.orEmpty()
+        overview.maxLines = if (compactHeight) 1 else 2
         overview.visibility =
-            if (compactHeight || metadata.overview.isNullOrBlank()) View.GONE else View.VISIBLE
+            if (resources.configuration.screenHeightDp < 440 || metadata.overview.isNullOrBlank())
+                View.GONE else View.VISIBLE
+        val trailerUrl = LanUrlPolicy.safeYoutubeTrailer(metadata.trailerUrl)
+        trailerButton.visibility = if (trailerUrl == null) View.GONE else View.VISIBLE
+        trailerButton.setOnClickListener(if (trailerUrl == null) null else View.OnClickListener {
+            try {
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(trailerUrl)))
+            } catch (_: ActivityNotFoundException) {
+                Toast.makeText(this, "Aucune application pour ouvrir la bande-annonce", Toast.LENGTH_SHORT).show()
+            }
+        })
+        if (focusedControlTag == "trailer" && trailerUrl != null && currentFocus == null) {
+            trailerButton.requestFocus()
+        }
         if (metadata.matched) findViewById<TextView>(R.id.seriesTitle).apply {
             text = metadata.title
             contentDescription = metadata.title
@@ -334,6 +358,7 @@ class SeriesActivity : ThemedActivity() {
             if (version != episodeListVersion || isFinishing || isDestroyed) return@submitList
             val control = when {
                 restoreControl == "continue" -> continueButton
+                restoreControl == "trailer" -> trailerButton.takeIf { it.visibility == View.VISIBLE }
                 restoreControl?.startsWith("season:") == true -> seasons.findViewWithTag<View>(restoreControl)
                 else -> null
             }
@@ -390,6 +415,8 @@ class SeriesActivity : ThemedActivity() {
         adapter.submitList(emptyList())
         continueButton.setOnClickListener(null)
         continueButton.visibility = View.GONE
+        trailerButton.visibility = View.GONE
+        trailerButton.setOnClickListener(null)
         seasons.removeAllViews()
         findViewById<View>(R.id.seasonScroller).visibility = View.GONE
         findViewById<TextView>(R.id.seriesSub).text = ""
@@ -475,8 +502,18 @@ class SeriesActivity : ThemedActivity() {
             ellipsize = android.text.TextUtils.TruncateAt.END
             contentDescription = text
         }
-        continueButton.layoutParams = continueButton.layoutParams.apply {
-            width = ViewGroup.LayoutParams.MATCH_PARENT
+        findViewById<View>(R.id.seriesActions).layoutParams =
+            findViewById<View>(R.id.seriesActions).layoutParams.apply {
+                width = ViewGroup.LayoutParams.MATCH_PARENT
+            }
+        continueButton.layoutParams = (continueButton.layoutParams as LinearLayout.LayoutParams).apply {
+            width = 0
+            weight = 1f
+        }
+        trailerButton.apply {
+            minWidth = 0
+            textSize = 12f
+            setPadding(dp(10), 0, dp(10), 0)
         }
         val content = findViewById<View>(R.id.seriesContent)
         val header = findViewById<View>(R.id.seriesHeaderContent)
@@ -486,7 +523,8 @@ class SeriesActivity : ThemedActivity() {
         val resizeHeader = {
             if (content.height > 0 && header.height > 0) {
                 val limit = (content.height * 0.40f).toInt().coerceAtLeast(dp(80))
-                val height = minOf(header.height, limit)
+                // Une petite fiche doit pouvoir grandir lorsque TMDB répond.
+                val height = if (header.height > limit) limit else ViewGroup.LayoutParams.WRAP_CONTENT
                 if (scroll.layoutParams.height != height) {
                     scroll.layoutParams = scroll.layoutParams.apply { this.height = height }
                 }

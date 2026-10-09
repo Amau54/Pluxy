@@ -3,6 +3,7 @@ package com.pluxy.tv.player
 import com.pluxy.tv.ui.ThemedActivity
 import com.pluxy.tv.ui.CompactChoiceMenu
 import android.content.Context
+import android.app.Dialog
 import android.content.Intent
 import android.content.res.Configuration
 import android.graphics.Color
@@ -19,6 +20,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.view.KeyEvent
+import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
@@ -26,6 +28,7 @@ import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
 import android.widget.ImageButton
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.PopupWindow
 import android.widget.ScrollView
@@ -66,6 +69,13 @@ import com.pluxy.tv.api.PlaybackDecision
 import com.pluxy.tv.api.DeviceProfile
 import com.pluxy.tv.api.MediaItem as PluxyItem
 import com.pluxy.tv.api.PluxyApi
+import com.pluxy.tv.api.LibraryRequest
+import com.pluxy.tv.api.LanUrlPolicy
+import com.pluxy.tv.api.LanMediaImages
+import com.pluxy.tv.ui.CatalogueRepository
+import com.pluxy.tv.ui.episodeCode
+import com.pluxy.tv.ui.cleanEpisodeTitle
+import coil.load
 import com.pluxy.tv.api.TvProfileStore
 import com.pluxy.tv.util.Logger
 import com.squareup.moshi.Moshi
@@ -145,8 +155,11 @@ class PlayerActivity : ThemedActivity() {
     private var decisionToneMapped = false
     private var prepareJob: Job? = null
     private var nextEpisodeHandled = false
-    private var nextEpisodeDialog: AlertDialog? = null
+    private var nextEpisodeDialog: Dialog? = null
     private var nextEpisodeJob: Job? = null
+    private var nextEpisodePrefetchJob: Job? = null
+    private var prefetchedNextEpisode: PluxyItem? = null
+    private var nextEpisodePrefetched = false
     private var resumeDialog: AlertDialog? = null
     private var nextEpisodeTick: Runnable? = null
     private val adaptiveHistory = ArrayDeque<Int>()
@@ -250,7 +263,10 @@ class PlayerActivity : ThemedActivity() {
                 .alpha(0f)
                 .setDuration(140L)
                 .withEndAction {
-                    if (controlsOverlay.alpha == 0f) controlsOverlay.visibility = View.GONE
+                    if (controlsOverlay.alpha == 0f) {
+                        controlsOverlay.visibility = View.GONE
+                        playerView.requestFocus()
+                    }
                 }
                 .start()
         }
@@ -620,6 +636,13 @@ class PlayerActivity : ThemedActivity() {
     }
 
     private fun setupModernControls() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            for (id in listOf(R.id.btnPlayPause, R.id.btnRewind, R.id.btnForward, R.id.btnRestart,
+                R.id.btnTracks, R.id.btnSubtitles, R.id.btnGear, R.id.btnExitPlayback,
+                R.id.btnRetryPlayback, R.id.btnAudioOutputError, R.id.btnLeavePlayback)) {
+                findViewById<View>(id).defaultFocusHighlightEnabled = false
+            }
+        }
         mediaTitleView.text = item.title
         timeDurationView.text = fmtPlayerTime(durationMs)
         timeline.setDuration(durationMs.coerceAtLeast(0L))
@@ -797,12 +820,17 @@ class PlayerActivity : ThemedActivity() {
                 weight = 0f
                 marginStart = if (compact) (16 * density).toInt() else 0
             }
-            for ((id, label) in listOf(
-                R.id.btnTracks to R.string.player_audio_action,
-                R.id.btnSubtitles to R.string.player_subtitles_action,
+            for ((id, label, icon) in listOf(
+                Triple(R.id.btnTracks, R.string.player_audio_action, R.drawable.ic_player_audio),
+                Triple(R.id.btnSubtitles, R.string.player_subtitles_action, R.drawable.ic_player_subtitles),
             )) {
                 findViewById<Button>(id).apply {
                     text = if (compact) "" else getString(label)
+                    // Sans libellé, l'icône se centre dans le bouton, indépendamment
+                    // des métriques de texte propres au fabricant de la TV.
+                    setCompoundDrawablesRelativeWithIntrinsicBounds(if (compact) 0 else icon, 0, 0, 0)
+                    foreground = if (compact) getDrawable(icon) else null
+                    foregroundGravity = Gravity.CENTER
                     compoundDrawablePadding = if (compact) 0 else (6 * density).toInt()
                     val horizontalPadding = if (compact) 0 else (10 * density).toInt()
                     setPaddingRelative(horizontalPadding, paddingTop, horizontalPadding, paddingBottom)
@@ -1316,6 +1344,7 @@ class PlayerActivity : ThemedActivity() {
         attempts.clear()
         attemptIdx = 0
         prepareAndPlay(selected)
+        prefetchNextEpisode()
         showControls(focusPlayPause = currentFocus == null)
     }
 
@@ -1334,6 +1363,8 @@ class PlayerActivity : ThemedActivity() {
         val interruptedNextEpisodeFetch = nextEpisodeJob?.isActive == true
         nextEpisodeJob?.cancel()
         nextEpisodeJob = null
+        nextEpisodePrefetchJob?.cancel()
+        nextEpisodePrefetchJob = null
         nextEpisodeDialog?.dismiss()
         nextEpisodeDialog = null
         nextEpisodeTick = null
@@ -2149,6 +2180,29 @@ class PlayerActivity : ThemedActivity() {
         )
     }
 
+    private fun prefetchNextEpisode() {
+        nextEpisodePrefetchJob?.cancel()
+        prefetchedNextEpisode = null
+        nextEpisodePrefetched = false
+        if (item.kind != "series") return
+        val ownerApi = api
+        val current = item
+        nextEpisodePrefetchJob = lifecycleScope.launch {
+            try {
+                val library = CatalogueRepository.cached(ownerApi.baseUrl, "series")?.items
+                    ?: ownerApi.listItems(LibraryRequest(kind = "series"))
+                if (api === ownerApi && item.id == current.id) {
+                    prefetchedNextEpisode = EpisodeQueue.next(current, library)
+                    nextEpisodePrefetched = true
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                // La lecture continue ; une nouvelle tentative reste possible à la fin.
+            }
+        }
+    }
+
     private fun offerNextEpisode() {
         if (nextEpisodeHandled || item.kind != "series" || isFinishing) return
         nextEpisodeHandled = true
@@ -2156,24 +2210,27 @@ class PlayerActivity : ThemedActivity() {
         val finishedItem = item
         nextEpisodeJob?.cancel()
         nextEpisodeJob = lifecycleScope.launch {
-            var library: List<PluxyItem>? = null
-            for (attempt in 0 until NEXT_EPISODE_FETCH_ATTEMPTS) {
-                try {
-                    library = ownerApi.listItems()
-                    break
-                } catch (cancelled: CancellationException) {
-                    throw cancelled
-                } catch (_: Exception) {
-                    if (attempt + 1 < NEXT_EPISODE_FETCH_ATTEMPTS) delay(750L)
+            nextEpisodePrefetchJob?.join()
+            val next = if (nextEpisodePrefetched) prefetchedNextEpisode else {
+                var library: List<PluxyItem>? = null
+                for (attempt in 0 until NEXT_EPISODE_FETCH_ATTEMPTS) {
+                    try {
+                        library = ownerApi.listItems(LibraryRequest(kind = "series"))
+                        break
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
+                        if (attempt + 1 < NEXT_EPISODE_FETCH_ATTEMPTS) delay(750L)
+                    }
                 }
-            }
-            val fetchedLibrary = library ?: run {
-                nextEpisodeHandled = false
-                return@launch
+                val fetchedLibrary = library ?: run {
+                    nextEpisodeHandled = false
+                    return@launch
+                }
+                EpisodeQueue.next(finishedItem, fetchedLibrary)
             }
             if (api !== ownerApi || item.id != finishedItem.id ||
                 player?.playbackState != Player.STATE_ENDED) return@launch
-            val next = EpisodeQueue.next(finishedItem, fetchedLibrary)
             if (
                 next == null || isFinishing || isDestroyed ||
                 !lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
@@ -2187,33 +2244,51 @@ class PlayerActivity : ThemedActivity() {
 
     private fun showNextEpisodeDialog(next: PluxyItem) {
         nextEpisodeDialog?.dismiss()
-        var seconds = NEXT_EPISODE_DELAY_SECONDS
         val automatic = PluxyApplication.autoPlayNextEpisode(this)
-        val dialog = AlertDialog.Builder(this)
-            .setTitle("Épisode suivant")
-            .setMessage(nextEpisodeMessage(next, if (automatic) seconds else null))
-            .setPositiveButton("Lire maintenant", null)
-            .setNegativeButton("Rester ici", null)
-            .create()
+        val dialog = Dialog(this)
+        dialog.setContentView(R.layout.dialog_next_episode)
+        dialog.setCanceledOnTouchOutside(false)
+        dialog.findViewById<TextView>(R.id.nextEpisodeTitle).text = cleanEpisodeTitle(next, 0)
+        dialog.findViewById<TextView>(R.id.nextEpisodeCode).text =
+            listOfNotNull(next.seriesName, episodeCode(next)).joinToString(" · ")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            dialog.findViewById<View>(R.id.nextEpisodePlay).defaultFocusHighlightEnabled = false
+            dialog.findViewById<View>(R.id.nextEpisodeStay).defaultFocusHighlightEnabled = false
+        }
+        val artwork = dialog.findViewById<ImageView>(R.id.nextEpisodeArtwork)
+        val artworkUrl = next.thumbnailUrl?.let {
+            runCatching { LanUrlPolicy.resolveSameServer(api.baseUrl, it) }.getOrNull()
+        }
+        artwork.load(artworkUrl, LanMediaImages.loader(this)) {
+            placeholder(R.drawable.ic_episode_placeholder)
+            error(R.drawable.ic_episode_placeholder)
+        }
+        val countdown = dialog.findViewById<TextView>(R.id.nextEpisodeCountdown)
+        countdown.text = if (automatic) getString(R.string.player_next_countdown, NEXT_EPISODE_DELAY_SECONDS)
+            else getString(R.string.player_next_manual)
         nextEpisodeDialog = dialog
         dialog.setOnShowListener {
-            dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE).setOnClickListener {
-                playNextEpisode(next)
+            dialog.findViewById<Button>(R.id.nextEpisodePlay).apply {
+                isFocusableInTouchMode = resources.configuration.uiMode and
+                    Configuration.UI_MODE_TYPE_MASK == Configuration.UI_MODE_TYPE_TELEVISION
+                setOnClickListener {
+                    playNextEpisode(next)
+                }
+                requestFocus()
             }
-            dialog.getButton(android.content.DialogInterface.BUTTON_NEGATIVE).setOnClickListener {
-                nextEpisodeTick?.let { handler.removeCallbacks(it) }
-                nextEpisodeTick = null
+            dialog.findViewById<Button>(R.id.nextEpisodeStay).setOnClickListener {
                 dialog.dismiss()
                 setStatus("Lecture terminée")
             }
             if (automatic) {
+                val deadline = SystemClock.elapsedRealtime() + NEXT_EPISODE_DELAY_SECONDS * 1_000L
                 val tick = object : Runnable {
                     override fun run() {
-                        if (!dialog.isShowing) return
-                        seconds--
+                        if (!dialog.isShowing || !activityStarted) return
+                        val seconds = episodeCountdownSeconds(deadline, SystemClock.elapsedRealtime())
                         if (seconds <= 0) playNextEpisode(next)
                         else {
-                            dialog.setMessage(nextEpisodeMessage(next, seconds))
+                            countdown.text = getString(R.string.player_next_countdown, seconds)
                             handler.postDelayed(this, 1_000L)
                         }
                     }
@@ -2228,16 +2303,21 @@ class PlayerActivity : ThemedActivity() {
             if (nextEpisodeDialog === dialog) nextEpisodeDialog = null
         }
         dialog.show()
-    }
-
-    private fun nextEpisodeMessage(next: PluxyItem, seconds: Int?): String = buildString {
-        if (next.season != null && next.episode != null) {
-            append("S").append(next.season.toString().padStart(2, '0'))
-            append("E").append(next.episode.toString().padStart(2, '0'))
-            append(" · ")
+        dialog.window?.apply {
+            setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
+            val density = resources.displayMetrics.density
+            val displayWidth = resources.displayMetrics.widthPixels
+            val edge = resources.getDimensionPixelSize(R.dimen.media_viewer_screen_pad)
+            setLayout(minOf((440 * density).toInt(), displayWidth - edge * 2), ViewGroup.LayoutParams.WRAP_CONTENT)
+            setGravity(Gravity.BOTTOM or Gravity.END)
+            attributes = attributes.apply {
+                x = edge
+                y = resources.getDimensionPixelSize(R.dimen.player_edge_gap)
+                dimAmount = 0.15f
+            }
+            addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
         }
-        append(next.title)
-        if (seconds != null) append("\n\nLecture dans ").append(seconds).append(" s")
+        hideControls()
     }
 
     private fun playNextEpisode(
@@ -2255,6 +2335,8 @@ class PlayerActivity : ThemedActivity() {
         resumeDialog = null
         nextEpisodeJob?.cancel()
         nextEpisodeJob = null
+        nextEpisodePrefetchJob?.cancel()
+        nextEpisodePrefetchJob = null
         nextEpisodeTick?.let { handler.removeCallbacks(it) }
         nextEpisodeTick = null
         nextEpisodeDialog?.dismiss()
@@ -2310,6 +2392,7 @@ class PlayerActivity : ThemedActivity() {
         setStatus("Préparation de l'épisode suivant…")
         prepareAndPlay(if (forceDirectForLaunch) PlaybackStrategy.DIRECT
             else PlaybackStrategy.fromKey(PluxyApplication.playbackStrategy(this)))
+        prefetchNextEpisode()
     }
 
     // ---- Chien de garde : chargement bloqué ------------------------------- //
@@ -2654,7 +2737,7 @@ class PlayerActivity : ThemedActivity() {
         // Nombre de tentatives de la phase de décision (appels de contrôle au serveur).
         private const val PREPARE_ATTEMPTS = 3
         // Délai d'auto-masquage des contrôles (assez long pour naviguer sereinement).
-        private const val CONTROLLER_TIMEOUT_MS = 6_000
+        private const val CONTROLLER_TIMEOUT_MS = 3_000
         private const val SEEK_PREVIEW_TICK_MS = 50L
         private const val SEEK_RELEASE_FALLBACK_MS = 900L
         private const val NEXT_EPISODE_DELAY_SECONDS = 8

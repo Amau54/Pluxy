@@ -61,15 +61,34 @@
                     android:textColor="?attr/pluxyTextSecondary"
                     android:textSize="@dimen/auxiliary_meta_size" />
 
-                <Button
-                    android:id="@+id/continueEpisode"
-                    style="@style/Btn.Primary"
-                    android:layout_height="48dp"
-                    android:minHeight="48dp"
-                    android:textStyle="normal"
-                    android:fontFamily="sans-serif-medium"
+                <LinearLayout
+                    android:id="@+id/seriesActions"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
-                    android:visibility="gone" />
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:clipChildren="false">
+                    <Button
+                        android:id="@+id/continueEpisode"
+                        style="@style/Btn.Primary"
+                        android:layout_height="48dp"
+                        android:minHeight="48dp"
+                        android:maxLines="1"
+                        android:ellipsize="end"
+                        android:nextFocusRight="@id/seriesTrailer"
+                        android:visibility="gone" />
+                    <Button
+                        android:id="@+id/seriesTrailer"
+                        style="@style/Btn.Secondary"
+                        android:layout_height="48dp"
+                        android:minHeight="48dp"
+                        android:layout_marginStart="8dp"
+                        android:maxLines="1"
+                        android:text="@string/action_trailer"
+                        android:nextFocusLeft="@id/continueEpisode"
+                        android:visibility="gone" />
+                </LinearLayout>
 
                 <!-- Notes multi-sites (TMDB / IMDb / Rotten Tomatoes / Metacritic) -->
                 <HorizontalScrollView

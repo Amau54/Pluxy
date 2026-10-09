@@ -13,12 +13,12 @@ object SeekAcceleration {
     private data class Stage(val untilMs: Long, val rate: Long, val label: String)
 
     private val stages = listOf(
-        Stage(1_200L, 10_000L, "×1"),
-        Stage(2_500L, 20_000L, "×2"),
-        Stage(5_000L, 40_000L, "×4"),
-        Stage(8_000L, 80_000L, "×8"),
-        Stage(12_000L, 160_000L, "×16"),
-        Stage(18_000L, 320_000L, "×32"),
+        Stage(1_000L, 10_000L, "×1"),
+        Stage(2_000L, 20_000L, "×2"),
+        Stage(4_000L, 40_000L, "×4"),
+        Stage(6_500L, 80_000L, "×8"),
+        Stage(10_000L, 160_000L, "×16"),
+        Stage(15_000L, 320_000L, "×32"),
         Stage(Long.MAX_VALUE, 640_000L, "×64"),
     )
 
