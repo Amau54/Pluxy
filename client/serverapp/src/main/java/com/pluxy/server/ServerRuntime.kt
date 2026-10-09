@@ -13,6 +13,7 @@ data class ServerSnapshot(
     val address: String? = null,
     val wifiConnected: Boolean = false,
     val error: String? = null,
+    val metadataStatus: String = "",
 )
 
 object ServerRuntime {

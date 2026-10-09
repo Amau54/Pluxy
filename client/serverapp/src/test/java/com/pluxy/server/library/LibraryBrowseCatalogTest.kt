@@ -5,6 +5,31 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class LibraryBrowseCatalogTest {
+    @Test fun `filtered series summaries open the complete season group`() {
+        val values = (1..8).map { season -> entry("ep-$season", kind = "series").let {
+            it.copy(media = it.media.copy(seriesKey = "boreal", seriesName = "Boreal", season = season, episode = 1))
+        } }
+        val catalog = LibraryBrowseCatalog("one", values)
+        val cards = catalog.page(500, 0, null, query("kind" to "series", "q" to "ep-3", "grouped" to "true"))
+        assertEquals(1, cards.total)
+        val episodes = catalog.page(500, 0, null, query("kind" to "series", "group_id" to cards.items.first().media.id))
+        assertEquals((1..8).toSet(), episodes.items.map { it.media.season }.toSet())
+    }
+    @Test fun `photo summaries separate roots and nested folders`() {
+        val catalog = LibraryBrowseCatalog("one", listOf("a", "b", "c", "d").mapIndexed { index, id ->
+            entry(id, kind = "photo").let { it.copy(media = it.media.copy(sourceId = if (index == 2) "two" else "one",
+                relativePath = if (index == 3) "Trip/Child/$id.jpg" else "Trip/$id.jpg")) }
+        })
+        val cards = catalog.page(500, 0, null, query("kind" to "photo", "grouped" to "true"))
+        assertEquals(listOf(1, 1, 2), cards.items.map { it.groupCount }.sorted())
+        assertEquals(setOf("a", "b"), catalog.page(500, 0, null, query("kind" to "photo", "group_id" to "a")).items.map { it.media.id }.toSet())
+    }
+    @Test fun `large catalogues have no offset ceiling`() {
+        val catalog = LibraryBrowseCatalog("large", (0..11000).map { entry("id-${it.toString().padStart(5, '0')}") })
+        val page = catalog.page(500, 10500, null, query())
+        assertEquals(11000, page.nextOffset)
+        assertEquals(1, catalog.page(500, page.nextOffset!!, page.revision, query()).items.size)
+    }
     @Test fun `alphabetical pages use metadata title and ignore accents`() {
         val catalog = LibraryBrowseCatalog("letters", listOf(
             entry("a", "Zulu", metadata = BrowseMetadata(title = "Évasion")),

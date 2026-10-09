@@ -119,7 +119,7 @@ namespace Pluxy {
             if(method=="item") return await Get(server,"/api/library/items/"+ItemPath(id));
             if(method=="progress") return await Get(server,"/api/playback/progress/"+ItemPath(id));
             if(method=="page") {
-                string[] fields={"kind","q","sort","descending","year","genre","watched","resolution","hdr_only","offset","revision"};
+                string[] fields={"kind","q","sort","descending","year","genre","watched","resolution","hdr_only","offset","revision","grouped","group_id"};
                 var query=new List<string>{"limit=500"};
                 foreach(var field in fields) { var text=Native.Text(args,field); if(text.Length>512) throw new ArgumentException("Filtre trop long."); if(text!="") query.Add(field+"="+Uri.EscapeDataString(text)); }
                 return await Get(server,"/api/library/items/page?"+string.Join("&",query.ToArray()));
@@ -130,6 +130,31 @@ namespace Pluxy {
             if(duration<=0) return;
             var body=Native.Json.Serialize(new { position_ms=(long)(Math.Max(0,position)*1000),duration_ms=(long)(duration*1000),session_id=sessionId,sequence=sequence });
             using(var response=await http.PostAsync(server+"/api/playback/progress/"+ItemPath(id),new StringContent(body,Encoding.UTF8,"application/json"))) response.EnsureSuccessStatusCode();
+        }
+        public async Task<object[]> Group(string id,string kind) {
+            var values=new List<object>(); int offset=0; string revision="";
+            for(int retry=0;retry<2;retry++) {
+                values.Clear(); offset=0; revision="";
+                try {
+                    while(true) {
+                        var page=Native.Object(await Api("page",new Dictionary<string,object>{{"kind",kind},{"group_id",ItemPath(id)},{"offset",offset},{"revision",revision}}));
+                        values.AddRange(page["items"] as object[] ?? new object[0]); revision=Native.Text(page,"revision");
+                        object next; if(!page.TryGetValue("next_offset",out next) || next==null) return values.ToArray();
+                        int following=Convert.ToInt32(next); if(following<=offset) throw new IOException("Pagination incorrecte du serveur."); offset=following;
+                    }
+                } catch(IOException error) { if(retry!=0 || !error.Message.Contains("409")) throw; }
+            }
+            throw new IOException("Le catalogue change trop rapidement. Réessayez.");
+        }
+        public async Task<string> PlaybackServer(string previous,string id) {
+            var tried=new HashSet<string>();
+            foreach(var candidate in new[]{previous,Server}) {
+                if(string.IsNullOrEmpty(candidate) || !tried.Add(candidate)) continue;
+                try { await Get(candidate,"/api/library/items/"+ItemPath(id)); return candidate; } catch { }
+            }
+            var found=Native.Json.DeserializeObject(Native.Json.Serialize(await Discover())) as object[] ?? new object[0];
+            if(found.Length!=1) throw new IOException(found.Length>1?"Plusieurs serveurs disponibles. Choisissez le vôtre dans la bibliothèque, puis réessayez.":"Le serveur est indisponible. Réessayez lorsqu'il est démarré.");
+            string address=Native.Text(Native.Object(found[0]),"url"); await Get(address,"/api/library/items/"+ItemPath(id)); return address;
         }
         public async Task<MemoryStream> Image(string server,string path) {
             if(server!=Server || !Regex.IsMatch(path,"^/(api/library/items/[A-Za-z0-9_-]{1,128}/thumbnail|stream/direct/[A-Za-z0-9_-]{1,128})$")) throw new ArgumentException("Image indisponible.");

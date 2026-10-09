@@ -136,6 +136,7 @@ class ServerService : Service() {
         when (action) {
             ACTION_SCAN -> if (actuallyRunning) scanLibrary() else startServer()
             ACTION_START -> startServer()
+            ACTION_METADATA -> serviceScope.launch { metadata.enrichAll(library.all(), force = true) }
             ACTION_REMOTE_PLAY_PAUSE -> runCatching { RemotePlaybackRuntime.playPause() }
             ACTION_REMOTE_STOP -> runCatching { RemotePlaybackRuntime.stop() }
             else -> if (preferences.runningDesired) startServer() else stopSelf()
@@ -407,6 +408,7 @@ class ServerService : Service() {
         const val ACTION_START = "com.pluxy.server.action.START"
         const val ACTION_STOP = "com.pluxy.server.action.STOP"
         const val ACTION_SCAN = "com.pluxy.server.action.SCAN"
+        const val ACTION_METADATA = "com.pluxy.server.action.METADATA"
         const val ACTION_REMOTE_PLAY_PAUSE = "com.pluxy.server.action.REMOTE_PLAY_PAUSE"
         const val ACTION_REMOTE_STOP = "com.pluxy.server.action.REMOTE_STOP"
 
@@ -436,6 +438,9 @@ class ServerService : Service() {
                 context,
                 Intent(context, ServerService::class.java).setAction(ACTION_SCAN),
             )
+        }
+        fun refreshMetadata(context: Context) {
+            ContextCompat.startForegroundService(context, Intent(context, ServerService::class.java).setAction(ACTION_METADATA))
         }
     }
 }

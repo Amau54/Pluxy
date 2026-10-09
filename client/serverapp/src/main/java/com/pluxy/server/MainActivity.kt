@@ -151,6 +151,11 @@ class MainActivity : AppCompatActivity() {
             findViewById<Button>(R.id.tmdbHelpToggle).text =
                 if (visible) "Masquer l’aide TMDB" else "À quoi sert TMDB ?"
         }
+        findViewById<Button>(R.id.refreshTmdb).setOnClickListener {
+            saveEditableSettings()
+            ServerRuntime.update { it.copy(metadataStatus = "Actualisation des affiches et synopsis…") }
+            ServerService.refreshMetadata(this)
+        }
         findViewById<Button>(R.id.copyAddress).setOnClickListener { copyAddress() }
         findViewById<Button>(R.id.batterySettings).setOnClickListener { openBatterySettings() }
         findViewById<Button>(R.id.privacyPolicy).setOnClickListener {
@@ -275,6 +280,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun renderState(state: ServerSnapshot) {
+        findViewById<TextView>(R.id.tmdbStatus).text = state.metadataStatus
+        findViewById<Button>(R.id.refreshTmdb).isEnabled = state.running && !state.starting
         val starting = state.starting || pendingStartAfterPermission
         val accent = ContextCompat.getColor(this, R.color.server_pluxy_accent)
         val success = ContextCompat.getColor(this, R.color.server_pluxy_success)

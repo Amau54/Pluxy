@@ -15,7 +15,7 @@ using Microsoft.Web.WebView2.WinForms;
 [assembly: System.Reflection.AssemblyDescription("Lecteur et serveur multimédia Pluxy")]
 [assembly: System.Reflection.AssemblyCompany("Pluxy")]
 [assembly: System.Reflection.AssemblyProduct("Pluxy")]
-[assembly: System.Reflection.AssemblyVersion("1.8.6.0")]
+[assembly: System.Reflection.AssemblyVersion("1.8.7.0")]
 
 namespace Pluxy {
     internal static class Program {
@@ -189,7 +189,9 @@ namespace Pluxy {
                     var item=Native.Object(await api.Api("item",args)); string itemId=Native.Text(item,"id");
                     double start=Math.Max(0,Native.Number(args,"start_ms")/1000);
                     var subtitles=item.ContainsKey("subtitles")?item["subtitles"] as object[]:null;
-                    var player=new PlayerWindow(api,itemId,Native.Text(item,"title"),api.Server+"/stream/direct/"+LibraryClient.ItemPath(itemId),prefs.audio,start,subtitles);
+                    object[] queue=null;
+                    if(Native.Text(item,"kind")=="series") queue=await api.Group(itemId,"series");
+                    var player=new PlayerWindow(api,itemId,Native.Text(item,"metadata_title",Native.Text(item,"title")),api.Server+"/stream/direct/"+LibraryClient.ItemPath(itemId),prefs.audio,start,subtitles,queue);
                     players.Add(player); player.FormClosed+=(s,e)=> { players.Remove(player); Event("progressUpdated",true); }; player.Show(this); result=true;
                 }
                 else result=await api.Api(method,args);

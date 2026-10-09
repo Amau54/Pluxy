@@ -49,6 +49,7 @@ namespace Pluxy {
         public string serverName = "";
         public string theme = "coral";
         public string audio = "auto";
+        public bool autoplay = true;
         public static Preferences Load() {
             try { return Native.Json.Deserialize<Preferences>(File.ReadAllText(Path.Combine(Native.Data,"desktop.json"))) ?? new Preferences(); }
             catch { return new Preferences(); }

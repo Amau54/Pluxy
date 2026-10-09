@@ -50,6 +50,23 @@ namespace Pluxy {
             bool badId=false; try { LibraryClient.ItemPath("../config.json"); } catch(ArgumentException) { badId=true; } Check(badId,"Chemin de média limité à un identifiant");
             Check(Native.Quote("C:\\Photos de famille\\")=="\"C:\\Photos de famille\\\\\"","Arguments Windows avec espaces et antislash final");
             Check(File.Exists(Path.Combine(Native.Root,"ui","reader.js")),"Interface du lecteur présente");
+            var originalContext=System.Threading.SynchronizationContext.Current;
+            using(var api=new LibraryClient()) using(var window=new PlayerWindow(api,"test","Test","http://127.0.0.1:1/stream/direct/test","auto",0)) {
+                var flags=System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic;
+                var slider=(PlayerSlider)typeof(PlayerWindow).GetField("timeline",flags).GetValue(window);
+                window.ActiveControl=slider;
+                var message=System.Windows.Forms.Message.Create(window.Handle,0,System.IntPtr.Zero,System.IntPtr.Zero);
+                var route=typeof(PlayerWindow).GetMethod("ProcessCmdKey",flags);
+                route.Invoke(window,new object[]{message,System.Windows.Forms.Keys.F11});
+                Check(window.FormBorderStyle==System.Windows.Forms.FormBorderStyle.None,"F11 reste disponible avec le curseur de position sélectionné");
+                route.Invoke(window,new object[]{message,System.Windows.Forms.Keys.Escape});
+                Check(window.FormBorderStyle==System.Windows.Forms.FormBorderStyle.Sizable,"Échap quitte le plein écran depuis le curseur de position");
+                typeof(PlayerSlider).GetMethod("OnKeyDown",flags).Invoke(slider,new object[]{new System.Windows.Forms.KeyEventArgs(System.Windows.Forms.Keys.Right)});
+                Check((bool)typeof(PlayerWindow).GetField("dragging",flags).GetValue(window),"Le réglage au clavier suspend l'actualisation de la position");
+                typeof(System.Windows.Forms.Control).GetMethod("OnKeyUp",flags).Invoke(slider,new object[]{new System.Windows.Forms.KeyEventArgs(System.Windows.Forms.Keys.Right)});
+                Check(!(bool)typeof(PlayerWindow).GetField("dragging",flags).GetValue(window),"Le relâchement du curseur rétablit l'actualisation");
+            }
+            System.Threading.SynchronizationContext.SetSynchronizationContext(originalContext);
             Check(SeekAcceleration.Distance(0)==10 && SeekAcceleration.Distance(12000)==1024 && SeekAcceleration.Speed(18000)=="×64","Avance progressive de dix secondes à ×64");
             var buffering=new PlaybackBufferPolicy();
             Check(buffering.ResumeSeconds==3 && !buffering.Observe(true,false,true),"Chargement initial et seek exclus de l'adaptation réseau");

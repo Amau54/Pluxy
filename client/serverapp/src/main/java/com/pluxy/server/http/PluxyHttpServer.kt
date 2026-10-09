@@ -267,6 +267,7 @@ class PluxyHttpServer(
             request.path == "/api/library/scan-status" && request.method in setOf("GET", "HEAD") ->
                 sendJson(output, 200, JSONObject().apply {
                     put("scanning", library.isScanning); put("count", library.all().size)
+                    put("metadata", JSONObject().put("message", metadata.status))
                 }, headOnly)
 
             request.path == "/api/library/scan" && request.method == "POST" -> {
@@ -505,6 +506,8 @@ class PluxyHttpServer(
     }
 
     private fun browseJson(entry: BrowseEntry): JSONObject = entry.media.publicJson(metadata.cached(entry.media.id), entry.watch).apply {
+        put("group_count", entry.groupCount)
+        put("season_count", entry.seasonCount)
         put("year", entry.year ?: JSONObject.NULL)
         put("genres", JSONArray(entry.metadata.genres))
         put("metadata_title", entry.metadata.title ?: JSONObject.NULL)

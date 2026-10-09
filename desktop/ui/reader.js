@@ -5,6 +5,8 @@ const pending = new Map();
 let sequence = 0, prefs = {}, connection = null, kind = 'home', items = [], next = null, revision = '', generation = 0;
 let reconnecting = false, toastTimer, searchTimer, slideTimer, photos = [], photoIndex = 0, groups = [];
 let fullscreen = false;
+let folderData = new Map(), galleryGeneration = 0;
+const photoCache = new Map();
 const labels = {home: 'Accueil', movie: 'Films', series: 'Séries', clip: 'Vidéos', photo: 'Photos', audio: 'Musique'};
 const iconNames = {movie: 'film', series: 'series', clip: 'play', photo: 'photos', audio: 'music'};
 function call(method, args = {}) {
@@ -51,6 +53,7 @@ function folded(value) { return String(value || '').normalize('NFD').replace(/[\
 function applyPreferences() {
   fullscreen=Boolean(prefs.fullscreen);
   $('fullscreen').setAttribute('aria-pressed',fullscreen);
+  $('fullscreen').setAttribute('aria-label',fullscreen?'Quitter le plein écran':'Plein écran');
   document.documentElement.dataset.theme = ['coral','ocean','midnight'].includes(prefs.theme) ? prefs.theme : 'coral';
   $('theme').value = prefs.theme || 'coral'; $('audio').value = prefs.audio || 'auto';
 }
@@ -108,24 +111,16 @@ async function load(append = false, retry = true) {
   updateToolbar();
   if (!connection) { $('content').replaceChildren(node('p','empty','Choisissez un serveur pour ouvrir votre bibliothèque.')); return; }
   const version = ++generation; const selectedKind = kind; const query = filters();
-  if (!append) { items = []; next = null; revision = ''; $('content').replaceChildren(skeleton()); }
+  if (!append) { items = []; next = null; revision = ''; folderData.clear(); $('content').replaceChildren(skeleton()); }
   hidden('more', true);
   try {
     if (selectedKind === 'home' && !query.q) {
       const home = await call('home'); if (version !== generation) return;
       items = home.items || []; renderHome(home.counts || {}); return;
     }
-    let page = await call('page', {...query, offset: append ? next : 0, revision: append ? revision : ''});
+    let page = await call('page', {...query, grouped: ['series','photo','audio'].includes(selectedKind), offset: append ? next : 0, revision: append ? revision : ''});
     if (version !== generation) return;
     items = append ? [...items, ...page.items] : page.items; revision = page.revision; next = page.next_offset;
-    // Une série et un arbre de dossiers doivent être complets avant d'être regroupés.
-    if (selectedKind === 'series' || selectedKind === 'photo' || selectedKind === 'audio') {
-      while (next != null && next <= 10000) {
-        page = await call('page', {...query, offset: next, revision});
-        if (version !== generation) return;
-        items.push(...page.items); next = page.next_offset;
-      }
-    }
     if (version !== generation) return;
     $('count').textContent = page.total + (selectedKind === 'series' ? ' épisodes' : selectedKind === 'photo' ? ' photos' : ' éléments');
     render(); hidden('more', next == null);
@@ -138,8 +133,8 @@ async function load(append = false, retry = true) {
     if (version !== generation) return;
     if (retry && error.message.includes('409')) { await load(false, false); return; }
     $('content').replaceChildren(node('p','empty',error.message));
-    $('server-choice').classList.add('offline');
-    await discover(true);
+    // Une erreur de filtre ou de catalogue n'est pas une déconnexion.
+    try { await call('ping'); } catch (_) { $('server-choice').classList.add('offline'); await discover(true); }
   }
 }
 function card(item, action, subtitle) {
@@ -168,7 +163,7 @@ function render() {
 function openItem(item) {
   if (item.kind === 'photo') { if (kind !== 'photo') groups = [items.filter(e=>e.kind === 'photo')]; openPhoto(item); }
   else if (item.kind === 'clip' || item.kind === 'audio') play(item);
-  else if (item.kind === 'series') showSeries(items.filter(e=>e.kind === 'series' && seriesKey(e) === seriesKey(item)));
+  else if (item.kind === 'series') openSeries(item);
   else showMovie(item);
 }
 function renderHome(counts) {
@@ -177,6 +172,13 @@ function renderHome(counts) {
   if (!items.length) { render(); return; }
   const recent=(a,b)=>(b.added_at || 0)-(a.added_at || 0);
   const started=items.filter(e=>e.in_progress && !e.watched).sort((a,b)=>(b.last_played_at || 0)-(a.last_played_at || 0)).slice(0,12);
+  const ongoing = new Map();
+  for (const item of items.filter(e=>e.kind==='series')) { const key=seriesKey(item); if(!ongoing.has(key)) ongoing.set(key,[]); ongoing.get(key).push(item); }
+  for (const episodes of ongoing.values()) {
+    if (episodes.some(e=>e.in_progress) || !episodes.some(e=>e.watched)) continue;
+    const candidate=episodes.sort((a,b)=>(a.season || 0)-(b.season || 0) || (a.episode || 0)-(b.episode || 0)).find(e=>!e.watched);
+    if(candidate) started.push(candidate);
+  }
   function shelf(name,values,target,landscape=false) {
     if (!values.length) return;
     const section=node('section','shelf'), header=node('div','shelf-heading'); header.append(node('h2','',name));
@@ -225,9 +227,28 @@ function renderSeries() {
   const grid = node('div','media-grid');
   grid.append(...groups.map(episodes => {
     const first = episodes[0], seasons = new Set(episodes.map(e => e.season || 0));
-    return card({...first, metadata_title: first.series_name || title(first)}, () => showSeries(episodes), seasons.size + (seasons.size > 1 ? ' saisons' : ' saison') + ' · ' + episodes.length + ' épisodes');
+    const count=first.group_count || episodes.length, seasonCount=first.season_count || seasons.size;
+    return card({...first, metadata_title: first.series_name || title(first)}, () => openSeries(first), seasonCount + (seasonCount > 1 ? ' saisons' : ' saison') + ' · ' + count + ' épisodes');
   }));
-  $('count').textContent = groups.length + ' séries · ' + items.length + ' épisodes'; $('content').replaceChildren(grid);
+  $('content').replaceChildren(grid);
+}
+async function fetchGroup(item, query = {}, retry = true) {
+  const result=[]; let offset=0, version=''; const address=connection.url;
+  try {
+    do {
+      const page=await call('page',{kind:item.kind,group_id:item.id,sort:'title',...query,offset,revision:version});
+      if(connection.url!==address) throw new Error('Le serveur a changé. Rouvrez ce dossier.');
+      result.push(...page.items); version=page.revision;
+      if(page.next_offset != null && page.next_offset <= offset) throw new Error('Pagination incorrecte du serveur.');
+      offset=page.next_offset;
+    } while(offset != null);
+    return result;
+  } catch(error) { if(retry && error.message.includes('409')) return fetchGroup(item,query,false); throw error; }
+}
+async function openSeries(item) {
+  const body=$('detail-content'), marker=node('p','empty','Chargement des saisons…'); body.replaceChildren(marker); showDialog('details');
+  try { const episodes=await fetchGroup(item); if(body.contains(marker) && episodes.length) showSeries(episodes); }
+  catch(error) { if(body.contains(marker)) marker.textContent=error.message; }
 }
 function showSeries(episodes) {
   episodes = [...episodes].sort((a,b) => (a.season || 0) - (b.season || 0) || (a.episode || 0) - (b.episode || 0) || title(a).localeCompare(title(b),'fr',{numeric:true}));
@@ -260,10 +281,24 @@ function renderPhotos() {
   function branch(folder, root = false) {
     if (folder.images.length) groups.push(folder.images);
     const e = node('details','folder-tree'); e.open = Object.prototype.hasOwnProperty.call(state,folder.key) ? Boolean(state[folder.key]) : root;
-    const summary = node('summary','folder-row'); summary.append(icon('chevron'),icon('folder'),node('strong','',folder.name),node('span','muted',folder.images.length ? folder.images.length + ' photos' : ''));
+    const summary = node('summary','folder-row'); summary.append(icon('chevron'),icon('folder'),node('strong','',folder.name),node('span','muted',folder.images.length ? folder.images.reduce((n,i)=>n+(i.group_count || 1),0) + ' photos' : ''));
     e.append(summary); e.dataset.folder = folder.key;
     e.addEventListener('toggle',() => { const saved = photoState(); saved[folder.key] = e.open; try { localStorage.setItem('folders:' + connection.url,JSON.stringify(saved)); } catch (_) { /* Stockage plein. */ } });
-    if (folder.images.length) { const grid = node('div','media-grid photos'); grid.append(...folder.images.map(item => card(item,() => openPhoto(item),''))); e.append(grid); }
+    if (folder.images.length) {
+      const seed=folder.images[0], grid=node('div','media-grid photos'); e.append(grid); let fetching=false;
+      const populate=async()=> {
+        if(!e.open || fetching) return; fetching=true;
+        try {
+          let values=folderData.get(seed.id);
+          if(!values) { values=await fetchGroup(seed,{q:$('search').value.trim()}); if(!e.isConnected) return; folderData.set(seed.id,values); }
+          const groupIndex=groups.indexOf(folder.images); if(groupIndex>=0) groups[groupIndex]=values;
+          grid.replaceChildren(...values.map(item=>card(item,()=>openPhoto(item),'')));
+        } catch(error) { grid.replaceChildren(button('Réessayer · '+error.message,()=>{fetching=false; populate();},'text-button')); }
+        finally { fetching=false; }
+      };
+      e.addEventListener('toggle',()=> { if(e.open) populate(); else grid.replaceChildren(); });
+      if(e.open) queueMicrotask(populate);
+    }
     for (const child of [...folder.children.values()].sort((a,b) => a.name.localeCompare(b.name,'fr',{numeric:true}))) e.append(branch(child));
     return e;
   }
@@ -274,7 +309,8 @@ function renderMusic() {
   for (const item of items) { const key = folded(item.artist) + '/' + folded(item.album || item.source_name); if (!albums.has(key)) albums.set(key,[]); albums.get(key).push(item); }
   const grid = node('div','media-grid music');
   grid.append(...[...albums.values()].map(tracks => {
-    const first = tracks[0]; return card({...first,metadata_title:first.album || 'Sans album'},() => {
+    const first = tracks[0]; return card({...first,metadata_title:first.album || 'Sans album'},async() => {
+      try { tracks=await fetchGroup(first); } catch(error) { fail(error); return; }
       const list = node('div','episode-list');
       tracks.sort((a,b) => (a.disc_number || 1) - (b.disc_number || 1) || (a.track_number || 0) - (b.track_number || 0) || title(a).localeCompare(title(b),'fr',{numeric:true}));
       list.append(...tracks.map(item => { const e = button('',() => play(item,false),'episode-row'); e.append(node('span','episode-number',String(item.track_number || '♪')),node('strong','',title(item)),node('span','muted',minutes(item)),icon('play')); return e; }));
@@ -283,16 +319,28 @@ function renderMusic() {
   })); $('content').replaceChildren(grid);
 }
 function openPhoto(item) { photos = groups.find(group => group.some(p => p.id === item.id)) || [item]; photoIndex = photos.findIndex(p => p.id === item.id); showPhoto(); showDialog('gallery'); }
-function showPhoto() {
+function preloadPhoto(item) {
+  const src=proxy('/stream/direct/'+encodeURIComponent(item.id));
+  if(photoCache.has(src)) { const image=photoCache.get(src); photoCache.delete(src); photoCache.set(src,image); return image; }
+  const image=new Image(); image.src=src; photoCache.set(src,image);
+  while(photoCache.size>9) photoCache.delete(photoCache.keys().next().value);
+  return image;
+}
+async function showPhoto() {
   const item = photos[photoIndex]; if (!item) return;
-  $('gallery-image').src = proxy('/stream/direct/' + encodeURIComponent(item.id)); $('gallery-image').alt = title(item);
+  const version=++galleryGeneration, current=preloadPhoto(item);
+  try { await current.decode(); if(version!==galleryGeneration) return; $('gallery-image').src=current.src; $('gallery-image').alt=title(item); }
+  catch(_) { if(version===galleryGeneration) toast('Cette photo ne peut pas être affichée.'); }
   $('gallery-name').textContent = title(item) + ' · ' + (photoIndex + 1) + ' / ' + photos.length;
-  for (const offset of [-2,-1,1,2]) { const near = photos[(photoIndex + offset + photos.length) % photos.length]; const preloaded = new Image(); preloaded.src = proxy('/stream/direct/' + encodeURIComponent(near.id)); }
+  for (const offset of [-2,-1,1,2]) preloadPhoto(photos[(photoIndex + offset + photos.length) % photos.length]);
+  const groupIndex=groups.indexOf(photos); if(groupIndex>=0 && groups.length>1) for(const offset of [-1,1]) preloadPhoto(groups[(groupIndex+offset+groups.length)%groups.length][0]);
 }
 function stepPhoto(delta) { if (photos.length) { photoIndex = (photoIndex + delta + photos.length) % photos.length; showPhoto(); } }
-function stepFolder(delta) {
+async function stepFolder(delta) {
   if (!groups.length) return;
-  const index = groups.indexOf(photos); photos = groups[(index + delta + groups.length) % groups.length]; photoIndex = 0; showPhoto();
+  const index = groups.indexOf(photos), nextIndex=(index+delta+groups.length)%groups.length; let target=groups[nextIndex];
+  try { if(target[0].group_count>1 && target.length===1) { target=await fetchGroup(target[0]); groups[nextIndex]=target; } if(!target.length) return; photos=target; photoIndex=0; showPhoto(); }
+  catch(error) { fail(error); return; }
   toast(photos[0].folder || photos[0].source_name || 'Photos');
 }
 function stopSlideshow() { clearInterval(slideTimer); slideTimer = null; $('slideshow').textContent = 'Diaporama'; }

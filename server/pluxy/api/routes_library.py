@@ -62,7 +62,8 @@ def items(request: Request) -> list[MediaItem]:
 
 @router.get("/items/page")
 def items_page(request: Request, limit: int = Query(default=500, ge=1, le=500),
-               offset: int = Query(default=0, ge=0, le=10_000),
+               offset: int = Query(default=0, ge=0, le=2_147_483_647),
+               grouped: bool = False, group_id: str = Query(default="", max_length=128),
                revision: str | None = Query(default=None, max_length=64),
                kind: Kind = "all", q: str = Query(default="", max_length=256),
                watched: Literal["all", "unwatched", "watched", "in_progress"] = "all",
@@ -80,7 +81,7 @@ def items_page(request: Request, limit: int = Query(default=500, ge=1, le=500),
     try:
         values, total, current = _catalogue(st).page(
             CatalogueQuery(kind, q, watched, tuple(genre), year, duration_max_minutes,
-                           resolution, hdr_only, sort, descending, title_prefix), offset, limit, revision)
+                           resolution, hdr_only, sort, descending, title_prefix, grouped, group_id), offset, limit, revision)
     except ValueError as error:
         raise HTTPException(409, "Le catalogue a change ; recommencer depuis la premiere page") from error
     return {"items": values, "total": total,

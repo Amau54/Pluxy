@@ -3,6 +3,7 @@ package com.pluxy.server.metadata
 import android.content.Context
 import android.util.AtomicFile
 import com.pluxy.server.ServerPreferences
+import com.pluxy.server.ServerRuntime
 import com.pluxy.server.library.MediaEntry
 import com.pluxy.server.library.putNullable
 import com.pluxy.server.library.BrowseMetadata
@@ -37,6 +38,10 @@ class TmdbRepository(
     private val browseFacts = mutableMapOf<String, BrowseMetadata>()
     private val publication = AtomicLong()
     internal val revision: Long get() = publication.get()
+    @Volatile var status: String = ""
+        private set
+    private fun diagnostic(message: String) { status = message; ServerRuntime.update { it.copy(metadataStatus = message) } }
+    private class LookupFailure(message: String) : IOException(message)
     private val http = OkHttpClient.Builder()
         .connectTimeout(8, TimeUnit.SECONDS)
         .readTimeout(15, TimeUnit.SECONDS)
@@ -77,12 +82,16 @@ class TmdbRepository(
             if (!force) cached(item.id)?.takeIf { it.optInt("lookup_revision") == 2 && it.optString("lookup_kind") == item.kind }
                 ?.let { return@withLock it }
             val key = preferences.tmdbApiKey
-            if (key.isBlank()) return@withLock fallback(item)
-            val remote = runCatching { fetch(item, key) }.getOrNull()
+            if (key.isBlank()) { diagnostic("Ajoutez votre clé TMDB pour obtenir les affiches et les synopsis."); return@withLock fallback(item) }
+            val remote = try { fetch(item, key) } catch (error: IOException) {
+                diagnostic(if (error is LookupFailure) error.message.orEmpty() else "Connexion à TMDB impossible. Vérifiez Internet et le VPN.")
+                null
+            } catch (_: org.json.JSONException) { diagnostic("Réponse TMDB illisible. Réessayez plus tard."); null }
             if (remote != null) {
                 remote.put("lookup_revision", 2)
                 remote.put("lookup_kind", item.kind)
                 save(item.id, remote)
+                diagnostic("Affiches et synopsis TMDB à jour.")
                 remote
             } else {
                 fallback(item)
@@ -93,15 +102,17 @@ class TmdbRepository(
     suspend fun enrichAll(items: List<MediaEntry>, force: Boolean = false) {
         if (!enriching.compareAndSet(false, true)) return
         try {
-            if (preferences.tmdbApiKey.isBlank()) return
+            if (preferences.tmdbApiKey.isBlank()) { diagnostic("Ajoutez votre clé TMDB pour obtenir les affiches et les synopsis."); return }
             val seriesMetadata = mutableMapOf<String, JSONObject>()
+            var resolved = 0
+            var issue: String? = null
             for (item in items.asSequence()
                 .filter { it.kind == "movie" || it.kind == "series" }
-                .take(MAX_ENRICH_ITEMS)
             ) {
                 val seriesKey = item.seriesKey?.takeIf { item.kind == "series" && it.isNotBlank() }
                 val existing = cached(item.id)
                 if (!force && existing != null) {
+                    if (existing.optBoolean("matched", false)) resolved++
                     seriesKey?.let { key ->
                         if (!seriesMetadata.containsKey(key)) seriesMetadata[key] = existing
                     }
@@ -110,15 +121,21 @@ class TmdbRepository(
                 val shared = seriesKey?.let { seriesMetadata[it] }
                 if (shared != null) {
                     save(item.id, shared)
+                    resolved++
                     continue
                 }
                 runCatching { get(item, force) }.getOrNull()?.let { fetched ->
                     if (fetched.optBoolean("matched", false)) {
+                        resolved++
                         seriesKey?.let { seriesMetadata[it] = fetched }
+                    } else {
+                        issue = status
                     }
                 }
+                if (status.startsWith("Clé TMDB refusée") || status.startsWith("TMDB reçoit trop") || status.startsWith("TMDB est temporairement")) break
                 delay(180)
             }
+            diagnostic(issue ?: if (resolved > 0) "$resolved médias avec affiches et synopsis TMDB." else "Aucun film ou série à enrichir. Vérifiez les catégories des dossiers.")
         } finally {
             enriching.set(false)
         }
@@ -139,7 +156,7 @@ class TmdbRepository(
         val result = (0 until minOf(results.length(), 20)).mapNotNull { results.optJSONObject(it) }.firstOrNull {
             TitleMatch.matches(query, it.optString(if (type == "tv") "name" else "title"),
                 it.optString(if (type == "tv") "original_name" else "original_title"))
-        } ?: return null
+        } ?: run { diagnostic("Aucune correspondance TMDB pour « $query ». Vérifiez le titre et l’année du fichier."); return null }
         val id = result.optInt("id", 0).takeIf { it > 0 } ?: return null
         val detailsUrl = apiUrl("$type/$id", key).newBuilder()
             .addQueryParameter("language", "fr-FR")
@@ -283,7 +300,7 @@ class TmdbRepository(
             header("Accept", "application/json")
         }.build()
         return http.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) return null
+            if (!response.isSuccessful) throw LookupFailure(tmdbHttpMessage(response.code))
             val body = response.body ?: return null
             if (body.contentLength() > MAX_RESPONSE_BYTES) return null
             val output = ByteArrayOutputStream(64 * 1024)
@@ -323,7 +340,6 @@ class TmdbRepository(
     private fun cacheFile(itemId: String) = File(cacheDir, "$itemId.json")
 
     companion object {
-        private const val MAX_ENRICH_ITEMS = 10_000
         private const val MAX_RESPONSE_BYTES = 2 * 1024 * 1024
     }
 }

@@ -371,6 +371,29 @@
                     android:textColor="@color/server_pluxy_text"
                     android:textColorHint="@color/server_pluxy_muted" />
 
+                <TextView
+                    android:id="@+id/tmdbStatus"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:textColor="@color/server_pluxy_muted"
+                    android:textSize="12sp"
+                    android:accessibilityLiveRegion="polite" />
+
+                <Button
+                    android:id="@+id/refreshTmdb"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:minHeight="48dp"
+                    android:layout_marginTop="6dp"
+                    android:paddingStart="12dp"
+                    android:paddingEnd="12dp"
+                    android:background="@drawable/server_bg_button_secondary"
+                    android:text="Actualiser les affiches"
+                    android:textAllCaps="false"
+                    android:textColor="@color/server_pluxy_text"
+                    android:textSize="13sp" />
+
                 <androidx.appcompat.widget.SwitchCompat
                     android:id="@+id/keepAwake"
                     android:layout_width="match_parent"
