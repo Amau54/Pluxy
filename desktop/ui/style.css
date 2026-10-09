@@ -5,3 +5,4 @@
 body{display:flow-root;overflow-x:hidden}::-webkit-scrollbar{width:8px;height:8px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#46526999;border:2px solid var(--bg);border-radius:10px}::-webkit-scrollbar-thumb:hover{background:#62728b}
 
 .detail-row{grid-template-columns:140px 1fr;gap:22px}.detail-poster{width:140px}.detail-text h2{font-size:23px}.episode-row{padding:8px 10px;gap:12px}.episode-row img{width:96px}.season-tabs{margin:20px 0 14px}.sidebar nav button:not(.active){background:transparent}.media-card .media-subtitle{margin-top:3px}.photos .poster,.music .poster{aspect-ratio:1}
+.episode-row.is-watched{position:relative;isolation:isolate}.episode-row.is-watched::after{content:"";position:absolute;inset:2px;border-radius:8px;background:#00000024;pointer-events:none}

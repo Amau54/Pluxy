@@ -548,7 +548,7 @@ private class EpisodeAdapter(
         holder.resume.visibility =
             if (episode.inProgress && episode.progress > 0.02) View.VISIBLE else View.GONE
         holder.resume.progress = (episode.progress * 100).toInt().coerceIn(1, 100)
-        holder.itemView.alpha = if (episode.watched) 0.78f else 1f
+        holder.itemView.isActivated = episode.watched
         holder.itemView.contentDescription =
             "${episodeCode(episode)}, $title, ${holder.meta.text}"
         holder.itemView.setOnClickListener { onClick(episode) }

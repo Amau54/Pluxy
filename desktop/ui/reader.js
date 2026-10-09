@@ -173,7 +173,7 @@ function showSeries(episodes) {
   function showSeason(season) {
     seasons.querySelectorAll('button').forEach(b => b.classList.toggle('active',Number(b.dataset.season) === season));
     list.replaceChildren(...episodes.filter(e => (e.season || 0) === season).map(item => {
-      const e = button('', () => play(item),'episode-row'); e.append(image(item),node('span','episode-number',String(item.episode || '—')),node('strong','',title(item)),node('span','muted',item.watched ? 'Vu' : item.in_progress ? 'Reprendre' : minutes(item)),icon('play')); return e;
+      const e = button('', () => play(item),'episode-row'); e.classList.toggle('is-watched',Boolean(item.watched)); e.append(image(item),node('span','episode-number',String(item.episode || '—')),node('strong','',title(item)),node('span','muted',item.watched ? 'Vu' : item.in_progress ? 'Reprendre' : minutes(item)),icon('play')); return e;
     }));
   }
   for (const season of [...new Set(episodes.map(e => e.season || 0))]) { const e = button(season ? 'Saison ' + season : 'Épisodes spéciaux',() => showSeason(season)); e.dataset.season = season; seasons.append(e); }
