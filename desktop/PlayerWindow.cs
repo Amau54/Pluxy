@@ -55,7 +55,7 @@ namespace Pluxy {
         private string previewUnsupported;
         private DateTime previewRetryAt=DateTime.MinValue;
         private readonly Panel nextPrompt=new Panel { Size=new Size(350,140),BackColor=Color.FromArgb(23,24,29),Padding=new Padding(16),Visible=false };
-        private readonly Label nextTitle=new Label { Dock=DockStyle.Top,Height=50,ForeColor=Color.FromArgb(241,243,248) };
+        private readonly Label nextTitle=new Label { Dock=DockStyle.Top,Height=50,AutoEllipsis=true,ForeColor=Color.FromArgb(241,243,248) };
         private readonly Label nextCountdown=new Label { Dock=DockStyle.Top,Height=24,ForeColor=Color.FromArgb(173,180,195) };
         private readonly System.Diagnostics.Stopwatch nextClock=new System.Diagnostics.Stopwatch();
         private bool nextHandled;
@@ -272,7 +272,12 @@ namespace Pluxy {
         }
         private void ShowNextPrompt(int index) {
             nextHandled=true; var episode=Native.Object(episodes[index]);
-            nextTitle.Text="Épisode suivant\nS"+Native.Number(episode,"season")+" · E"+Native.Number(episode,"episode")+"  "+Native.Text(episode,"title");
+            string title=Native.Text(episode,"title");
+            var marker=System.Text.RegularExpressions.Regex.Match(title,@"s\d{1,2}[ ._-]?e\d{1,2}|\b\d{1,2}x\d{2}\b",System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            if(marker.Success) title=title.Substring(marker.Index+marker.Length);
+            title=System.Text.RegularExpressions.Regex.Replace(title,@"[._]+|\s+"," ").Trim(' ','-');
+            string code="S"+((int)Native.Number(episode,"season")).ToString("00")+"E"+((int)Native.Number(episode,"episode")).ToString("00");
+            nextTitle.Text="Épisode suivant\n"+(title.Length>0?title:"Épisode "+Native.Number(episode,"episode"))+" · "+code;
             nextCountdown.Text=autoplay?"Lecture dans 8 s":"Prêt lorsque vous l'êtes";
             nextClock.Restart(); nextPrompt.Visible=true; nextPrompt.BringToFront();
         }
