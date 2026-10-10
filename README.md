@@ -6,7 +6,7 @@
 
 Vos films, séries, photos et musique sur la TV.
 
-**Android 1.7.13 · Windows 1.8.7**
+**Android 1.7.14 · Windows 1.8.8**
 
 [Application Android](https://github.com/Amau54/Pluxy/releases/download/dev-latest/Pluxy-debug.apk)
 · [Application PC](https://github.com/Amau54/Pluxy/releases/download/pc-latest/Pluxy-Setup.exe)
@@ -22,6 +22,11 @@ Aucun compte ni abonnement n'est nécessaire. Pluxy ne fournit pas de contenu.
 
 Dans le lecteur, **Réglages → Thème** propose Corail, Océan et Minuit. Le choix
 est conservé sur cet appareil et s'applique aussi aux commandes vidéo.
+
+Pendant un déplacement dans la vidéo, un aperçu apparaît lorsque le serveur peut
+extraire une image. Les images sont préparées en arrière-plan et mises en cache.
+Avec un ancien serveur ou un serveur Android antérieur à Android 8.1, le temps
+reste affiché sans aperçu. Aucun réencodage du film n'est nécessaire.
 
 Pour conserver la vidéo 4K/HDR, choisissez **Mode de lecture → Vidéo originale (4K/HDR)**.
 Le lecteur ne réduit alors pas la résolution et n'accepte aucun réencodage vidéo.

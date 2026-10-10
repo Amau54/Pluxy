@@ -1,3 +1,12 @@
+## Windows 1.8.8 · Android 1.7.14
+
+- Commandes vidéo plus discrètes, icônes Windows redessinées et couleurs des trois thèmes harmonisées.
+- Aperçus pendant la navigation dans une vidéo, préparés à la demande et mis en cache par le serveur PC ou Android 8.1 et plus. Le temps reste disponible quand l'aperçu ne peut pas être créé.
+- Fiches plus compactes, synopsis abrégé avec accès au texte complet et bande-annonce à côté de Lire sur Windows.
+- Épisodes TV plus compacts, métadonnées regroupées et état vu conservé sur toute la ligne.
+- Proposition de l'épisode suivant avec décompte et progression discrets. Retour et passage en arrière-plan annulent le lancement automatique ; le réglage de lecture automatique reste respecté.
+- Accueil Windows avec temps restant sur les reprises, aperçus des dossiers photos et pochettes des albums.
+
 ## Windows 1.8.1 · Android 1.7.6
 
 - Windows : une application unique avec choix Lecteur ou Serveur, mémorisé et modifiable dans les options.

@@ -4,7 +4,7 @@
     android:layout_height="wrap_content"
     android:layout_marginTop="5dp"
     android:layout_marginBottom="5dp"
-    android:background="@drawable/focus_card"
+    android:background="@drawable/focus_episode"
     android:foreground="@drawable/episode_watched_overlay"
     android:clickable="true"
     android:focusable="true"

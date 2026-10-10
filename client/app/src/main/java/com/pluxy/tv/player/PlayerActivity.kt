@@ -7,6 +7,8 @@ import android.app.Dialog
 import android.content.Intent
 import android.content.res.Configuration
 import android.graphics.Color
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.media.MediaMetadata
 import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
@@ -339,6 +341,69 @@ class PlayerActivity : ThemedActivity() {
     private lateinit var seekArrowView: TextView
     private lateinit var seekDeltaView: TextView
     private lateinit var seekTargetView: TextView
+    private var seekPreviewJob: Job? = null
+    private var seekPreviewBucket = -1L
+    private var seekPreviewUnavailableItem: String? = null
+    private val seekPreviewCache = android.util.LruCache<String, Bitmap>(12)
+
+    private fun requestSeekPreview(positionMs: Long) {
+        val bucket = positionMs.coerceAtLeast(0) / 10_000 * 10_000
+        val image = findViewById<ImageView>(R.id.seekPreviewImage)
+        if (bucket != seekPreviewBucket) {
+            seekPreviewBucket = bucket
+            image.setImageDrawable(null)
+            image.visibility = View.GONE
+        }
+        val key = "${api.baseUrl}:${item.id}:$bucket"
+        seekPreviewCache.get(key)?.let {
+            image.setImageBitmap(it)
+            image.visibility = View.VISIBLE
+            return
+        }
+        if (seekPreviewUnavailableItem == item.id || seekPreviewJob?.isActive == true) return
+        seekPreviewJob = lifecycleScope.launch {
+            delay(350)
+            var previous = -1L
+            var attempts = 0
+            while (seekOverlay.visibility == View.VISIBLE && activityStarted) {
+                val requested = seekPreviewBucket
+                val requestedItem = item.id
+                val requestedApi = api
+                if (previous != requested) { previous = requested; attempts = 0 }
+                val cacheKey = "${requestedApi.baseUrl}:$requestedItem:$requested"
+                val bytes = try {
+                    requestedApi.seekPreview(requestedItem, requested)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: com.pluxy.tv.api.ApiException) {
+                    if (error.code == 404 && item.id == requestedItem) seekPreviewUnavailableItem = requestedItem
+                    return@launch
+                } catch (_: Exception) {
+                    return@launch
+                }
+                if (item.id != requestedItem || api !== requestedApi) return@launch
+                if (bytes != null) {
+                    val bitmap = kotlinx.coroutines.withContext(Dispatchers.Default) {
+                        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+                        if (bounds.outWidth !in 1..640 || bounds.outHeight !in 1..360) null
+                        else BitmapFactory.decodeByteArray(bytes, 0, bytes.size,
+                            BitmapFactory.Options().apply { inPreferredConfig = Bitmap.Config.RGB_565 })
+                    }
+                    if (bitmap != null) {
+                        seekPreviewCache.put(cacheKey, bitmap)
+                        if (requested == seekPreviewBucket && seekOverlay.visibility == View.VISIBLE) {
+                            image.setImageBitmap(bitmap)
+                            image.visibility = View.VISIBLE
+                            return@launch
+                        }
+                    }
+                }
+                if (requested == seekPreviewBucket && ++attempts >= 4) return@launch
+                delay(if (requested == seekPreviewBucket) 1_000 else 350)
+            }
+        }
+    }
 
     /** Démarre un scrub visuel. Le lecteur réel ne reçoit aucun seek avant la relâche :
      *  cela évite les rafales de requêtes Range/HLS et les redémarrages FFmpeg. */
@@ -412,11 +477,21 @@ class PlayerActivity : ThemedActivity() {
         }
         seekDeltaView.text = getString(R.string.player_seek_delta, delta, speed)
         seekTargetView.text = fmtPlayerTime(targetMs)
+        requestSeekPreview(targetMs)
         timeline.setPosition(targetMs)
         timePositionView.text = fmtPlayerTime(targetMs)
     }
 
     private fun dismissSeekOverlay() {
+        seekPreviewJob?.cancel()
+        seekPreviewJob = null
+        seekPreviewBucket = -1L
+        if (::seekOverlay.isInitialized) {
+            findViewById<ImageView>(R.id.seekPreviewImage).apply {
+                setImageDrawable(null)
+                visibility = View.GONE
+            }
+        }
         if (::seekOverlay.isInitialized) seekOverlay.visibility = View.GONE
     }
 
@@ -721,6 +796,14 @@ class PlayerActivity : ThemedActivity() {
             androidx.appcompat.widget.TooltipCompat.setTooltipText(this, getString(R.string.player_leave_action))
         }
         setupImmersivePlayback()
+        controlsOverlay.viewTreeObserver.addOnGlobalFocusChangeListener { _, focused ->
+            findViewById<TextView>(R.id.playerActionHint).apply {
+                val ids = setOf(R.id.btnRestart, R.id.btnRewind, R.id.btnPlayPause,
+                    R.id.btnForward, R.id.btnTracks, R.id.btnSubtitles, R.id.btnGear)
+                text = if (focused?.id in ids) focused?.contentDescription ?: "" else ""
+                visibility = if (text.isNotEmpty()) View.VISIBLE else View.INVISIBLE
+            }
+        }
         for ((id, description) in listOf(
             R.id.btnRewind to R.string.player_rewind_description,
             R.id.btnForward to R.string.player_forward_description,
@@ -871,6 +954,12 @@ class PlayerActivity : ThemedActivity() {
         }
         val panel = findViewById<View>(R.id.playerBottomPanel)
         val margin = (scroll.layoutParams as FrameLayout.LayoutParams).bottomMargin
+        val hint = findViewById<View>(R.id.playerActionHint)
+        val hintParams = hint.layoutParams as FrameLayout.LayoutParams
+        val hintMargin = margin + panel.measuredHeight + (4 * density).toInt()
+        if (hintParams.bottomMargin != hintMargin) {
+            hint.layoutParams = hintParams.apply { bottomMargin = hintMargin }
+        }
         val belowTitle = (controlsOverlay.height - controlsOverlay.paddingBottom - title.bottom - margin - 12 * density).toInt()
         val cap = belowTitle
         val height = minOf(panel.measuredHeight, cap.coerceAtLeast((48 * density).toInt()))
@@ -906,6 +995,7 @@ class PlayerActivity : ThemedActivity() {
         seekOverlay.visibility = View.VISIBLE
         seekArrowView.text = ""
         seekTargetView.text = fmtPlayerTime(target)
+        requestSeekPreview(target)
         seekDeltaView.text = if (durationMs > 0L) "${target * 100L / durationMs} %" else ""
         timePositionView.text = fmtPlayerTime(target)
     }
@@ -1350,6 +1440,7 @@ class PlayerActivity : ThemedActivity() {
 
     override fun onStop() {
         activityStarted = false
+        dismissSeekOverlay()
         cancelSeekRebuild()
         playerChoiceMenuGeneration++
         playerChoiceMenu?.dismiss()
@@ -2243,6 +2334,7 @@ class PlayerActivity : ThemedActivity() {
     }
 
     private fun showNextEpisodeDialog(next: PluxyItem) {
+        setStatus("")
         nextEpisodeDialog?.dismiss()
         val automatic = PluxyApplication.autoPlayNextEpisode(this)
         val dialog = Dialog(this)
@@ -2264,6 +2356,8 @@ class PlayerActivity : ThemedActivity() {
             error(R.drawable.ic_episode_placeholder)
         }
         val countdown = dialog.findViewById<TextView>(R.id.nextEpisodeCountdown)
+        val progress = dialog.findViewById<android.widget.ProgressBar>(R.id.nextEpisodeProgress)
+        progress.visibility = if (automatic) View.VISIBLE else View.GONE
         countdown.text = if (automatic) getString(R.string.player_next_countdown, NEXT_EPISODE_DELAY_SECONDS)
             else getString(R.string.player_next_manual)
         nextEpisodeDialog = dialog
@@ -2289,6 +2383,7 @@ class PlayerActivity : ThemedActivity() {
                         if (seconds <= 0) playNextEpisode(next)
                         else {
                             countdown.text = getString(R.string.player_next_countdown, seconds)
+                            progress.progress = seconds * 1_000 / NEXT_EPISODE_DELAY_SECONDS
                             handler.postDelayed(this, 1_000L)
                         }
                     }

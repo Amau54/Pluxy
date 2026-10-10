@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Globalization;
 using System.Net;
 using System.Net.Http;
 using System.Net.Sockets;
@@ -31,6 +32,25 @@ namespace Pluxy {
         public static string ItemPath(string id) {
             if(!Regex.IsMatch(id ?? "", "^[A-Za-z0-9_-]{1,128}$")) throw new ArgumentException("Média invalide.");
             return Uri.EscapeDataString(id);
+        }
+        public async Task<byte[]> SeekPreview(string server,string id,long second,CancellationToken cancellation) {
+            using(var timeout=CancellationTokenSource.CreateLinkedTokenSource(cancellation)) {
+                timeout.CancelAfter(2000);
+                using(var response=await http.GetAsync(server+"/api/library/items/"+ItemPath(id)+"/preview?position="+second.ToString(CultureInfo.InvariantCulture),HttpCompletionOption.ResponseHeadersRead,timeout.Token)) {
+                    if((int)response.StatusCode==202) return null;
+                    if((int)response.StatusCode==404) return new byte[0];
+                    response.EnsureSuccessStatusCode();
+                    if(response.Content.Headers.ContentLength>256*1024) throw new IOException("Aperçu trop volumineux.");
+                    using(var input=await response.Content.ReadAsStreamAsync()) using(var output=new MemoryStream()) {
+                        var buffer=new byte[8192]; int count;
+                        while((count=await input.ReadAsync(buffer,0,buffer.Length,timeout.Token))>0) {
+                            if(output.Length+count>256*1024) throw new IOException("Aperçu trop volumineux.");
+                            output.Write(buffer,0,count);
+                        }
+                        return output.ToArray();
+                    }
+                }
+            }
         }
         private async Task<object> Get(string server, string path) {
             using(var response = await http.GetAsync(server + path,HttpCompletionOption.ResponseHeadersRead)) {

@@ -15,7 +15,7 @@ using Microsoft.Web.WebView2.WinForms;
 [assembly: System.Reflection.AssemblyDescription("Lecteur et serveur multimédia Pluxy")]
 [assembly: System.Reflection.AssemblyCompany("Pluxy")]
 [assembly: System.Reflection.AssemblyProduct("Pluxy")]
-[assembly: System.Reflection.AssemblyVersion("1.8.7.0")]
+[assembly: System.Reflection.AssemblyVersion("1.8.8.0")]
 
 namespace Pluxy {
     internal static class Program {
@@ -184,6 +184,14 @@ namespace Pluxy {
                     string theme=Native.Text(args,"theme",prefs.theme),audio=Native.Text(args,"audio",prefs.audio);
                     if(!new[]{"coral","ocean","midnight"}.Contains(theme) || !new[]{"auto","passthrough","compatible"}.Contains(audio)) throw new ArgumentException("Réglage inconnu.");
                     prefs.theme=theme; prefs.audio=audio; prefs.Save(); result=true;
+                }
+                else if(method=="trailer") {
+                    Uri trailer; string value=Native.Text(args,"url");
+                    if(!Uri.TryCreate(value,UriKind.Absolute,out trailer) || trailer.Scheme!="https" || !string.IsNullOrEmpty(trailer.UserInfo)) throw new ArgumentException("Bande-annonce invalide.");
+                    string video=trailer.Host=="youtu.be"?trailer.AbsolutePath.Trim('/'):
+                        (trailer.Host=="www.youtube.com" || trailer.Host=="youtube.com") && trailer.AbsolutePath=="/watch"?System.Web.HttpUtility.ParseQueryString(trailer.Query)["v"]:null;
+                    if(!System.Text.RegularExpressions.Regex.IsMatch(video ?? "","^[A-Za-z0-9_-]{11}$")) throw new ArgumentException("Bande-annonce invalide.");
+                    Process.Start(new ProcessStartInfo("https://www.youtube.com/watch?v="+video) { UseShellExecute=true }); result=true;
                 }
                 else if(method=="play") {
                     var item=Native.Object(await api.Api("item",args)); string itemId=Native.Text(item,"id");

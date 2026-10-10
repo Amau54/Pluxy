@@ -95,6 +95,7 @@ class PluxyHttpServer(
     @Synchronized
     fun stop() {
         running = false
+        thumbnails.cancelPreviews()
         runCatching { serverSocket?.close() }
         serverSocket = null
         inactivityMonitor?.shutdownNow()
@@ -342,6 +343,20 @@ class PluxyHttpServer(
             request.path.matches(Regex("^/stream/direct/[0-9a-f]+$")) &&
                 request.method in setOf("GET", "HEAD") -> {
                 streamDocument(output, request, requireItem(request.path.substringAfterLast('/')), null)
+            }
+            request.path.matches(Regex("^/api/library/items/[0-9a-f]+/preview$")) &&
+                request.method in setOf("GET", "HEAD") -> {
+                val item = requireItem(request.path.substringBeforeLast('/').substringAfterLast('/'))
+                val position = request.query["position"]?.toDoubleOrNull()
+                    ?: throw HttpFailure(400, "Position invalide")
+                if (!position.isFinite() || position !in 0.0..604_800.0) throw HttpFailure(400, "Position invalide")
+                when (val preview = thumbnails.preview(item, position)) {
+                    is Result.Ready -> sendBytes(output, 200, "image/jpeg", preview.bytes, headOnly,
+                        mapOf("Cache-Control" to "private, max-age=86400"))
+                    Result.Busy -> sendBytes(output, 202, "image/jpeg", ByteArray(0), headOnly,
+                        mapOf("Retry-After" to "1", "Cache-Control" to "no-store"))
+                    Result.Unsupported -> throw HttpFailure(404, "Aperçu indisponible")
+                }
             }
             request.path.matches(Regex("^/image/thumbnail/[0-9a-f]+$")) &&
                 request.method in setOf("GET", "HEAD") -> {
@@ -765,6 +780,7 @@ class PluxyHttpServer(
     private fun reason(status: Int): String = when (status) {
         200 -> "OK"; 204 -> "No Content"; 206 -> "Partial Content"; 307 -> "Temporary Redirect"
         400 -> "Bad Request"; 404 -> "Not Found"; 405 -> "Method Not Allowed"
+        202 -> "Accepted"
         409 -> "Conflict"
         415 -> "Unsupported Media Type"
         413 -> "Payload Too Large"; 414 -> "URI Too Long"; 416 -> "Range Not Satisfiable"

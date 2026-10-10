@@ -93,6 +93,11 @@ class DetailsActivity : ThemedActivity() {
         findViewById<Button>(R.id.trailer).visibility = View.GONE
         findViewById<Button>(R.id.playSettings).setOnClickListener { showPlaybackSettings() }
         findViewById<TextView>(R.id.playDiagnostic).setOnClickListener { showDiagnosticDetails() }
+        findViewById<TextView>(R.id.overview).setOnClickListener {
+            AlertDialog.Builder(this).setTitle(R.string.label_synopsis)
+                .setMessage(findViewById<TextView>(R.id.overview).text)
+                .setPositiveButton("Fermer", null).show()
+        }
 
         loadMetadata()
         loadPlaybackDiagnostic()
@@ -201,10 +206,7 @@ class DetailsActivity : ThemedActivity() {
             }
             chips.addView(chip(label, accent = h >= 2000))
         }
-        item.videoCodec?.let { chips.addView(chip(it.uppercase(), accent = false)) }
         if (item.isHdr) chips.addView(chip("HDR", accent = true))
-        val mins = (item.duration / 60).toInt()
-        if (mins > 0) chips.addView(chip("${mins} min", accent = false))
     }
 
     private fun chip(text: String, accent: Boolean): TextView {
@@ -304,7 +306,7 @@ class DetailsActivity : ThemedActivity() {
             renderPlaybackActions()
             val ui = PlaybackDiagnostic.from(decision)
             view.text = when (ui.level) {
-                DiagnosticLevel.DIRECT -> ui.title
+                DiagnosticLevel.DIRECT -> "Détails de lecture · ${ui.title}"
                 DiagnosticLevel.ADAPTATION -> getString(R.string.label_adaptation_status, ui.title)
                 DiagnosticLevel.WARNING -> getString(R.string.label_warning_status, ui.title)
                 DiagnosticLevel.UNSUPPORTED ->
@@ -312,7 +314,7 @@ class DetailsActivity : ThemedActivity() {
             }
             view.setTextColor(
                 when (ui.level) {
-                    DiagnosticLevel.DIRECT -> 0xFF68D391.toInt()
+                    DiagnosticLevel.DIRECT -> pluxyColor(R.color.text_secondary)
                     DiagnosticLevel.ADAPTATION -> pluxyColor(R.color.accent)
                     DiagnosticLevel.WARNING -> 0xFFF6C85F.toInt()
                     DiagnosticLevel.UNSUPPORTED -> 0xFFFF7B7B.toInt()
@@ -330,7 +332,7 @@ class DetailsActivity : ThemedActivity() {
         val ui = PlaybackDiagnostic.from(decision)
         AlertDialog.Builder(this)
             .setTitle(ui.title)
-            .setMessage(ui.detail + "\n\nProfil : " + (decision.profileName ?: "détection locale"))
+            .setMessage(ui.detail + "\n\nFichier : " + listOfNotNull(item.videoCodec, item.audioCodec).joinToString(" · ") + "\nProfil : " + (decision.profileName ?: "détection locale"))
             .setPositiveButton("Fermer", null)
             .show()
     }

@@ -48,6 +48,12 @@ function image(item, classes = '', full = false) {
   return e;
 }
 function title(item) { return item.metadata_title || item.title || 'Sans titre'; }
+function episodeTitle(item) {
+  const raw=String(item.title || '');
+  const marker=raw.match(/s\d{1,2}[ ._-]?e\d{1,2}|\b\d{1,2}x\d{2}\b/i);
+  const name=(marker ? raw.slice(marker.index+marker[0].length) : raw).replace(/[._]+/g,' ').replace(/\s+/g,' ').replace(/^[\s-]+|[\s-]+$/g,'');
+  return name || 'Épisode '+(item.episode || 1);
+}
 function minutes(item) { return item.duration ? Math.round(item.duration / 60) + ' min' : ''; }
 function folded(value) { return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); }
 function applyPreferences() {
@@ -122,7 +128,8 @@ async function load(append = false, retry = true) {
     if (version !== generation) return;
     items = append ? [...items, ...page.items] : page.items; revision = page.revision; next = page.next_offset;
     if (version !== generation) return;
-    $('count').textContent = page.total + (selectedKind === 'series' ? ' épisodes' : selectedKind === 'photo' ? ' photos' : ' éléments');
+    const countLabel = {movie:'film',series:'série',clip:'vidéo',photo:'dossier',audio:'album'}[selectedKind];
+    $('count').textContent = page.total + (countLabel ? ' ' + countLabel + (page.total === 1 ? '' : 's') : ' éléments');
     render(); hidden('more', next == null);
     if (!append && selectedKind !== 'home') {
       const facets = await call('facets', {kind: selectedKind});
@@ -167,7 +174,7 @@ function openItem(item) {
   else showMovie(item);
 }
 function renderHome(counts) {
-  $('count').textContent = 'Vos médias, à portée de main';
+  $('count').textContent = 'Reprises et ajouts récents';
   const content=$('content'); content.replaceChildren();
   if (!items.length) { render(); return; }
   const recent=(a,b)=>(b.added_at || 0)-(a.added_at || 0);
@@ -184,7 +191,13 @@ function renderHome(counts) {
     const section=node('section','shelf'), header=node('div','shelf-heading'); header.append(node('h2','',name));
     if(target) header.append(button('Tout voir',()=>selectKind(target),'text-button'));
     const grid=node('div','shelf-items'+(landscape?' landscape':''));
-    grid.append(...values.map(e=>card(e,()=>landscape?play(e):openItem(e),e.kind==='series'?'S'+(e.season || 0)+' · E'+(e.episode || 0)+(landscape?' · '+title(e):''):undefined)));
+    grid.append(...values.map(e=> {
+      const remaining=e.in_progress && e.duration>0?Math.max(1,Math.ceil(e.duration*(1-(e.progress || 0))/60))+' min restantes':'';
+      const subtitle=[e.kind==='series'?'S'+(e.season || 0)+' · E'+(e.episode || 0):'',landscape?remaining:''].filter(Boolean).join(' · ');
+      const entry=card(e,()=>landscape?play(e):openItem(e),subtitle || undefined);
+      if(landscape && e.kind==='series') entry.querySelector('.media-title').textContent=e.series_name || title(e);
+      return entry;
+    }));
     section.append(header,grid); content.append(section);
   }
   shelf('Continuer à regarder',started,null,true);
@@ -214,7 +227,35 @@ async function showMovie(item) {
   if (item.in_progress) actions.append(button('Depuis le début', () => play(item, false)));
   text.append(actions); const overview = node('p','overview',''); text.append(overview);
   const row = node('div','detail-row'); row.append(poster,text); body.replaceChildren(row); showDialog('details');
-  try { const metadata = await call('metadata',{id:item.id}); if (body.contains(overview)) overview.textContent = metadata.overview || ''; } catch (_) { /* La lecture reste disponible sans métadonnées. */ }
+  await decorateDetails(item,body,row,text,actions,overview);
+}
+async function decorateDetails(item,body,row,text,actions,overview) {
+  try {
+    const metadata=await call('metadata',{id:item.id});
+    if(!body.contains(row) || !metadata) return;
+    overview.textContent=metadata.overview || '';
+    if(overview.textContent.length>280) {
+      const more=button('Lire la suite',()=> {
+        const expanded=overview.classList.toggle('expanded'); more.textContent=expanded?'Réduire':'Lire la suite'; more.setAttribute('aria-expanded',String(expanded));
+      },'text-button synopsis-toggle'); more.setAttribute('aria-expanded','false'); text.append(more);
+    }
+    if(metadata.trailer_url) {
+      try {
+        const url=new URL(metadata.trailer_url);
+        if(url.protocol==='https:' && ['youtube.com','www.youtube.com','youtu.be'].includes(url.hostname))
+          actions.append(button('Bande-annonce',()=>call('trailer',{url:metadata.trailer_url}).catch(fail)));
+      } catch (_) { /* Lien absent ou invalide. */ }
+    }
+    if(metadata.backdrop_url) {
+      try {
+        const url=new URL(metadata.backdrop_url);
+        if(url.origin==='https://image.tmdb.org' && url.pathname.startsWith('/t/p/')) {
+          const backdrop=node('img','detail-backdrop'); backdrop.alt=''; backdrop.src=url.href;
+          backdrop.addEventListener('error',()=>backdrop.remove()); body.prepend(backdrop);
+        }
+      } catch (_) { /* Le fond neutre reste disponible. */ }
+    }
+  } catch (_) { /* La lecture reste disponible sans métadonnées. */ }
 }
 function seriesKey(item) {
   // Le serveur récent fournit une clé canonique. Ce repli couvre les index plus anciens.
@@ -255,16 +296,19 @@ function showSeries(episodes) {
   const first = episodes[0], body = $('detail-content'), row = node('div','detail-row'), poster = node('div','detail-poster'), text = node('div','detail-text');
   poster.append(image(first)); text.append(node('p','eyebrow','Série'),node('h2','',first.series_name || title(first)),node('p','muted',episodes.length + ' épisodes'));
   const resume = [...episodes].filter(e => e.in_progress).sort((a,b) => b.last_played_at - a.last_played_at)[0] || episodes.find(e => !e.watched) || first;
-  text.append(button('Lire · S' + (resume.season || 0) + ' E' + (resume.episode || 0), () => play(resume),'primary')); row.append(poster,text);
+  const actions=node('div','detail-actions');
+  actions.append(button((resume.in_progress?'Reprendre':'Lire')+' · S' + (resume.season || 0) + ' E' + (resume.episode || 0), () => play(resume),'primary'));
+  const overview=node('p','overview'); text.append(actions,overview); row.append(poster,text);
   const seasons = node('div','season-tabs'), list = node('div','episode-list');
   function showSeason(season) {
     seasons.querySelectorAll('button').forEach(b => b.classList.toggle('active',Number(b.dataset.season) === season));
     list.replaceChildren(...episodes.filter(e => (e.season || 0) === season).map(item => {
-      const e = button('', () => play(item),'episode-row'); e.classList.toggle('is-watched',Boolean(item.watched)); e.append(image(item),node('span','episode-number',String(item.episode || '—')),node('strong','',title(item)),node('span','muted',item.watched ? 'Vu' : item.in_progress ? 'Reprendre' : minutes(item)),icon('play')); return e;
+      const e = button('', () => play(item),'episode-row'); e.classList.toggle('is-watched',Boolean(item.watched)); e.append(image(item),node('span','episode-number',String(item.episode || '—')),node('strong','',episodeTitle(item)),node('span','muted',item.watched ? 'Vu' : item.in_progress ? 'Reprendre' : minutes(item)),icon('play')); return e;
     }));
   }
   for (const season of [...new Set(episodes.map(e => e.season || 0))]) { const e = button(season ? 'Saison ' + season : 'Épisodes spéciaux',() => showSeason(season)); e.dataset.season = season; seasons.append(e); }
   body.replaceChildren(row,seasons,list); showSeason(resume.season || 0); showDialog('details');
+  decorateDetails(first,body,row,text,actions,overview);
 }
 function photoState() { try { return JSON.parse(localStorage.getItem('folders:' + connection.url) || '{}'); } catch (_) { return {}; } }
 function renderPhotos() {
@@ -282,6 +326,7 @@ function renderPhotos() {
     if (folder.images.length) groups.push(folder.images);
     const e = node('details','folder-tree'); e.open = Object.prototype.hasOwnProperty.call(state,folder.key) ? Boolean(state[folder.key]) : root;
     const summary = node('summary','folder-row'); summary.append(icon('chevron'),icon('folder'),node('strong','',folder.name),node('span','muted',folder.images.length ? folder.images.reduce((n,i)=>n+(i.group_count || 1),0) + ' photos' : ''));
+    if(folder.images.length) summary.insertBefore(image(folder.images[0],'folder-cover'),summary.querySelector('strong'));
     e.append(summary); e.dataset.folder = folder.key;
     e.addEventListener('toggle',() => { const saved = photoState(); saved[folder.key] = e.open; try { localStorage.setItem('folders:' + connection.url,JSON.stringify(saved)); } catch (_) { /* Stockage plein. */ } });
     if (folder.images.length) {
@@ -314,7 +359,9 @@ function renderMusic() {
       const list = node('div','episode-list');
       tracks.sort((a,b) => (a.disc_number || 1) - (b.disc_number || 1) || (a.track_number || 0) - (b.track_number || 0) || title(a).localeCompare(title(b),'fr',{numeric:true}));
       list.append(...tracks.map(item => { const e = button('',() => play(item,false),'episode-row'); e.append(node('span','episode-number',String(item.track_number || '♪')),node('strong','',title(item)),node('span','muted',minutes(item)),icon('play')); return e; }));
-      $('detail-content').replaceChildren(node('h2','',first.album || 'Sans album'),node('p','muted',first.artist || ''),list); showDialog('details');
+      const header=node('div','detail-row'), cover=node('div','detail-poster album-cover'), info=node('div','detail-text');
+      cover.append(image(first)); info.append(node('p','eyebrow','Album'),node('h2','',first.album || 'Sans album'),node('p','muted',[first.artist,tracks.length+' pistes'].filter(Boolean).join(' · ')));
+      header.append(cover,info); $('detail-content').replaceChildren(header,list); showDialog('details');
     },first.artist || tracks.length + ' pistes');
   })); $('content').replaceChildren(grid);
 }

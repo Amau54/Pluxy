@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true">
+        <shape>
+            <solid android:color="?attr/pluxyGlassFocusBottom" />
+            <stroke android:width="1.5dp" android:color="?attr/pluxyBorderFocus" />
+            <corners android:radius="@dimen/radius_md" />
+        </shape>
+    </item>
+    <item>
+        <shape>
+            <solid android:color="#14000000" />
+            <corners android:radius="@dimen/radius_md" />
+        </shape>
+    </item>
+</selector>

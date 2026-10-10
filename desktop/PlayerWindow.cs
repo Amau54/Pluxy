@@ -45,6 +45,20 @@ namespace Pluxy {
         private int recoveryAttempts;
         private DateTime stalledSince=DateTime.MinValue,healthySince=DateTime.MinValue;
         private Button retryButton,nextButton;
+        private readonly Timer previewTimer=new Timer { Interval=400 };
+        private readonly Panel previewPanel=new Panel { Size=new Size(176,122),BackColor=Color.FromArgb(23,24,29),Visible=false };
+        private readonly PictureBox previewImage=new PictureBox { Dock=DockStyle.Top,Height=94,SizeMode=PictureBoxSizeMode.Zoom };
+        private readonly Label previewTime=new Label { Dock=DockStyle.Bottom,Height=28,TextAlign=ContentAlignment.MiddleCenter,ForeColor=Color.FromArgb(240,242,247) };
+        private readonly Dictionary<string,Bitmap> previewCache=new Dictionary<string,Bitmap>();
+        private readonly System.Threading.CancellationTokenSource previewLifetime=new System.Threading.CancellationTokenSource();
+        private bool previewBusy;
+        private string previewUnsupported;
+        private DateTime previewRetryAt=DateTime.MinValue;
+        private readonly Panel nextPrompt=new Panel { Size=new Size(350,140),BackColor=Color.FromArgb(23,24,29),Padding=new Padding(16),Visible=false };
+        private readonly Label nextTitle=new Label { Dock=DockStyle.Top,Height=50,ForeColor=Color.FromArgb(241,243,248) };
+        private readonly Label nextCountdown=new Label { Dock=DockStyle.Top,Height=24,ForeColor=Color.FromArgb(173,180,195) };
+        private readonly System.Diagnostics.Stopwatch nextClock=new System.Diagnostics.Stopwatch();
+        private bool nextHandled;
         public PlayerWindow(LibraryClient api,string id,string title,string url,string audio,double start,object[] subtitles=null)
             : this(api,id,title,url,audio,start,subtitles,null) { }
         public PlayerWindow(LibraryClient api,string id,string title,string url,string audio,double start,object[] subtitles,object[] queue) {
@@ -54,9 +68,9 @@ namespace Pluxy {
             Text=title+" · Pluxy"; Size=new Size(1180,760); MinimumSize=new Size(700,440); StartPosition=FormStartPosition.CenterParent;
             BackColor=Color.FromArgb(12,16,22); Font=new Font("Segoe UI",10); KeyPreview=true;
             string theme=Preferences.Load().theme;
-            var accent=theme=="ocean"?Color.FromArgb(133,204,220):theme=="midnight"?Color.FromArgb(182,173,242):Color.FromArgb(237,184,148);
+            var accent=theme=="ocean"?Color.FromArgb(131,217,229):theme=="midnight"?Color.FromArgb(196,207,235):Color.FromArgb(246,173,132);
             timeline.Accent=accent; status.ForeColor=accent;
-            controls=new Panel { Height=76,Padding=new Padding(18,4,18,8),BackColor=Color.FromArgb(23,24,29),Anchor=AnchorStyles.Top|AnchorStyles.Left };
+            controls=new Panel { Height=76,Padding=new Padding(12,2,12,6),BackColor=Color.FromArgb(23,24,29),Anchor=AnchorStyles.Top|AnchorStyles.Left };
             var buttons=new FlowLayoutPanel { Dock=DockStyle.Fill,WrapContents=false };
             pause=ControlButton("Ⅱ","Lire / pause · Espace",async(s,e)=> { if(!ready || closing) return; try { if(Convert.ToBoolean(await mpv.Command("get_property","eof-reached"))) { await Run("seek",0,"absolute+exact"); await Run("set_property","pause",false); } else await Run("cycle","pause"); } catch(Exception error) { Native.Log(error); } });
             buttons.Controls.Add(ControlButton("−10","Reculer de 10 secondes · Flèche gauche",async(s,e)=>await Run("seek",-10,"relative+exact")));
@@ -72,10 +86,16 @@ namespace Pluxy {
             volume.MouseUp+=async(s,e)=>await Run("set_property","volume",volume.Value); volume.KeyUp+=async(s,e)=>await Run("set_property","volume",volume.Value); buttons.Controls.Add(volume);
             controls.Controls.Add(buttons); controls.Controls.Add(timeline);
             Controls.Add(screen); Controls.Add(controls); Controls.Add(status);
+            previewPanel.Controls.Add(previewImage); previewPanel.Controls.Add(previewTime); Controls.Add(previewPanel);
+            previewTimer.Tick+=async(s,e)=>await UpdatePreview(); previewTimer.Start();
+            var nextActions=new FlowLayoutPanel { Dock=DockStyle.Bottom,Height=44,FlowDirection=FlowDirection.RightToLeft };
+            nextActions.Controls.Add(ControlButton("Rester","Rester sur cet épisode",(s,e)=>CancelNextPrompt()));
+            nextActions.Controls.Add(ControlButton("Lire maintenant","Lire l'épisode suivant",async(s,e)=>await NextEpisode()));
+            nextPrompt.Controls.Add(nextCountdown); nextPrompt.Controls.Add(nextTitle); nextPrompt.Controls.Add(nextActions); Controls.Add(nextPrompt);
             retryButton=ControlButton("Réessayer","Reprendre au même endroit",async(s,e)=> { recoveryAttempts=0; await Recover(position); }); retryButton.Visible=false; retryButton.Dock=DockStyle.Top; Controls.Add(retryButton); retryButton.BringToFront();
             controls.BringToFront();
-            Resize+=(s,e)=> { controls.SetBounds(0,ClientSize.Height-controls.Height,ClientSize.Width,controls.Height); };
-            controls.SetBounds(0,ClientSize.Height-controls.Height,ClientSize.Width,controls.Height);
+            Resize+=(s,e)=>LayoutControls();
+            LayoutControls();
             time.Margin=new Padding(10,10,15,0); time.Font=new Font("Segoe UI",9);
             timeline.AccessibleName="Position dans la vidéo";
             timeline.MouseDown+=(s,e)=>dragging=true;
@@ -94,7 +114,7 @@ namespace Pluxy {
             };
             KeyUp+=async(s,e)=> { if((e.KeyCode==Keys.Right || e.KeyCode==Keys.Left) && seekDirection!=0) { e.Handled=true; UpdateSeek(); seekDirection=0; seekTimer.Stop(); seekClock.Stop(); await Run("seek",seekTarget,"absolute+exact"); } };
             seekTimer.Tick+=(s,e)=>UpdateSeek();
-            Deactivate+=(s,e)=> { seekDirection=0; seekTimer.Stop(); seekClock.Stop(); };
+            Deactivate+=(s,e)=> { seekDirection=0; seekTimer.Stop(); seekClock.Stop(); CancelNextPrompt(); };
             Shown+=async(s,e)=> {
                 Native.DarkFrame(this);
                 bool opened=false;
@@ -109,12 +129,14 @@ namespace Pluxy {
         }
         public async Task Shutdown() {
             if(closing) return; closing=true; timer.Stop(); seekTimer.Stop(); mpv.Dispose();
+            previewTimer.Stop(); previewLifetime.Cancel(); previewImage.Image=null;
+            foreach(var bitmap in previewCache.Values) bitmap.Dispose(); previewCache.Clear();
             try { var save=api.SaveProgress(server,id,position,duration,progressSession,++progressSequence); await Task.WhenAny(save,Task.Delay(2000)); if(save.IsCompleted) await save; else saveObserver=save.ContinueWith(t=>Native.Log(t.Exception),TaskContinuationOptions.OnlyOnFaulted); } catch(Exception error) { Native.Log(error); }
-            timer.Dispose(); seekTimer.Dispose(); hints.Dispose(); Close();
+            timer.Dispose(); seekTimer.Dispose(); previewTimer.Dispose(); previewLifetime.Dispose(); hints.Dispose(); Close();
         }
         protected override bool ProcessCmdKey(ref Message message,Keys keyData) {
             if(keyData==Keys.F11 || keyData==Keys.F) { ToggleFull(); return true; }
-            if(keyData==Keys.Escape) { if(full) ToggleFull(); else Close(); return true; }
+            if(keyData==Keys.Escape) { if(nextPrompt.Visible) CancelNextPrompt(); else if(full) ToggleFull(); else Close(); return true; }
             if(!(ActiveControl is PlayerSlider) && (keyData==Keys.Right || keyData==Keys.Left)) {
                 StartSeek(keyData==Keys.Right?1:-1); return true;
             }
@@ -128,6 +150,7 @@ namespace Pluxy {
                     double value=Convert.ToDouble(command[1],CultureInfo.InvariantCulture);
                     resume=Convert.ToString(command[2]).StartsWith("absolute",StringComparison.Ordinal)?value:position+value;
                     resume=Math.Max(0,duration>0?Math.Min(duration-.25,resume):resume);
+                    CancelNextPrompt(); nextHandled=false;
                     seekGraceUntil=DateTime.UtcNow.AddSeconds(5); restoreReserveAfterSeek=true;
                     await mpv.Command("set_property","cache-pause-wait",3);
                 }
@@ -165,6 +188,7 @@ namespace Pluxy {
         private async Task NextEpisode() {
             if(recovering || closing || episodes.Count<2) return;
             int index=episodes.FindIndex(e=>Native.Text(Native.Object(e),"id")==id); if(index<0 || index+1>=episodes.Count) return;
+            CancelNextPrompt(); nextHandled=false;
             recovering=true; ready=false; timer.Stop(); bool failed=false;
             try {
                 await api.SaveProgress(server,id,position,duration,progressSession,++progressSequence);
@@ -196,7 +220,13 @@ namespace Pluxy {
                 position=Convert.ToDouble(pos,CultureInfo.InvariantCulture); duration=Convert.ToDouble(dur,CultureInfo.InvariantCulture);
                 int episodeIndex=episodes.FindIndex(e=>Native.Text(Native.Object(e),"id")==id);
                 nextButton.Enabled=episodeIndex>=0 && episodeIndex+1<episodes.Count;
-                if(autoplay && nextButton.Enabled && Convert.ToBoolean(await mpv.Command("get_property","eof-reached"))) { await NextEpisode(); return; }
+                bool ended=Convert.ToBoolean(await mpv.Command("get_property","eof-reached"));
+                if(ended && nextButton.Enabled && !nextHandled) ShowNextPrompt(episodeIndex+1);
+                if(nextPrompt.Visible && autoplay) {
+                    int remaining=Math.Max(0,8-(int)nextClock.Elapsed.TotalSeconds);
+                    nextCountdown.Text="Lecture dans "+remaining+" s";
+                    if(remaining==0 && ContainsFocus) { await NextEpisode(); return; }
+                }
                 if(!dragging && duration>0) timeline.Value=(int)Math.Max(0,Math.Min(10000,position/duration*10000));
                 time.Text=Clock(position)+" / "+Clock(duration); pause.Text=Convert.ToBoolean(paused)?"▶":"Ⅱ";
                 var pointer=Cursor.Position;
@@ -229,10 +259,57 @@ namespace Pluxy {
             } catch(Exception error) { Native.Log(error); }
         }
         private Button ControlButton(string text,string help,EventHandler action) {
-            var button=Native.Button(text,action); button.AutoSize=true; button.Height=32; button.MinimumSize=new Size(36,32);
+            string symbol=text=="−10"?"back":text=="+10"?"forward":text=="Ⅱ"?"pause":text=="▷|"?"next":text=="Audio"?"audio":text=="Sous-titres"?"subtitles":text=="⛶"?"fullscreen":null;
+            var button=new PlayerButton { Text=text,Symbol=symbol,AutoSize=symbol==null,Size=new Size(40,40),MinimumSize=new Size(40,40) }; button.Click+=action;
             button.Font=new Font("Segoe UI",9); button.Margin=new Padding(3,1,3,0); button.Padding=new Padding(7,2,7,2);
             button.BackColor=Color.FromArgb(23,24,29); button.FlatAppearance.BorderSize=0;
             button.FlatAppearance.MouseOverBackColor=Color.FromArgb(43,44,51); button.AccessibleName=help; hints.SetToolTip(button,help); return button;
+        }
+        private void LayoutControls() {
+            int width=Math.Min(800,Math.Max(100,ClientSize.Width-24));
+            controls.SetBounds((ClientSize.Width-width)/2,ClientSize.Height-controls.Height-12,width,controls.Height);
+            nextPrompt.Location=new Point(Math.Max(12,ClientSize.Width-nextPrompt.Width-24),Math.Max(12,controls.Top-nextPrompt.Height-12));
+        }
+        private void ShowNextPrompt(int index) {
+            nextHandled=true; var episode=Native.Object(episodes[index]);
+            nextTitle.Text="Épisode suivant\nS"+Native.Number(episode,"season")+" · E"+Native.Number(episode,"episode")+"  "+Native.Text(episode,"title");
+            nextCountdown.Text=autoplay?"Lecture dans 8 s":"Prêt lorsque vous l'êtes";
+            nextClock.Restart(); nextPrompt.Visible=true; nextPrompt.BringToFront();
+        }
+        private void CancelNextPrompt() { nextPrompt.Visible=false; nextClock.Reset(); }
+        private async Task UpdatePreview() {
+            if(closing || !ready || duration<=0 || (!dragging && seekDirection==0)) { previewPanel.Visible=false; return; }
+            double target=seekDirection!=0?seekTarget:duration*timeline.Value/10000;
+            long second=(long)Math.Max(0,target)/10*10; string requestedId=id,requestedServer=server;
+            string key=server+":"+id+":"+second;
+            if(Convert.ToString(previewPanel.Tag)!=key) { previewPanel.Tag=key; previewImage.Image=null; previewPanel.Visible=false; }
+            previewTime.Text=Clock(target);
+            Bitmap cached;
+            if(previewCache.TryGetValue(key,out cached)) { ShowPreview(cached,target); return; }
+            if(previewBusy || previewUnsupported==server+":"+id || DateTime.UtcNow<previewRetryAt) return;
+            previewBusy=true;
+            try {
+                var bytes=await api.SeekPreview(server,id,second,previewLifetime.Token);
+                if(closing) return;
+                if(bytes==null) { previewRetryAt=DateTime.UtcNow.AddSeconds(1); return; }
+                if(bytes.Length==0) { previewUnsupported=requestedServer+":"+requestedId; return; }
+                Bitmap bitmap;
+                using(var input=new System.IO.MemoryStream(bytes)) using(var image=Image.FromStream(input)) {
+                    if(image.Width>640 || image.Height>360) return; bitmap=new Bitmap(image);
+                }
+                if(previewCache.Count>=12) {
+                    var oldest=previewCache.Keys.First(); var old=previewCache[oldest];
+                    if(previewImage.Image==old) previewImage.Image=null; previewCache.Remove(oldest); old.Dispose();
+                }
+                previewCache[key]=bitmap;
+                if(Convert.ToString(previewPanel.Tag)==key && (dragging || seekDirection!=0)) ShowPreview(bitmap,target);
+            } catch(OperationCanceledException) { } catch(Exception) { previewRetryAt=DateTime.UtcNow.AddSeconds(2); }
+            finally { previewBusy=false; }
+        }
+        private void ShowPreview(Bitmap bitmap,double target) {
+            int x=controls.Left+controls.Padding.Left+(int)(timeline.Width*Math.Max(0,Math.Min(1,target/duration)))-previewPanel.Width/2;
+            previewPanel.Location=new Point(Math.Max(12,Math.Min(ClientSize.Width-previewPanel.Width-12,x)),Math.Max(12,controls.Top-previewPanel.Height-8));
+            previewImage.Image=bitmap; previewPanel.Visible=true; previewPanel.BringToFront();
         }
         private void ShowControls() { lastInteraction=DateTime.UtcNow; controls.Visible=true; controls.BringToFront(); }
         private void ToggleFull() {

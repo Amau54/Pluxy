@@ -655,7 +655,7 @@ private fun episodeMeta(item: MediaItem): String {
     val minutes = (item.duration / 60).toInt()
     if (minutes > 0) values += "$minutes min"
     when {
-        item.watched -> values += "Vu"
+        item.watched -> Unit
         item.inProgress && item.progress > 0.02 ->
             values += "${(item.progress * 100).toInt().coerceIn(1, 99)} % regardé"
         else -> values += "Non regardé"

@@ -68,6 +68,8 @@ class PluxyApi(val baseUrl: String, val sessionId: String = UUID.randomUUID().to
 
     private val moshi = Moshi.Builder().add(KotlinJsonAdapterFactory()).build()
     private val jsonMedia = "application/json".toMediaType()
+    private val previewHttp = http.newBuilder().callTimeout(2, TimeUnit.SECONDS)
+        .readTimeout(2, TimeUnit.SECONDS).retryOnConnectionFailure(false).build()
 
     fun abs(relative: String): String {
         val resolved = LanUrlPolicy.resolveSameServer(baseUrl, relative)
@@ -81,6 +83,28 @@ class PluxyApi(val baseUrl: String, val sessionId: String = UUID.randomUUID().to
     fun close() {
         http.dispatcher.executorService.shutdown()
         http.connectionPool.evictAll()
+    }
+
+    suspend fun seekPreview(itemId: String, positionMs: Long): ByteArray? = withContext(Dispatchers.IO) {
+        val path = "/api/library/items/${android.net.Uri.encode(itemId)}/preview?position=${positionMs.coerceAtLeast(0) / 1000}"
+        val request = Request.Builder().url(abs(path)).build()
+        previewHttp.newCall(request).execute().use { response ->
+            if (response.code == 202) return@withContext null
+            if (!response.isSuccessful) throw ApiException(response.code, "Aperçu indisponible")
+            val body = response.body ?: return@withContext null
+            require(body.contentLength() <= 256 * 1024) { "Aperçu trop volumineux" }
+            body.byteStream().use { input ->
+                val output = ByteArrayOutputStream()
+                val buffer = ByteArray(8192)
+                while (true) {
+                    val count = input.read(buffer)
+                    if (count < 0) break
+                    require(output.size() + count <= 256 * 1024) { "Aperçu trop volumineux" }
+                    output.write(buffer, 0, count)
+                }
+                output.toByteArray()
+            }
+        }
     }
 
     // --- Helpers --------------------------------------------------------- //

@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Request, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 
 from ..models import MediaInfo, MediaItem, MovieMetadata
 from ..probe import probe
@@ -128,6 +128,23 @@ def item_thumbnail(item_id: str, request: Request):
             "ETag": f'"thumb-{it.id}-{path.stat().st_mtime_ns}"',
         },
     )
+
+
+@router.get("/items/{item_id}/preview")
+def item_preview(item_id: str, request: Request, position: float = Query(ge=0, le=604800)):
+    st = get_state(request)
+    it = st.library.get(item_id)
+    if not it:
+        raise HTTPException(404, "Média introuvable")
+    try:
+        image, pending = st.seek_previews.request(it, position)
+    except ValueError:
+        raise HTTPException(400, "Position invalide")
+    if image:
+        return FileResponse(image, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=86400"})
+    if pending:
+        return Response(status_code=202, headers={"Retry-After": "1", "Cache-Control": "no-store"})
+    raise HTTPException(404, "Aperçu indisponible")
 
 
 @router.get("/items/{item_id}/probe", response_model=MediaInfo)

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <dimen name="library_top_pad">28dp</dimen>
+    <dimen name="library_top_pad">20dp</dimen>
     <dimen name="library_toolbar_height">48dp</dimen>
-    <dimen name="library_navigation_top">80dp</dimen>
+    <dimen name="library_navigation_top">72dp</dimen>
     <dimen name="library_tab_text_size">15sp</dimen>
 </resources>

@@ -91,7 +91,7 @@
         android:layout_marginStart="2dp"
         android:layout_marginEnd="2dp"
         android:ellipsize="end"
-        android:minLines="2"
+        android:minLines="1"
         android:maxLines="2"
         android:textColor="?attr/pluxyTextPrimary"
         android:textSize="@dimen/card_title_size"

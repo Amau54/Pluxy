@@ -28,6 +28,94 @@ class MediaThumbnailer(context: Context) {
     private val cache = object : LruCache<String, ByteArray>(CACHE_BYTES) {
         override fun sizeOf(key: String, value: ByteArray): Int = value.size
     }
+    private val previewCache = object : LruCache<String, ByteArray>(4 * 1024 * 1024) {
+        override fun sizeOf(key: String, value: ByteArray): Int = value.size
+    }
+    private val previewLock = Any()
+    private val previewPending = LinkedHashMap<String, Triple<String, MediaEntry, Long>>()
+    private val previewFailures = LinkedHashMap<String, Long>()
+    private var previewActive: String? = null
+    private var previewWorker: Thread? = null
+
+    fun preview(item: MediaEntry, position: Double): Result {
+        // Les anciens retrievers décodent une image complète : garder le temps seul sur ces appareils.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O_MR1 ||
+            item.kind !in setOf("movie", "series", "clip")) return Result.Unsupported
+        val second = PreviewPosition.second(position, item.durationSeconds)
+        val key = "${item.id}:${item.modifiedAtMs}:${item.size}:$second"
+        previewCache.get(key)?.let { return Result.Ready(it) }
+        synchronized(previewLock) {
+            if ((previewFailures[key] ?: 0) > android.os.SystemClock.elapsedRealtime()) return Result.Unsupported
+            if (previewActive != key) {
+                previewPending.remove(item.id)
+                previewPending[item.id] = Triple(key, item, second)
+                while (previewPending.size > 4) previewPending.remove(previewPending.keys.first())
+            }
+            if (previewWorker == null) {
+                previewWorker = Thread(::runPreviews, "pluxy-seek-preview").apply {
+                    isDaemon = true
+                    start()
+                }
+            }
+        }
+        return Result.Busy
+    }
+
+    fun cancelPreviews() = synchronized(previewLock) { previewPending.clear() }
+
+    private fun runPreviews() {
+        android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND)
+        while (true) {
+            val task = synchronized(previewLock) {
+                if (previewPending.isEmpty()) {
+                    previewWorker = null
+                    previewActive = null
+                    return
+                }
+                val id = previewPending.keys.first()
+                previewPending.remove(id)!!.also { previewActive = it.first }
+            }
+            val result = capturePreview(task.second, task.third)
+            synchronized(previewLock) {
+                previewActive = null
+                when (result) {
+                    is Result.Ready -> previewCache.put(task.first, result.bytes)
+                    Result.Busy -> Unit // Les miniatures peuvent occuper le décodeur ; laisser la prochaine demande réessayer.
+                    Result.Unsupported -> {
+                        previewFailures[task.first] = android.os.SystemClock.elapsedRealtime() + 60_000
+                        while (previewFailures.size > 256) previewFailures.remove(previewFailures.keys.first())
+                    }
+                }
+            }
+        }
+    }
+
+    @android.annotation.TargetApi(27)
+    private fun capturePreview(item: MediaEntry, second: Long): Result {
+        if (!decodeSlots.tryAcquire()) return Result.Busy
+        if (!videoSlot.tryAcquire()) { decodeSlots.release(); return Result.Busy }
+        val retriever = MediaMetadataRetriever()
+        return try {
+            resolver.openFileDescriptor(Uri.parse(item.uri), "r")?.use { descriptor ->
+                retriever.setDataSource(descriptor.fileDescriptor)
+                val width = item.width?.coerceAtLeast(1) ?: 320
+                val height = item.height?.coerceAtLeast(1) ?: 180
+                val ratio = minOf(320f / width, 180f / height, 1f)
+                val frame = retriever.getScaledFrameAtTime(second * 1_000_000,
+                    MediaMetadataRetriever.OPTION_CLOSEST_SYNC,
+                    (width * ratio).toInt().coerceAtLeast(1), (height * ratio).toInt().coerceAtLeast(1))
+                    ?: return Result.Unsupported
+                encodeScaled(frame)?.takeIf { it.size <= 256 * 1024 }
+                    ?.let { Result.Ready(it) } ?: Result.Unsupported
+            } ?: Result.Unsupported
+        } catch (_: Exception) {
+            Result.Unsupported
+        } finally {
+            runCatching { retriever.release() }
+            videoSlot.release()
+            decodeSlots.release()
+        }
+    }
 
     fun jpeg(item: MediaEntry): Result {
         if (item.kind !in setOf("photo", "movie", "series", "clip", "audio")) return Result.Unsupported

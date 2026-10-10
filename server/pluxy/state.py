@@ -15,6 +15,7 @@ from .metadata import MetadataProvider
 from .paths import data_dir
 from .transcoder import TranscodeManager
 from .thumbnails import VideoThumbnailer
+from .seek_previews import SeekPreviews
 from .vodhls import VodHls
 from .watchstate import WatchStore
 from .catalogue import Catalogue
@@ -37,6 +38,7 @@ class AppState:
         self.watch = WatchStore(data)
         self.catalogue = Catalogue(self.library, self.metadata, self.watch)
         self.thumbnails = VideoThumbnailer(self.cfgm.cfg, data)
+        self.seek_previews = SeekPreviews(self.cfgm.cfg, data)
         # Dernière décision de lecture par média (capacités client réelles) — réutilisée
         # par les endpoints de flux (remux) pour cibler le bon codec audio.
         self._decision_lock = threading.RLock()
@@ -155,6 +157,7 @@ class AppState:
         """Libère les ressources externes même lors d'un arrêt avec lecteurs actifs."""
         with self._job_lock:
             self._closing.set()
+        self.seek_previews.close()
         try:
             self.discovery.stop()
         finally:
