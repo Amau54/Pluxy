@@ -61,8 +61,13 @@ object LibraryPreferences {
     fun saveView(context: Context, destination: String, view: String) = prefs(context).edit()
         .putString(key(context, "view:$destination"), view).apply()
 
-    fun compact(context: Context): Boolean = prefs(context).getBoolean("compact", true)
-    fun setCompact(context: Context, value: Boolean) = prefs(context).edit().putBoolean("compact", value).apply()
+    fun density(context: Context): CardDensity {
+        val stored = prefs(context)
+        return CardDensity.fromStored(stored.getString("card_density", null),
+            if (stored.contains("compact")) stored.getBoolean("compact", true) else null)
+    }
+    fun setDensity(context: Context, value: CardDensity) = prefs(context).edit()
+        .putString("card_density", value.key).apply()
 
     fun collections(context: Context, serverUrl: String = PluxyApplication.serverBaseUrl(context)): List<LibraryCollection> = runCatching {
         prefs(context).getString(key(context, "collections", serverUrl), null)?.let(collectionAdapter::fromJson)

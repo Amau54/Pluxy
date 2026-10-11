@@ -1,7 +1,6 @@
 package com.pluxy.tv.ui
 
 import android.content.Intent
-import android.content.res.Configuration
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -66,12 +65,11 @@ class AlbumActivity : ThemedActivity() {
             list.layoutManager = LinearLayoutManager(this)
             list.adapter = trackAdapter
         } else {
-            val tv = resources.configuration.uiMode and Configuration.UI_MODE_TYPE_MASK == Configuration.UI_MODE_TYPE_TELEVISION
-            val compact = intent.getStringExtra(EXTRA_DENSITY) == "compact"
-            val columns = (resources.configuration.screenWidthDp / if (compact) 125 else if (tv) 160 else 170).coerceAtLeast(2)
+            val density = CardDensity.fromStored(intent.getStringExtra(EXTRA_DENSITY))
+            val columns = (resources.configuration.screenWidthDp / (125f * density.scale)).toInt().coerceAtLeast(2)
             val layout = GridLayoutManager(this, columns)
             photoAdapter = LibraryAdapter(
-                environment = CardEnvironment(PluxyApplication.advancedMode(this), LanMediaImages.loader(this)),
+                environment = CardEnvironment(PluxyApplication.advancedMode(this), LanMediaImages.loader(this), density = density),
                 onMedia = ::open, onQuickPlay = ::open, onSeries = {}, onHeaderToggle = {},
                 onFocused = { _, row -> focusedId = (row as? LibRow.MediaRow)?.item?.id },
             )

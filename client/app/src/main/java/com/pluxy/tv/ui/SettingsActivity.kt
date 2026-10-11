@@ -185,13 +185,13 @@ class SettingsActivity : ThemedActivity() {
 
 
         section("Affichage")
-        rowButton("Densité", if (LibraryPreferences.compact(this)) "Compact" else "Confort",
+        rowButton("Densité", LibraryPreferences.density(this).label,
             "Ajuste la taille des affiches ; les commandes restent faciles à utiliser.", showHint = true)
             .setOnClickListener { anchor ->
                 CompactChoiceMenu.show(this, anchor, "Densité",
-                    listOf(CompactChoiceMenu.Choice("Compact", "compact"), CompactChoiceMenu.Choice("Confort", "comfort")),
-                    if (LibraryPreferences.compact(this)) "compact" else "comfort",
-                    onSelect = { LibraryPreferences.setCompact(this, it == "compact"); render() })
+                    CardDensity.entries.map { CompactChoiceMenu.Choice(it.label, it.key) },
+                    LibraryPreferences.density(this).key,
+                    onSelect = { LibraryPreferences.setDensity(this, CardDensity.fromStored(it)); render() })
             }
 
         section("Bibliothèque")

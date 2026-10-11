@@ -31,8 +31,10 @@ internal data class CardEnvironment(
     val advancedMode: Boolean,
     val lanImages: ImageLoader,
     val photoFolderInHeader: Boolean = false,
-    val compact: Boolean = true,
-)
+    val density: CardDensity = CardDensity.BALANCED,
+) {
+    val compact: Boolean get() = density != CardDensity.COMFORT
+}
 
 internal class LibraryAdapter(
     environment: CardEnvironment,
@@ -254,7 +256,7 @@ internal class HomeShelfAdapter(
         val resources = holder.cards.resources
         val cardWidth = (resources.getDimensionPixelSize(
             if (landscape) R.dimen.library_landscape_card_width else R.dimen.library_card_width,
-        ) * if (environment.compact) 1f else 1.1f).toInt()
+        ) * environment.density.scale).toInt()
         val artworkHeight = cardWidth * if (landscape) 9f / 16f else 1.5f
         val paint = Paint()
         paint.textSize = resources.getDimension(R.dimen.card_title_size)
@@ -417,7 +419,7 @@ internal class ShelfCardAdapter(
         val view = LayoutInflater.from(parent.context).inflate(R.layout.item_media, parent, false)
         val density = parent.resources.displayMetrics.density
         val width = (parent.resources.getDimensionPixelSize(R.dimen.library_card_width) *
-            if (environment.compact) 1f else 1.1f).toInt()
+            environment.density.scale).toInt()
         val margin = ((if (environment.compact) 4 else 6) * density).toInt()
         view.layoutParams = RecyclerView.LayoutParams(
             width,
@@ -431,7 +433,7 @@ internal class ShelfCardAdapter(
     override fun onBindViewHolder(holder: CardViewHolder, position: Int) {
         val width = (holder.itemView.resources.getDimensionPixelSize(
             if (aspect == ArtworkPolicy.Aspect.LANDSCAPE) R.dimen.library_landscape_card_width else R.dimen.library_card_width,
-        ) * if (environment.compact) 1f else 1.1f).toInt()
+        ) * environment.density.scale).toInt()
         if (holder.itemView.layoutParams.width != width) {
             holder.itemView.layoutParams = holder.itemView.layoutParams.apply { this.width = width }
         }
