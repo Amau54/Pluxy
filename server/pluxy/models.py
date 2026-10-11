@@ -102,6 +102,7 @@ class MediaItem(BaseModel):
     genres: List[str] = Field(default_factory=list)
     poster_url: Optional[str] = None
     thumbnail_url: Optional[str] = None
+    episode_still_url: Optional[str] = None
     folder: Optional[str] = None
     folder_id: Optional[str] = None
     relative_path: Optional[str] = None
@@ -149,6 +150,7 @@ class MovieMetadata(BaseModel):
     ratings: List[Rating] = Field(default_factory=list)   # notes multi-sites
     poster_url: Optional[str] = None
     backdrop_url: Optional[str] = None
+    episode_still_url: Optional[str] = None
     cast: List[CastMember] = Field(default_factory=list)
     director: Optional[str] = None
     trailer_youtube_key: Optional[str] = None

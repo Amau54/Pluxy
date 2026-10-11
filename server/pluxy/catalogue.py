@@ -37,6 +37,7 @@ def public_item(item: MediaItem, meta: MovieMetadata | None, watch: dict) -> Med
         pub.year, pub.poster_url = meta.year or item.year, meta.poster_url
         pub.has_metadata, pub.genres = meta.matched, list(meta.genres)
         pub.metadata_title = meta.title if meta.matched else None
+        pub.episode_still_url = meta.episode_still_url if item.kind == "series" else None
     if pub.kind in {"movie", "series", "clip", "photo", "audio"}:
         pub.thumbnail_url = f"/api/library/items/{item.id}/thumbnail?v=2"
     position = int(watch.get("position_ms", 0) or 0)

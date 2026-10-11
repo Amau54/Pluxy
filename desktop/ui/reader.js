@@ -40,11 +40,12 @@ function loading(text) { $('loading-text').textContent = text; hidden('loading',
 function fail(error) { toast(error.message || 'Impossible de terminer cette action.'); }
 function proxy(path) { return 'https://media.pluxy.invalid/remote?server=' + encodeURIComponent(connection.url) + '&path=' + encodeURIComponent(path); }
 function thumbnail(item) { return proxy('/api/library/items/' + encodeURIComponent(item.id) + '/thumbnail'); }
-function image(item, classes = '', full = false) {
+function image(item, classes = '', full = false, episode = false) {
   const e = node('img', classes); e.alt = ''; e.loading = 'lazy'; e.decoding = 'async';
   let remote = false;
-  try { const url = new URL(item.poster_url); remote = url.origin === 'https://image.tmdb.org'; } catch (_) { /* Affiche locale. */ }
-  e.src = full ? proxy('/stream/direct/' + encodeURIComponent(item.id)) : remote ? item.poster_url : thumbnail(item);
+  const official = episode ? item.episode_still_url : item.poster_url;
+  try { const url = new URL(official); remote = url.origin === 'https://image.tmdb.org' && url.pathname.startsWith('/t/p/'); } catch (_) { /* Illustration locale. */ }
+  e.src = full ? proxy('/stream/direct/' + encodeURIComponent(item.id)) : remote ? official : thumbnail(item);
   e.addEventListener('error', () => { if (remote) { remote = false; e.src = thumbnail(item); } else e.remove(); });
   return e;
 }
@@ -341,7 +342,7 @@ function showSeries(episodes) {
   function showSeason(season) {
     seasons.querySelectorAll('button').forEach(b => b.classList.toggle('active',Number(b.dataset.season) === season));
     list.replaceChildren(...episodes.filter(e => (e.season || 0) === season).map(item => {
-      const e = button('', () => play(item),'episode-row'); e.dataset.mediaId=item.id; e.mediaItem=item; e.classList.toggle('is-watched',Boolean(item.watched)); e.append(image(item),node('span','episode-number',String(item.episode || '—')),node('strong','',episodeTitle(item)),node('span','muted',item.watched ? 'Vu' : item.in_progress ? 'Reprendre' : minutes(item)),icon('play')); return e;
+      const e = button('', () => play(item),'episode-row'); e.dataset.mediaId=item.id; e.mediaItem=item; e.classList.toggle('is-watched',Boolean(item.watched)); e.append(image(item,'',false,true),node('span','episode-number',String(item.episode || '—')),node('strong','',episodeTitle(item)),node('span','muted',item.watched ? 'Vu' : item.in_progress ? 'Reprendre' : minutes(item)),icon('play')); return e;
     }));
   }
   for (const season of [...new Set(episodes.map(e => e.season || 0))]) { const e = button(season ? 'Saison ' + season : 'Épisodes spéciaux',() => showSeason(season)); e.dataset.season = season; seasons.append(e); }

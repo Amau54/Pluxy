@@ -88,9 +88,6 @@ class SeriesActivity : ThemedActivity() {
         list = findViewById(R.id.episodes)
         seasons = findViewById(R.id.seasons)
         continueButton = findViewById(R.id.continueEpisode)
-        findViewById<Button>(R.id.seriesMetadataFix).setOnClickListener {
-            allEpisodes.firstOrNull()?.let { item -> MetadataMatchDialog.show(this, item) { load() } }
-        }
         trailerButton = findViewById(R.id.seriesTrailer)
         trailerButton.tag = "trailer"
         trailerButton.setOnFocusChangeListener { _, focused ->
@@ -597,24 +594,7 @@ private class EpisodeAdapter(
             if (focused) onFocused(episode)
         }
 
-        val relative = episode.thumbnailUrl
-        val context = holder.itemView.context
-        val url = relative?.let {
-            runCatching {
-                LanUrlPolicy.resolveSameServer(PluxyApplication.serverBaseUrl(context), it)
-            }.getOrNull()
-        }
-        holder.thumbnail.contentDescription = null
-        if (url == null) {
-            holder.thumbnail.dispose()
-            holder.thumbnail.setImageResource(R.drawable.ic_episode_placeholder)
-        } else {
-            holder.thumbnail.load(url, LanMediaImages.loader(context)) {
-                placeholder(R.drawable.ic_episode_placeholder)
-                error(R.drawable.ic_episode_placeholder)
-                crossfade(true)
-            }
-        }
+        EpisodeArtwork.load(holder.thumbnail, episode)
     }
 
     fun positionOf(itemId: String): Int = currentList.indexOfFirst { it.id == itemId }

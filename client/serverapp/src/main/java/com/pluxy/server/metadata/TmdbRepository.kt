@@ -37,6 +37,7 @@ class TmdbRepository(
     private val enriching = AtomicBoolean(false)
     private val browseFacts = mutableMapOf<String, BrowseMetadata>()
     private val publication = AtomicLong()
+    private val seasonStills = LinkedHashMap<String, Pair<Long, Map<Int, String>>>()
     internal val revision: Long get() = publication.get()
     @Volatile var status: String = ""
         private set
@@ -79,21 +80,26 @@ class TmdbRepository(
     suspend fun get(item: MediaEntry, force: Boolean = false): JSONObject = withContext(Dispatchers.IO) {
         if (item.kind !in setOf("movie", "series")) return@withContext fallback(item)
         requestMutex.withLock {
-            cached(item.id)?.takeIf { it.optBoolean("manual") && it.optString("lookup_kind") == item.kind }?.let { return@withLock it }
-            if (!force) cached(item.id)?.takeIf { it.optInt("lookup_revision") == 2 && it.optString("lookup_kind") == item.kind }
-                ?.let { return@withLock it }
             val key = preferences.tmdbApiKey
+            val existing = cached(item.id)
+            if (existing != null && existing.optString("lookup_kind") == item.kind &&
+                (existing.optBoolean("manual") || (!force && existing.optInt("lookup_revision") == LOOKUP_REVISION))) {
+                val value = episodeArtwork(item, existing, key).apply { put("lookup_revision", LOOKUP_REVISION) }
+                if (value.toString() != existing.toString()) save(item.id, value)
+                return@withLock value
+            }
             if (key.isBlank()) { diagnostic("Ajoutez votre clé TMDB pour obtenir les affiches et les synopsis."); return@withLock fallback(item) }
             val remote = try { fetch(item, key) } catch (error: IOException) {
                 diagnostic(if (error is LookupFailure) error.message.orEmpty() else "Connexion à TMDB impossible. Vérifiez Internet et le VPN.")
                 null
             } catch (_: org.json.JSONException) { diagnostic("Réponse TMDB illisible. Réessayez plus tard."); null }
             if (remote != null) {
-                remote.put("lookup_revision", 2)
+                remote.put("lookup_revision", LOOKUP_REVISION)
                 remote.put("lookup_kind", item.kind)
-                save(item.id, remote)
+                val value = episodeArtwork(item, remote, key)
+                save(item.id, value)
                 diagnostic("Affiches et synopsis TMDB à jour.")
-                remote
+                value
             } else {
                 fallback(item)
             }
@@ -104,6 +110,7 @@ class TmdbRepository(
         if (!enriching.compareAndSet(false, true)) return
         try {
             if (preferences.tmdbApiKey.isBlank()) { diagnostic("Ajoutez votre clé TMDB pour obtenir les affiches et les synopsis."); return }
+            if (force) requestMutex.withLock { seasonStills.clear() }
             val seriesMetadata = mutableMapOf<String, JSONObject>()
             var resolved = 0
             var issue: String? = null
@@ -112,16 +119,17 @@ class TmdbRepository(
             ) {
                 val seriesKey = item.seriesKey?.takeIf { item.kind == "series" && it.isNotBlank() }
                 val existing = cached(item.id)
-                if (!force && existing != null) {
-                    if (existing.optBoolean("matched", false)) resolved++
+                if (!force && existing != null && existing.optInt("lookup_revision") == LOOKUP_REVISION) {
+                    val current = if (item.kind == "series") get(item) else existing
+                    if (current.optBoolean("matched", false)) resolved++
                     seriesKey?.let { key ->
-                        if (!seriesMetadata.containsKey(key)) seriesMetadata[key] = existing
+                        if (!seriesMetadata.containsKey(key)) seriesMetadata[key] = current
                     }
                     continue
                 }
                 val shared = seriesKey?.let { seriesMetadata[it] }
                 if (shared != null) {
-                    save(item.id, shared)
+                    requestMutex.withLock { save(item.id, episodeArtwork(item, shared, preferences.tmdbApiKey)) }
                     resolved++
                     continue
                 }
@@ -160,9 +168,9 @@ class TmdbRepository(
             val key = preferences.tmdbApiKey
             require(key.isNotBlank() && id > 0) { "Correspondance indisponible : vérifiez TMDB." }
             val value = fetch(item, key, id) ?: throw IOException("Correspondance TMDB indisponible")
-            value.put("lookup_revision", 2).put("lookup_kind", item.kind).put("manual", true)
-            related.forEach { save(it.id, value) }
-            value
+            value.put("lookup_revision", LOOKUP_REVISION).put("lookup_kind", item.kind).put("manual", true)
+            related.forEach { save(it.id, episodeArtwork(it, value, key)) }
+            cached(item.id) ?: value
         }
     }
 
@@ -190,7 +198,40 @@ class TmdbRepository(
             .addQueryParameter("append_to_response", "credits,videos")
             .build()
         val details = getJson(detailsUrl, key) ?: return null
+        if (selectTrailer(details.optJSONObject("videos")?.optJSONArray("results")) == null) {
+            val backup = runCatching { getJson(apiUrl("$type/$id/videos", key).newBuilder()
+                .addQueryParameter("language", "en-US").addQueryParameter("include_video_language", "en,null").build(), key) }.getOrNull()
+            if (backup != null) details.put("videos", backup)
+        }
         return if (type == "tv") tvMetadata(details) else movieMetadata(details)
+    }
+
+    private fun episodeArtwork(item: MediaEntry, metadata: JSONObject, key: String): JSONObject {
+        val value = JSONObject(metadata.toString())
+        val id = value.optInt("tmdb_id", 0)
+        val season = item.season; val episode = item.episode
+        if (item.kind != "series" || !value.optBoolean("matched") || id <= 0 ||
+            season == null || episode == null || season !in 0..1000 || episode !in 1..1000) return value.apply { remove("episode_still_url") }
+        if (key.isBlank()) return value
+        value.remove("episode_still_url")
+        val cacheKey = "$id/$season:${key.hashCode()}"
+        val now = System.currentTimeMillis()
+        var cached = seasonStills[cacheKey]
+        if (cached == null || cached.first <= now) {
+            var ttl = 60_000L
+            val stills = mutableMapOf<Int, String>()
+            try {
+                val details = getJson(apiUrl("tv/$id/season/$season", key).newBuilder().addQueryParameter("language", "fr-FR").build(), key)
+                if (details != null) stills.putAll(TmdbMediaPolicy.stills(details))
+                ttl = 86_400_000L
+            } catch (_: IOException) { /* Les captures locales restent disponibles. */ }
+            catch (_: org.json.JSONException) { /* Réponse temporairement inutilisable. */ }
+            cached = Pair(now + ttl, stills)
+            seasonStills[cacheKey] = cached
+            while (seasonStills.size > 256) seasonStills.remove(seasonStills.keys.first())
+        }
+        value.putNullable("episode_still_url", cached.second[episode])
+        return value
     }
 
     private fun movieMetadata(details: JSONObject): JSONObject {
@@ -281,18 +322,7 @@ class TmdbRepository(
         }
     }
 
-    private fun selectTrailer(videos: JSONArray?): String? {
-        if (videos == null) return null
-        var fallback: String? = null
-        for (i in 0 until videos.length()) {
-            val video = videos.optJSONObject(i) ?: continue
-            if (!video.optString("site").equals("YouTube", true)) continue
-            val key = video.optString("key").takeIf { it.isNotBlank() } ?: continue
-            if (fallback == null) fallback = key
-            if (video.optString("type").equals("Trailer", true)) return key
-        }
-        return fallback
-    }
+    private fun selectTrailer(videos: JSONArray?): String? = TmdbMediaPolicy.trailer(videos)
 
     private fun fallback(item: MediaEntry): JSONObject = JSONObject().apply {
         put("tmdb_id", JSONObject.NULL)
@@ -367,6 +397,7 @@ class TmdbRepository(
     private fun cacheFile(itemId: String) = File(cacheDir, "$itemId.json")
 
     companion object {
+        private const val LOOKUP_REVISION = 3
         private const val MAX_RESPONSE_BYTES = 2 * 1024 * 1024
     }
 }

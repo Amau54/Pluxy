@@ -88,10 +88,6 @@
                         android:text="@string/action_trailer"
                         android:nextFocusLeft="@id/continueEpisode"
                         android:visibility="gone" />
-                    <Button android:id="@+id/seriesMetadataFix" style="@style/Btn.Secondary"
-                        android:layout_width="48dp" android:layout_height="48dp"
-                        android:layout_marginStart="8dp" android:text="" android:contentDescription="Corriger les informations"
-                        android:drawableTop="@drawable/ic_player_symbol_more" android:padding="12dp" />
                 </LinearLayout>
 
                 <!-- Notes multi-sites (TMDB / IMDb / Rotten Tomatoes / Metacritic) -->
@@ -118,9 +114,6 @@
                     android:maxLines="2"
                     android:ellipsize="end"
                     android:visibility="gone" />
-
-
-
             </LinearLayout>
         </ScrollView>
 

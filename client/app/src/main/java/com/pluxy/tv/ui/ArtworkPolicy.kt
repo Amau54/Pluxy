@@ -9,6 +9,7 @@ object ArtworkPolicy {
         LOCAL_POSTER,
         EMBEDDED_ARTWORK,
         TMDB_POSTER,
+        TMDB_EPISODE_STILL,
         LOCAL_THUMBNAIL,
     }
 
@@ -44,6 +45,7 @@ object ArtworkPolicy {
         embeddedArtworkUrl: String? = null,
         tmdbPosterUrl: String? = null,
         localThumbnailUrl: String? = null,
+        episodeStillUrl: String? = null,
     ): Plan {
         val posterAspect = when (kind) {
             "clip" -> Aspect.LANDSCAPE
@@ -55,6 +57,9 @@ object ArtworkPolicy {
             else -> Aspect.LANDSCAPE
         }
         val candidates = buildList {
+            episodeStillUrl.usable()?.let {
+                add(Candidate(Role.TMDB_EPISODE_STILL, it, Aspect.LANDSCAPE))
+            }
             localPosterUrl.usable()?.let {
                 add(Candidate(Role.LOCAL_POSTER, it, posterAspect))
             }

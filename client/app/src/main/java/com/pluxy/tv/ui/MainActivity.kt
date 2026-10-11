@@ -1658,6 +1658,18 @@ class MainActivity : ThemedActivity() {
     }
 
     private fun openRowActions(row: LibRow) {
+        if (row is LibRow.SeriesRow) {
+            AlertDialog.Builder(this).setTitle("Options de la série")
+                .setItems(arrayOf("Ajouter à une collection", "Corriger l’identification")) { _, action ->
+                    if (action == 0) addToCollection(row)
+                    else allItems.firstOrNull { mediaSeriesIdentity(it) == row.key }?.let { item ->
+                        MetadataMatchDialog.show(this, item) { loadItems() }
+                    }
+                }.setNegativeButton("Fermer", null).show()
+        } else addToCollection(row)
+    }
+
+    private fun addToCollection(row: LibRow) {
         if (row is LibRow.CollectionRow) {
             AlertDialog.Builder(this).setTitle(row.collection.name)
                 .setItems(arrayOf("Renommer", if (row.collection.smartQuery == null) "Modifier les médias" else "Modifier les filtres", "Supprimer la collection")) { _, action ->

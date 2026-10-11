@@ -559,6 +559,7 @@ private fun bindMediaCard(
         height = media.height,
         tmdbPosterUrl = LanUrlPolicy.safeTmdbImage(media.posterUrl),
         localThumbnailUrl = localThumbnail,
+        episodeStillUrl = LanUrlPolicy.safeTmdbImage(media.episodeStillUrl),
     )
     loadArtwork(holder, media.id, displayTitle, plan, environment, forcedAspect)
     holder.itemView.contentDescription = buildString {
@@ -702,7 +703,7 @@ private fun loadArtwork(
                 },
             )
         }
-        if (candidate.role == ArtworkPolicy.Role.TMDB_POSTER) {
+        if (candidate.role in setOf(ArtworkPolicy.Role.TMDB_POSTER, ArtworkPolicy.Role.TMDB_EPISODE_STILL)) {
             holder.poster.load(candidate.value, builder = builder)
         } else {
             holder.poster.load(candidate.value, environment.lanImages, builder)

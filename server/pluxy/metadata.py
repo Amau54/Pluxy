@@ -64,6 +64,16 @@ def _confident(query: str, *candidates: Optional[str]) -> bool:
     return False
 
 
+def select_trailer(videos: list[dict], language: str = "fr") -> str | None:
+    candidates = [video for video in videos if video.get("site") == "YouTube"
+                  and video.get("type") in {"Trailer", "Teaser"}
+                  and re.fullmatch(r"[A-Za-z0-9_-]{11}", str(video.get("key", "")))]
+    preferred = language.split("-")[0]
+    candidates.sort(key=lambda video: (video.get("iso_639_1") == preferred,
+                                      video.get("type") == "Trailer", bool(video.get("official"))), reverse=True)
+    return candidates[0]["key"] if candidates else None
+
+
 class MetadataProvider:
     def __init__(self, cfgm: ConfigManager, base_dir: Path):
         self.cfgm = cfgm
@@ -73,6 +83,7 @@ class MetadataProvider:
         # Cache SÉRIE (par clé canonique) : une seule recherche TMDB TV pour TOUS les
         # épisodes d'une série -> évite N appels identiques (quota/rate-limit).
         self._tv_cache: dict[str, MovieMetadata] = {}
+        self._season_cache: OrderedDict[tuple, tuple[float, dict[int, str]]] = OrderedDict()
         self._memory: OrderedDict[str, tuple[int, dict]] = OrderedDict()
         self._key_locks = WeakValueDictionary()
         self._catalogue: dict[str, MovieMetadata] | None = None
@@ -84,7 +95,7 @@ class MetadataProvider:
     def _summary(meta: dict | MovieMetadata) -> MovieMetadata:
         value = meta.model_dump() if isinstance(meta, MovieMetadata) else meta
         return MovieMetadata.model_validate({key: value[key] for key in
-                                            ("title", "year", "poster_url", "matched", "genres", "source")
+                                            ("title", "year", "poster_url", "episode_still_url", "matched", "genres", "source")
                                             if key in value})
 
     def snapshot(self, item_ids: frozenset[str] | None = None) -> tuple[str, dict[str, MovieMetadata]]:
@@ -130,19 +141,23 @@ class MetadataProvider:
             meta = self._fetch_tmdb(item.title, item.year, cfg.tmdb_api_key, cfg.language, selected_id=selected_id)
         if not meta or not meta.matched:
             raise ValueError("Cette correspondance est indisponible.")
+        if item.kind == "series":
+            with self._lock:
+                self._tv_cache[self._tv_key(item)] = meta
         from .paths import atomic_write_text
         for value in related:
             with self._lock:
                 lock = self._key_locks.setdefault(value.id, threading.Lock())
             with lock:
-                record = {"metadata": meta.model_dump(), "manual": True, "manual_kind": value.kind}
+                episode_meta = self._episode_artwork(value, meta)
+                record = {"metadata": episode_meta.model_dump(), "manual": True, "manual_kind": value.kind}
                 atomic_write_text(self._cache_path(value.id), json.dumps(record, ensure_ascii=False))
                 with self._lock:
                     self._memory.pop(value.id, None)
                     if self._catalogue is not None:
-                        self._catalogue = {**self._catalogue, value.id: self._summary(meta)}
+                        self._catalogue = {**self._catalogue, value.id: self._summary(episode_meta)}
                     self._revision += 1
-        return meta
+        return self.cached(item.id) or meta
 
     # -- Cache ------------------------------------------------------------- #
     def _cache_path(self, item_id: str) -> Path:
@@ -152,6 +167,7 @@ class MetadataProvider:
         """Vide le cache série en mémoire (avant un rafraîchissement forcé)."""
         with self._lock:
             self._tv_cache.clear()
+            self._season_cache.clear()
 
     def cached(self, item_id: str) -> Optional[MovieMetadata]:
         record = self._record(item_id)
@@ -204,13 +220,27 @@ class MetadataProvider:
     def _get(self, item: MediaItem, force: bool = False, share_series: bool = False) -> MovieMetadata:
         cfg = self.cfgm.cfg.metadata
         fingerprint = hashlib.sha256(json.dumps([
-            cfg.model_dump(), item.kind, item.title, item.series_key, item.modified_at, item.size,
+            "tmdb_media_v3", cfg.model_dump(), item.kind, item.title, item.series_key,
+            item.season, item.episode, item.modified_at, item.size,
         ], sort_keys=True).encode()).hexdigest()
         is_series = item.kind == "series" and bool(item.series_name)
 
         manual = self._record(item.id)
         if manual and manual.get("manual") and manual.get("manual_kind") == item.kind:
-            return MovieMetadata.model_validate(manual["metadata"])
+            cached = MovieMetadata.model_validate(manual["metadata"])
+            if is_series and cached.matched:
+                with self._lock:
+                    self._tv_cache[self._tv_key(item)] = cached
+            enriched = self._episode_artwork(item, cached)
+            if enriched != cached:
+                from .paths import atomic_write_text
+                atomic_write_text(self._cache_path(item.id), json.dumps({**manual, "metadata": enriched.model_dump()}, ensure_ascii=False))
+                with self._lock:
+                    self._memory.pop(item.id, None)
+                    if self._catalogue is not None:
+                        self._catalogue = {**self._catalogue, item.id: self._summary(enriched)}
+                    self._revision += 1
+            return enriched
 
         if not force:
             c = self.cached(item.id)
@@ -220,7 +250,10 @@ class MetadataProvider:
             if (c is not None and record is not None and record.get("fingerprint") == fingerprint
                     and (c.matched or record.get("retry_at", 0) > time.time())
                     and not (is_series and c.source == "tmdb" and c.matched)):
-                return c
+                enriched = self._episode_artwork(item, c)
+                if enriched != c:
+                    self._save(item.id, enriched, fingerprint)
+                return enriched
 
         if is_series:
             title, year = item.series_name or item.title, None
@@ -234,8 +267,7 @@ class MetadataProvider:
             try:
                 if is_series:
                     # Une seule recherche TV par SÉRIE (clé canonique) -> partagée.
-                    config_key = hashlib.sha256(json.dumps(cfg.model_dump(), sort_keys=True).encode()).hexdigest()
-                    skey = f"{item.series_key or _norm(title)}:{config_key}"
+                    skey = self._tv_key(item)
                     with self._lock:
                         series_lock = self._key_locks.setdefault("series:" + skey, threading.Lock())
                     with series_lock:
@@ -262,8 +294,64 @@ class MetadataProvider:
         if meta is None:                       # repli : titre/année déduits
             meta = MovieMetadata(title=title, year=year, matched=False, source="filename", lookup_error=lookup_error)
 
+        meta = self._episode_artwork(item, meta)
         self._save(item.id, meta, fingerprint)
         return meta
+
+    def _episode_artwork(self, item: MediaItem, meta: MovieMetadata) -> MovieMetadata:
+        cfg = self.cfgm.cfg.metadata
+        if (item.kind != "series" or not meta.matched or not meta.tmdb_id
+                or item.season is None or item.episode is None
+                or not 0 <= item.season <= 1000 or not 1 <= item.episode <= 1000):
+            return meta.model_copy(update={"episode_still_url": None})
+        if not cfg.enabled or not cfg.tmdb_api_key:
+            return meta
+        key = (meta.tmdb_id, item.season, hashlib.sha256(cfg.tmdb_api_key.encode()).hexdigest(), cfg.language)
+        with self._lock:
+            lock = self._key_locks.setdefault("season:" + str(key), threading.Lock())
+        with lock:
+            with self._lock:
+                cached = self._season_cache.get(key)
+            if cached is None or cached[0] <= time.time():
+                stills, ttl = {}, 60
+                try:
+                    with tmdb_client(cfg.tmdb_api_key) as cli:
+                        response = cli.get(f"{TMDB_API}/tv/{meta.tmdb_id}/season/{item.season}", params={"language": cfg.language}, timeout=5)
+                        if response.status_code == 404:
+                            ttl = 86400
+                        else:
+                            response.raise_for_status()
+                            for episode in response.json().get("episodes", []):
+                                path, number = episode.get("still_path"), episode.get("episode_number")
+                                if isinstance(number, int) and isinstance(path, str) and re.fullmatch(r"/[A-Za-z0-9._-]+", path):
+                                    stills[number] = f"{IMG}/w780{path}"
+                            ttl = 86400
+                except (httpx.HTTPError, ValueError, TypeError, AttributeError):
+                    pass
+                cached = (time.time() + ttl, stills)
+                with self._lock:
+                    self._season_cache[key] = cached
+                    self._season_cache.move_to_end(key)
+                    while len(self._season_cache) > 256:
+                        self._season_cache.popitem(last=False)
+        # Never share the first episode's still with the rest of its season.
+        return meta.model_copy(update={"episode_still_url": cached[1].get(item.episode)})
+
+    def _tv_key(self, item: MediaItem) -> str:
+        config_key = hashlib.sha256(json.dumps(self.cfgm.cfg.metadata.model_dump(), sort_keys=True).encode()).hexdigest()
+        return f"{item.series_key or _norm(item.series_name or item.title)}:{config_key}"
+
+    @staticmethod
+    def _trailer(cli, media_type: str, media_id: int, details: dict, lang: str) -> str | None:
+        key = select_trailer(details.get("videos", {}).get("results", []), lang)
+        if key:
+            return key
+        try:
+            response = cli.get(f"{TMDB_API}/{media_type}/{media_id}/videos", params={"language": "en-US", "include_video_language": "en,null"}, timeout=5)
+            response.raise_for_status()
+            return select_trailer(response.json().get("results", []), lang)
+        except (httpx.HTTPError, ValueError, TypeError, AttributeError):
+            return None
 
     # -- Notes multi-sites (OMDb : IMDb / Rotten Tomatoes / Metacritic) ----- #
     def _ratings(self, tmdb_vote, imdb_id: Optional[str], omdb_key: str) -> list[Rating]:
@@ -309,6 +397,7 @@ class MetadataProvider:
                                 "append_to_response": "credits,videos,external_ids"})
             d.raise_for_status()
             j = d.json()
+            yt_key = self._trailer(cli, "tv", tid, j, lang)
         imdb_id = (j.get("external_ids") or {}).get("imdb_id")
 
         credits = j.get("credits", {})
@@ -321,10 +410,6 @@ class MetadataProvider:
             for c in credits.get("cast", [])[:10]
         ]
         creator = next((c.get("name") for c in j.get("created_by", [])), None)
-        vids = j.get("videos", {}).get("results", [])
-        yt = next((v for v in vids if v.get("site") == "YouTube" and v.get("type") == "Trailer"),
-                  next((v for v in vids if v.get("site") == "YouTube"), None))
-        yt_key = yt.get("key") if yt else None
         fa = j.get("first_air_date") or ""
         return MovieMetadata(
             tmdb_id=tid,
@@ -392,6 +477,7 @@ class MetadataProvider:
             )
             d.raise_for_status()
             j = d.json()
+            yt_key = self._trailer(cli, "movie", mid, j, lang)
 
         # Casting (10 premiers) + réalisateur
         credits = j.get("credits", {})
@@ -407,12 +493,6 @@ class MetadataProvider:
             (c["name"] for c in credits.get("crew", []) if c.get("job") == "Director"),
             None,
         )
-
-        # Bande-annonce YouTube (priorité Trailer officiel)
-        vids = j.get("videos", {}).get("results", [])
-        yt = next((v for v in vids if v.get("site") == "YouTube" and v.get("type") == "Trailer"),
-                  next((v for v in vids if v.get("site") == "YouTube"), None))
-        yt_key = yt.get("key") if yt else None
 
         rd = j.get("release_date") or ""
         return MovieMetadata(

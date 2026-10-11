@@ -2464,13 +2464,7 @@ class PlayerActivity : ThemedActivity() {
             dialog.findViewById<View>(R.id.nextEpisodeStay).defaultFocusHighlightEnabled = false
         }
         val artwork = dialog.findViewById<ImageView>(R.id.nextEpisodeArtwork)
-        val artworkUrl = next.thumbnailUrl?.let {
-            runCatching { LanUrlPolicy.resolveSameServer(api.baseUrl, it) }.getOrNull()
-        }
-        artwork.load(artworkUrl, LanMediaImages.loader(this)) {
-            placeholder(R.drawable.ic_episode_placeholder)
-            error(R.drawable.ic_episode_placeholder)
-        }
+        com.pluxy.tv.ui.EpisodeArtwork.load(artwork, next, api.baseUrl)
         val countdown = dialog.findViewById<TextView>(R.id.nextEpisodeCountdown)
         countdown.text = if (automatic) getString(R.string.player_next_countdown, NEXT_EPISODE_DELAY_SECONDS)
             else getString(R.string.player_next_manual)

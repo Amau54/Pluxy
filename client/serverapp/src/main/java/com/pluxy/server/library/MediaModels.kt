@@ -115,6 +115,7 @@ data class MediaEntry(
             })
             putNullable("year", year)
             putNullable("poster_url", poster)
+            putNullable("episode_still_url", videoMetadata?.takeIf { kind == "series" }?.optStringOrNull("episode_still_url"))
             put("has_metadata", metadataMatched)
             put("watched", watch.watched)
             put("in_progress", !watch.watched && watch.positionMs > 0)
