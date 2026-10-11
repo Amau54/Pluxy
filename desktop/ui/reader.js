@@ -582,12 +582,6 @@ $('metadata-search').addEventListener('submit',async event=>{
 });
 $('metadata-match').addEventListener('close',()=>{ metadataSearchVersion++; metadataItem=null; });
 
-$('check-update').addEventListener('click',async()=>{
-  $('check-update').disabled=true; $('update-status').textContent='Vérification…';
-  try { const state=await call('checkUpdate'); $('update-status').textContent=state.available?'Version '+state.version+' disponible.':'Votre version '+state.current+' est aussi récente que la version publiée.'; hidden('open-update',!state.available); }
-  catch(error) { $('update-status').textContent='Impossible de vérifier les mises à jour. Réessayez lorsque Internet sera disponible.'; }
-  finally { $('check-update').disabled=false; }
-});
-$('open-update').addEventListener('click',()=>call('openUpdate').catch(fail));
+$('check-update').addEventListener('click',()=>call('updates').catch(fail));
 $('backup-settings').addEventListener('click',()=>call('backup').then(done=>{if(done) toast('Sauvegarde créée.');}).catch(fail));
 $('restore-settings').addEventListener('click',()=>call('restoreBackup').catch(fail));

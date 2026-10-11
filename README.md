@@ -6,7 +6,7 @@
 
 Vos films, séries, photos et musique sur la TV.
 
-**Android 1.7.23 · Windows 1.8.18**
+**Android 1.7.24 · Windows 1.8.19**
 
 [Application Android](https://github.com/Amau54/Pluxy/releases/download/dev-latest/Pluxy-debug.apk)
 · [Application PC](https://github.com/Amau54/Pluxy/releases/download/pc-latest/Pluxy-Setup.exe)
@@ -19,6 +19,14 @@ son mode au premier lancement, puis dans les options pour le modifier.
 Les appareils doivent être sur le même réseau.
 
 Aucun compte ni abonnement n'est nécessaire. Pluxy ne fournit pas de contenu.
+
+Les applications vérifient les nouvelles versions sur GitHub en arrière-plan.
+Dans **Options → Mises à jour**, vous pouvez aussi lancer la vérification,
+puis télécharger et installer la version proposée. Android demande de confirmer
+l’installation et, la première fois, d’autoriser Pluxy à installer ses mises à jour.
+Sous Windows, confirmez la demande de Windows ; Pluxy se ferme pendant
+l’installation puis se rouvre. Vos réglages sont conservés.
+
 
 Dans le lecteur, **Réglages → Thème** propose Corail, Océan et Minuit. Le choix
 est conservé sur cet appareil et s'applique aussi aux commandes vidéo.

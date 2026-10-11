@@ -1,4 +1,4 @@
-#define AppVersion "1.8.18"
+#define AppVersion "1.8.19"
 [Setup]
 AppId={{42602BFC-1295-4EA4-B419-808A2A4D09C0}
 AppName=Pluxy
@@ -47,8 +47,14 @@ Name: "{autodesktop}\Pluxy"; Filename: "{app}\Pluxy.exe"; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\Pluxy.exe"; Description: "Ouvrir Pluxy"; Flags: nowait postinstall skipifsilent runasoriginaluser
+Filename: "{app}\Pluxy.exe"; Flags: nowait runasoriginaluser; Check: IsAutomaticUpdate
 
 [Code]
+function IsAutomaticUpdate(): Boolean;
+begin
+  Result := WizardSilent and (ExpandConstant('{param:PLUXYUPDATE|0}') = '1');
+end;
+
 function WebViewInstalled(): Boolean;
 var Version: String;
 begin

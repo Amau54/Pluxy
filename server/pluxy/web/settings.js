@@ -371,7 +371,7 @@ if (window.chrome?.webview) {
     } else if (message.eventName === 'serverError') toast(message.data, true);
   });
   document.querySelectorAll('[data-desktop]').forEach(button => button.addEventListener('click', async () => {
-    if (button.dataset.desktop.startsWith('server') && desktopServerState?.running && isDirty() && !await save()) return;
+    if ((button.dataset.desktop.startsWith('server') || button.dataset.desktop === 'updates') && desktopServerState?.running && isDirty() && !await save()) return;
     $('desktopMenu').close();
     window.chrome.webview.postMessage({method: button.dataset.desktop});
   }));

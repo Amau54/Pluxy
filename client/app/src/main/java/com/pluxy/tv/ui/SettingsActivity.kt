@@ -246,6 +246,8 @@ class SettingsActivity : ThemedActivity() {
         }
 
         section("Application")
+        rowButton("Mises à jour", "Vérifier ›", "Télécharger et installer la dernière version depuis GitHub.")
+            .setOnClickListener { com.pluxy.server.updates.AppUpdates.open(this) }
         rowButton("Mode de l’application", "Lecteur ›", "Choisir Lecteur ou Serveur pour cet appareil.", showHint = true)
             .setOnClickListener { startActivity(Intent(this, ModeActivity::class.java)
                 .putExtra(com.pluxy.server.ApplicationMode.EXTRA_CHOOSE_MODE, true)) }

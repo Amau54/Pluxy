@@ -484,6 +484,18 @@
                     android:textAllCaps="false"
                     android:textColor="@color/server_pluxy_text" />
 
+                <Button
+                    android:id="@+id/appUpdates"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:minHeight="48dp"
+                    android:layout_marginTop="8dp"
+                    android:background="@drawable/server_bg_button_secondary"
+                    android:text="Mises à jour"
+                    android:textSize="14sp"
+                    android:textAllCaps="false"
+                    android:textColor="@color/server_pluxy_text" />
+
                 <ImageView
                     android:layout_width="64dp"
                     android:layout_height="42dp"

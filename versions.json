@@ -1,9 +1,4 @@
 {
-  "android": {
-    "name": "1.7.23",
-    "code": 77
-  },
-  "windows": {
-    "name": "1.8.18"
-  }
+  "android": { "name": "1.7.24", "code": 78 },
+  "windows": { "name": "1.8.19" }
 }

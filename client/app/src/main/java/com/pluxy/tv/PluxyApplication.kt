@@ -14,6 +14,11 @@ class PluxyApplication : Application() {
         super.onCreate()
         instance = this
         ProgressOutbox.start(this)
+        com.pluxy.server.updates.AppUpdates.register(this, setOf(
+            com.pluxy.tv.ui.MainActivity::class.java,
+            com.pluxy.tv.ui.ServerSetupActivity::class.java,
+            com.pluxy.server.MainActivity::class.java,
+        ))
     }
 
     companion object {

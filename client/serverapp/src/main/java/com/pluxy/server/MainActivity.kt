@@ -179,6 +179,7 @@ class MainActivity : AppCompatActivity() {
             optionsExpanded = !optionsExpanded
             renderOptions()
         }
+        findViewById<Button>(R.id.appUpdates).setOnClickListener { com.pluxy.server.updates.AppUpdates.open(this) }
         autoDiscover.setOnCheckedChangeListener { _, checked ->
             preferences.autoDiscoverMedia = checked
             if (checked && !hasAutomaticMediaPermissions()) {

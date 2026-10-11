@@ -19,6 +19,11 @@
         android:maxSdkVersion="32" />
 
     <application>
+        <provider android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.updates" android:exported="false" android:grantUriPermissions="true">
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/update_paths" />
+        </provider>
+        <activity android:name=".updates.UpdateActivity" android:exported="false" android:theme="@style/Theme.PluxyServer" />
 
         <activity android:name=".MainActivity" android:exported="false"
             android:theme="@style/Theme.PluxyServer" />

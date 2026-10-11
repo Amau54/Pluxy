@@ -65,6 +65,7 @@ namespace Pluxy {
         public bool playerActionHints = false;
         public bool playerFocusContrast = false;
         public bool multipleProfiles = false;
+        public long updateOfferAfter = 0;
         public string ProfileFor(string address) { string value; return multipleProfiles && profiles!=null && profiles.TryGetValue(address,out value)?value:"default"; }
         public void StoreReader(string address,string profile) {
             if(readers==null) readers=new Dictionary<string,ReaderPreferences>();

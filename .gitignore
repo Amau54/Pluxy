@@ -22,6 +22,7 @@ server/.pluxy_watch.json
 
 # ---------- Client Android ----------
 client/.gradle/
+client/.kotlin/
 client/.gradle-codex-verify/
 client/.android-codex-verify/
 artifacts/

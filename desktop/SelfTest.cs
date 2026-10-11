@@ -106,6 +106,7 @@ namespace Pluxy {
             File.WriteAllText(report,Native.Json.Serialize(new{success=code==0,checks=checks,error=error})); return code;
         }
         private static async Task Verify(string[] args) {
+            await UpdateTests.Run(Check);
             VerifySkipSegments();
             var skipFile=Argument(args,"--test-skip");
             if(skipFile!=null) using(var player=new MpvSession()) {
