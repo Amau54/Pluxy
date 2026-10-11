@@ -5,6 +5,31 @@ using System.Threading.Tasks;
 
 namespace Pluxy {
     internal static class SelfTest {
+        private static void VerifyMainWindowFullscreen() {
+            var flags=System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic;
+            var originalContext=System.Threading.SynchronizationContext.Current;
+            using(var window=new MainWindow(new string[0])) {
+                var type=typeof(MainWindow);
+                var preferences=(Preferences)type.GetField("prefs",flags).GetValue(window);
+                var toggle=type.GetMethod("ToggleFullscreen",flags);
+                var keys=type.GetMethod("HandlesFullscreenKey",flags);
+                var full=type.GetField("fullscreen",flags);
+                preferences.mode="server";
+                toggle.Invoke(window,null);
+                Check(!(bool)full.GetValue(window) && window.FormBorderStyle==System.Windows.Forms.FormBorderStyle.Sizable && !(bool)keys.Invoke(window,new object[]{System.Windows.Forms.Keys.F11}),"Le serveur refuse le plein écran et F11, et conserve ses bordures Windows");
+                preferences.mode="reader";
+                toggle.Invoke(window,null);
+                Check((bool)full.GetValue(window) && window.FormBorderStyle==System.Windows.Forms.FormBorderStyle.None && (bool)keys.Invoke(window,new object[]{System.Windows.Forms.Keys.Escape}),"Le lecteur conserve le plein écran avec sortie par Échap");
+                preferences.mode="server";
+                type.GetMethod("UpdateServerControls",flags).Invoke(window,null);
+                Check(!(bool)full.GetValue(window) && window.FormBorderStyle==System.Windows.Forms.FormBorderStyle.Sizable,"Passer au serveur restaure automatiquement la fenêtre et son bouton de fermeture");
+                preferences.mode="reader";
+                type.GetField("choosing",flags).SetValue(window,true);
+                toggle.Invoke(window,null);
+                Check(!(bool)full.GetValue(window),"Le choix de mode reste toujours dans une fenêtre Windows");
+            }
+            System.Threading.SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
         private static async Task VerifyProgressPersistence() {
             var path=Path.Combine(Path.GetTempPath(), "Pluxy-outbox-"+Guid.NewGuid().ToString("N")+".json");
             var old=new ProgressUpdate { server="http://127.0.0.1:18442",profile="default",id="film",session="session00",sequence=1,positionMs=600000,durationMs=1200000 };
@@ -106,6 +131,7 @@ namespace Pluxy {
             File.WriteAllText(report,Native.Json.Serialize(new{success=code==0,checks=checks,error=error})); return code;
         }
         private static async Task Verify(string[] args) {
+            VerifyMainWindowFullscreen();
             await UpdateTests.Run(Check);
             VerifySkipSegments();
             var skipFile=Argument(args,"--test-skip");

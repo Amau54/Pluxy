@@ -15,7 +15,7 @@ using Microsoft.Web.WebView2.WinForms;
 [assembly: System.Reflection.AssemblyDescription("Lecteur et serveur multimédia Pluxy")]
 [assembly: System.Reflection.AssemblyCompany("Pluxy")]
 [assembly: System.Reflection.AssemblyProduct("Pluxy")]
-[assembly: System.Reflection.AssemblyVersion("1.8.19.0")]
+[assembly: System.Reflection.AssemblyVersion("1.8.20.0")]
 
 namespace Pluxy {
     internal static class Program {
@@ -94,6 +94,12 @@ namespace Pluxy {
                 var environment=await CoreWebView2Environment.CreateAsync(null,Path.Combine(Native.Data,"WebView"));
                 await browser.EnsureCoreWebView2Async(environment);
                 var core=browser.CoreWebView2;
+                await RefreshInterfaceCache(core);
+                browser.KeyDown+=(s,e)=> {
+                    if(e.KeyData!=Keys.F11 && !HandlesFullscreenKey(e.KeyData)) return;
+                    e.Handled=true; e.SuppressKeyPress=true;
+                    if(HandlesFullscreenKey(e.KeyData)) BeginInvoke((Action)ToggleFullscreen);
+                };
                 core.Settings.AreDefaultContextMenusEnabled=false; core.Settings.AreDevToolsEnabled=false;
                 core.Settings.IsStatusBarEnabled=false; core.Settings.IsZoomControlEnabled=true;
                 core.SetVirtualHostNameToFolderMapping("pluxy.app",Path.Combine(Native.Root,"ui"),CoreWebView2HostResourceAccessKind.DenyCors);
@@ -173,12 +179,13 @@ namespace Pluxy {
             if(!quitting && pendingUpdate!=null && pendingUpdate.available && DateTime.UtcNow>=nextUpdateOffer && DateTime.UtcNow.Ticks>=prefs.updateOfferAfter && Visible && ContainsFocus && players.Count==0 && !busy) ShowUpdater(pendingUpdate);
         }
         private void ChooseMode() {
-            if(busy) return; choosing=true; Restore();
+            if(busy) return; if(fullscreen) ToggleFullscreen(); choosing=true; Restore();
             if(browser.CoreWebView2!=null) browser.CoreWebView2.Navigate(Origin+"index.html");
             else browser.Source=new Uri(Origin+"index.html");
         }
         private void UpdateServerControls() {
             if(quitting) return;
+            if(prefs.mode=="server" && fullscreen) ToggleFullscreen();
             bool active=prefs.mode=="server",running=server.Running;
             string status=serverOperation ?? (running?"Serveur démarré":"Serveur arrêté");
             if(startServer!=null) {
@@ -215,6 +222,7 @@ namespace Pluxy {
         private void Event(string name,object data) { if(browser.CoreWebView2!=null && !quitting) browser.CoreWebView2.PostWebMessageAsJson(Native.Json.Serialize(new{eventName=name,data=data})); }
         private void ToggleFullscreen() {
             if(!fullscreen) {
+                if(prefs.mode!="reader" || choosing) return;
                 restoreBounds=WindowState==FormWindowState.Normal?Bounds:RestoreBounds; restoreState=WindowState;
                 fullscreen=true; WindowState=FormWindowState.Normal; FormBorderStyle=FormBorderStyle.None; Bounds=Screen.FromControl(this).Bounds;
             } else {
@@ -223,18 +231,32 @@ namespace Pluxy {
             Event("fullscreen",fullscreen);
         }
         protected override void WndProc(ref System.Windows.Forms.Message message) {
-            if(message.Msg==0x112 && (message.WParam.ToInt64()&0xFFF0)==0xF030) { if(!fullscreen) ToggleFullscreen(); return; }
+            if(prefs.mode=="reader" && !choosing && message.Msg==0x112 && (message.WParam.ToInt64()&0xFFF0)==0xF030) { if(!fullscreen) ToggleFullscreen(); return; }
             base.WndProc(ref message);
         }
         protected override bool ProcessCmdKey(ref System.Windows.Forms.Message message,Keys keyData) {
-            if(keyData==Keys.F11 || keyData==Keys.Escape && fullscreen) { ToggleFullscreen(); return true; }
+            if(HandlesFullscreenKey(keyData)) { ToggleFullscreen(); return true; }
+            if(keyData==Keys.F11) return true;
             return base.ProcessCmdKey(ref message,keyData);
+        }
+        private bool HandlesFullscreenKey(Keys key) {
+            return key==Keys.Escape && fullscreen || key==Keys.F11 && (fullscreen || prefs.mode=="reader" && !choosing);
+        }
+        private async Task RefreshInterfaceCache(CoreWebView2 core) {
+            var version=System.Reflection.Assembly.GetExecutingAssembly().GetName().Version.ToString();
+            var marker=Path.Combine(Native.Data,"desktop-ui.version");
+            try {
+                if(File.Exists(marker) && File.ReadAllText(marker)==version) return;
+                await core.Profile.ClearBrowsingDataAsync(CoreWebView2BrowsingDataKinds.DiskCache);
+                File.WriteAllText(marker,version);
+            } catch(Exception error) { Native.Log(error); }
         }
         private async Task ChangeMode(string mode) {
             if(mode!="reader" && mode!="server") throw new ArgumentException("Choisissez Lecteur ou Serveur.");
             if(busy) throw new IOException("La préparation est déjà en cours."); busy=true; UpdateServerControls();
             try {
                 if(mode=="server") {
+                    if(fullscreen) ToggleFullscreen();
                     await server.Start(message=> { Event("status",message); });
                     prefs.mode="server"; prefs.Save(); choosing=false; browser.Source=new Uri(server.Address);
                 } else {

@@ -133,7 +133,7 @@ async def trusted_lan_only(request: Request, call_next):
     response.headers["Referrer-Policy"] = "no-referrer"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
-    if request.url.path.startswith("/api/settings"):
+    if request.url.path.startswith("/api/settings") or request.url.path in {"/", "/settings.js", "/settings.css"}:
         response.headers["Cache-Control"] = "no-store"
     content_type = response.headers.get("content-type", "")
     if content_type.startswith("text/html"):
