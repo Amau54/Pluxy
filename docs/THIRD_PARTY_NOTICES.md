@@ -1,5 +1,12 @@
 # Composants tiers et crédits
 
+## Pictogrammes du lecteur
+
+Lucide, sous licence ISC, fournit les pictogrammes du lecteur. Les chiffres des
+commandes de saut proviennent de Material Symbols Rounded, Google, sous licence
+Apache 2.0. Les SVG d’origine et leurs licences sont dans `assets/player-icons`.
+Les versions Android et Windows utilisent les mêmes tracés, sans police distante.
+
 ## FFmpeg sur Windows
 
 Le lanceur télécharge séparément FFmpeg et ffprobe 9.0.2 depuis

@@ -21,6 +21,7 @@ internal class CatalogueStore(
     private val clockMs: () -> Long = { System.nanoTime() / 1_000_000 },
     private val freshnessMs: Long = 30_000,
     private val capacity: Int = 2,
+    private val profile: (String) -> String = { "default" },
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
 ) {
     data class Snapshot(val serverUrl: String, val revision: Long, val items: List<MediaItem>)
@@ -33,7 +34,7 @@ internal class CatalogueStore(
 
     /** Rendering an existing snapshot must not wait for validation or extend its freshness. */
     suspend fun cached(serverUrl: String, mediaKind: String = "all"): Snapshot? = mutex.withLock {
-        val key = scopedCatalogueKey(serverUrl, mediaKind)
+        val key = scopedCatalogueKey(serverUrl, mediaKind, profile(serverUrl))
         val entry = entries.remove(key) ?: return@withLock null
         entries[key] = entry
         entry.snapshot
@@ -45,7 +46,7 @@ internal class CatalogueStore(
         mediaKind: String = "all",
         loader: suspend () -> List<MediaItem>,
     ): Snapshot {
-        val key = scopedCatalogueKey(serverUrl, mediaKind)
+        val key = scopedCatalogueKey(serverUrl, mediaKind, profile(serverUrl))
         val result = mutex.withLock {
             val previous = entries[key]
             if (!forceRefresh && previous != null && clockMs() - previous.validatedAtMs < freshnessMs) {
@@ -97,9 +98,9 @@ internal class CatalogueStore(
     }
 }
 
-private fun scopedCatalogueKey(serverUrl: String, mediaKind: String): String {
+private fun scopedCatalogueKey(serverUrl: String, mediaKind: String, profile: String): String {
     require(mediaKind in setOf("all", "movie", "series", "clip", "photo", "audio")) { "Invalid catalogue kind" }
-    val server = catalogueServerKey(serverUrl)
+    val server = catalogueServerKey(serverUrl) + if (profile == "default") "" else "#profile:$profile"
     return if (mediaKind == "all") server else "$server#$mediaKind"
 }
 
@@ -112,7 +113,7 @@ internal fun catalogueServerKey(value: String): String {
 }
 
 internal object CatalogueRepository {
-    private val store = CatalogueStore()
+    private val store = CatalogueStore(profile = FamilyProfileSelection::selected)
 
     suspend fun cached(serverUrl: String, mediaKind: String = "all"): CatalogueStore.Snapshot? = store.cached(serverUrl, mediaKind)
 

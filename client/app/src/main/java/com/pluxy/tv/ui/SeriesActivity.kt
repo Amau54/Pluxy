@@ -88,6 +88,9 @@ class SeriesActivity : ThemedActivity() {
         list = findViewById(R.id.episodes)
         seasons = findViewById(R.id.seasons)
         continueButton = findViewById(R.id.continueEpisode)
+        findViewById<Button>(R.id.seriesMetadataFix).setOnClickListener {
+            allEpisodes.firstOrNull()?.let { item -> MetadataMatchDialog.show(this, item) { load() } }
+        }
         trailerButton = findViewById(R.id.seriesTrailer)
         trailerButton.tag = "trailer"
         trailerButton.setOnFocusChangeListener { _, focused ->
@@ -636,7 +639,7 @@ private class EpisodeAdapter(
 
 internal fun episodeCode(item: MediaItem): String =
     if (item.season != null && item.episode != null) {
-        "S%02dE%02d".format(item.season, item.episode)
+        "Saison ${item.season} - Épisode ${item.episode}"
     } else {
         "Épisode ${item.episode ?: 1}"
     }
@@ -647,6 +650,8 @@ internal fun cleanEpisodeTitle(item: MediaItem, fallbackPosition: Int): String {
     title = title.replace(Regex("[._]+"), " ")
         .replace(Regex("\\s+"), " ")
         .trim(' ', '-', '_', '.')
+    val technical = Regex("(?i)(?:^|[ \\[-])(?:MULTI|VOSTFR|TRUEFRENCH|VFQ|VFF|VF2|2160p|1080[pi]|720p|480p|4K|UHD|WEB[ -]?(?:DL|RIP)|Blu[ -]?Ray|BDRip|HDTV|[hx][ .]?26[45]|HEVC|AV1|HDR10?\\+?|DV|DOLBY[ -]?VISION|PROPER|REPACK|10[ -]?bits?)(?=$|[ \\]()-])")
+    technical.find(title)?.let { title = title.substring(0, it.range.first).trim(' ', '-', '[') }
     return title.ifBlank { "Épisode ${item.episode ?: fallbackPosition + 1}" }
 }
 
@@ -660,14 +665,7 @@ private fun episodeMeta(item: MediaItem): String {
             values += "${(item.progress * 100).toInt().coerceIn(1, 99)} % regardé"
         else -> values += "Non regardé"
     }
-    item.height?.let {
-        values += when {
-            it >= 2000 -> "4K"
-            it >= 1060 -> "1080p"
-            it >= 700 -> "720p"
-            else -> "${it}p"
-        }
-    }
+    ArtworkPolicy.resolutionLabel(item.width, item.height)?.let { values += it }
     return values.joinToString(" · ")
 }
 

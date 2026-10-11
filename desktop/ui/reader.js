@@ -24,7 +24,8 @@ window.chrome.webview.addEventListener('message', ({data}) => {
     $('fullscreen').title=fullscreen?'Quitter le plein écran · Échap':'Plein écran · F11'; return;
   }
   if (data.eventName === 'status') { $('loading-text').textContent = data.data; return; }
-  if (data.eventName === 'progressUpdated') { if (prefs.mode === 'reader') load(); return; }
+  if (data.eventName === 'music') { updateMusic(data.data); return; }
+  if (data.eventName === 'progressUpdated') { if (prefs.mode === 'reader') refreshProgress(data.data?.id).catch(fail); return; }
   const task = pending.get(data.id); if (!task) return;
   pending.delete(data.id); clearTimeout(task.timeout);
   data.error ? task.reject(new Error(data.error)) : task.resolve(data.result);
@@ -51,10 +52,19 @@ function title(item) { return item.metadata_title || item.title || 'Sans titre';
 function episodeTitle(item) {
   const raw=String(item.title || '');
   const marker=raw.match(/s\d{1,2}[ ._-]?e\d{1,2}|\b\d{1,2}x\d{2}\b/i);
-  const name=(marker ? raw.slice(marker.index+marker[0].length) : raw).replace(/[._]+/g,' ').replace(/\s+/g,' ').replace(/^[\s-]+|[\s-]+$/g,'');
+  let name=(marker ? raw.slice(marker.index+marker[0].length) : raw).replace(/[._]+/g,' ').replace(/\s+/g,' ').replace(/^[\s-]+|[\s-]+$/g,'');
+  const technical=name.match(/(?:^|[ \[-])(?:MULTI|VOSTFR|TRUEFRENCH|VFQ|VFF|VF2|2160p|1080[pi]|720p|480p|4K|UHD|WEB[ -]?(?:DL|RIP)|Blu[ -]?Ray|BDRip|HDTV|[hx][ .]?26[45]|HEVC|AV1|HDR10?\+?|DV|DOLBY[ -]?VISION|PROPER|REPACK|10[ -]?bits?)(?=$|[ \]()-])/i);
+  if (technical) name=name.slice(0,technical.index).replace(/[ \[-]+$/g,'');
   return name || 'Épisode '+(item.episode || 1);
 }
-function minutes(item) { return item.duration ? Math.round(item.duration / 60) + ' min' : ''; }
+function episodeCode(item) {
+  return (item.season != null ? 'Saison ' + item.season + ' - ' : '') + 'Épisode ' + (item.episode || 1);
+}
+function minutes(item) {
+  const duration = Number(item.duration);
+  if (!Number.isFinite(duration) || duration <= 0) return '';
+  return duration < 60 ? Math.max(1, Math.round(duration)) + ' s' : Math.round(duration / 60) + ' min';
+}
 function folded(value) { return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); }
 function applyPreferences() {
   fullscreen=Boolean(prefs.fullscreen);
@@ -62,6 +72,12 @@ function applyPreferences() {
   $('fullscreen').setAttribute('aria-label',fullscreen?'Quitter le plein écran':'Plein écran');
   document.documentElement.dataset.theme = ['coral','ocean','midnight'].includes(prefs.theme) ? prefs.theme : 'coral';
   $('theme').value = prefs.theme || 'coral'; $('audio').value = prefs.audio || 'auto';
+  $('player-action-hints').checked = Boolean(prefs.playerActionHints);
+  $('player-focus-contrast').checked = Boolean(prefs.playerFocusContrast);
+  $('multiple-profiles').checked = Boolean(prefs.multipleProfiles);
+  hidden('family-settings',!prefs.multipleProfiles);
+  hidden('profile-management',!prefs.multipleProfiles);
+  hidden('general-profile-note',Boolean(prefs.multipleProfiles));
 }
 async function chooseMode(mode) {
   loading(mode === 'server' ? 'Préparation du serveur…' : 'Ouverture du lecteur…');
@@ -78,7 +94,7 @@ async function openReader() {
 async function connect(url) {
   $('connection-status').textContent = 'Connexion…';
   const selected = await call('connect', {url});
-  connection = selected; prefs.server = selected.url; prefs.serverName = selected.name;
+  connection = selected; prefs={...prefs,...await call("state")}; applyPreferences(); await loadProfiles(); prefs.server = selected.url; prefs.serverName = selected.name;
   $('server-name').textContent = selected.name; $('server-choice').classList.remove('offline');
   $('address').value = selected.url; $('connection').close(); $('connection-status').textContent = '';
   await load();
@@ -146,9 +162,11 @@ async function load(append = false, retry = true) {
 }
 function card(item, action, subtitle) {
   const e = button('', action, 'media-card');
+  e.dataset.mediaId = item.id;
+  e.mediaItem = item;
   e.classList.toggle('is-watched',Boolean(item.watched));
   const poster = node('div','poster'); poster.append(icon(iconNames[item.kind] || 'film'), image(item));
-  const quality = [item.width >= 3840 || item.height >= 2160 ? '4K' : '', item.is_hdr ? 'HDR' : ''].filter(Boolean).join(' · ');
+  const quality = [item.width >= 3802 || item.height >= 2139 ? '4K' : '', item.is_hdr ? 'HDR' : ''].filter(Boolean).join(' · ');
   if (quality) poster.append(node('span','quality',quality));
   if (item.watched) poster.append(node('span','watched','Vu'));
   const hover = node('span','card-play'); hover.append(icon(item.kind === 'photo' ? 'photos' : 'play')); poster.append(hover);
@@ -157,6 +175,25 @@ function card(item, action, subtitle) {
   }
   e.append(poster, node('strong','media-title',title(item)), node('span','media-subtitle',subtitle == null ? [item.year, minutes(item)].filter(Boolean).join(' · ') : subtitle));
   e.title = title(item); return e;
+}
+async function refreshProgress(id) {
+  if (!connection || !id) return;
+  const address=connection.url, profile=prefs.profile, state=await call('progress',{id});
+  if (connection.url!==address || prefs.profile!==profile) return;
+  const changes={watched:Boolean(state.watched),in_progress:!state.watched && state.position_ms>0,
+    progress:state.duration_ms>0 ? Math.min(1,state.position_ms/state.duration_ms) : 0,last_played_at:Date.now()/1000};
+  items.filter(item=>item.id===id).forEach(item=>Object.assign(item,changes));
+  document.querySelectorAll('[data-media-id]').forEach(e=>{
+    if(e.dataset.mediaId!==id) return;
+    if(e.mediaItem) Object.assign(e.mediaItem,changes);
+    e.classList.toggle('is-watched',changes.watched);
+    const poster=e.querySelector('.poster');
+    if(poster) {
+      poster.querySelectorAll('.watch-progress,.watched').forEach(n=>n.remove());
+      if(changes.watched) poster.append(node('span','watched','Vu'));
+      else if(changes.in_progress) { const p=node('progress','watch-progress'); p.max=1; p.value=changes.progress; p.setAttribute('aria-label','Progression de lecture'); poster.append(p); }
+    } else if(e.classList.contains('episode-row')) e.querySelector('.muted').textContent=changes.watched?'Vu':changes.in_progress?'Reprendre':'';
+  });
 }
 function render() {
   hidden('photo-commands', kind !== 'photo'); $('genre').hidden = kind === 'photo' || kind === 'audio';
@@ -193,7 +230,7 @@ function renderHome(counts) {
     const grid=node('div','shelf-items'+(landscape?' landscape':''));
     grid.append(...values.map(e=> {
       const remaining=e.in_progress && e.duration>0?Math.max(1,Math.ceil(e.duration*(1-(e.progress || 0))/60))+' min restantes':'';
-      const subtitle=[e.kind==='series'?'S'+(e.season || 0)+' · E'+(e.episode || 0):'',landscape?remaining:''].filter(Boolean).join(' · ');
+      const subtitle=[e.kind==='series'?episodeCode(e):'',landscape?remaining:''].filter(Boolean).join(' · ');
       const entry=card(e,()=>landscape?play(e):openItem(e),subtitle || undefined);
       if(landscape && e.kind==='series') entry.querySelector('.media-title').textContent=e.series_name || title(e);
       return entry;
@@ -222,7 +259,7 @@ async function play(item, resume = true) {
 }
 async function showMovie(item) {
   const body = $('detail-content'); const poster = node('div','detail-poster'); poster.append(image(item));
-  const text = node('div','detail-text'); text.append(node('p','eyebrow',item.kind === 'series' ? 'Série' : 'Film'), node('h2','',title(item)), node('p','muted',[item.year, minutes(item), item.is_hdr ? 'HDR' : '', item.width >= 3840 ? '4K' : ''].filter(Boolean).join(' · ')));
+  const text = node('div','detail-text'); text.append(node('p','eyebrow',item.kind === 'series' ? 'Série' : 'Film'), node('h2','',title(item)), node('p','muted',[item.year, minutes(item), item.is_hdr ? 'HDR' : '', item.width >= 3802 ? '4K' : ''].filter(Boolean).join(' · ')));
   const actions = node('div','detail-actions'); actions.append(button(item.in_progress ? 'Reprendre' : 'Lire', () => play(item), 'primary'));
   if (item.in_progress) actions.append(button('Depuis le début', () => play(item, false)));
   text.append(actions); const overview = node('p','overview',''); text.append(overview);
@@ -230,6 +267,7 @@ async function showMovie(item) {
   await decorateDetails(item,body,row,text,actions,overview);
 }
 async function decorateDetails(item,body,row,text,actions,overview) {
+  text.append(button('Corriger les informations',()=>openMetadataMatch(item),'text-button metadata-edit'));
   try {
     const metadata=await call('metadata',{id:item.id});
     if(!body.contains(row) || !metadata) return;
@@ -269,7 +307,7 @@ function renderSeries() {
   grid.append(...groups.map(episodes => {
     const first = episodes[0], seasons = new Set(episodes.map(e => e.season || 0));
     const count=first.group_count || episodes.length, seasonCount=first.season_count || seasons.size;
-    return card({...first, metadata_title: first.series_name || title(first)}, () => openSeries(first), seasonCount + (seasonCount > 1 ? ' saisons' : ' saison') + ' · ' + count + ' épisodes');
+    return card({...first, metadata_title: first.metadata_title || first.series_name || title(first)}, () => openSeries(first), seasonCount + (seasonCount > 1 ? ' saisons' : ' saison') + ' · ' + count + ' épisodes');
   }));
   $('content').replaceChildren(grid);
 }
@@ -294,23 +332,23 @@ async function openSeries(item) {
 function showSeries(episodes) {
   episodes = [...episodes].sort((a,b) => (a.season || 0) - (b.season || 0) || (a.episode || 0) - (b.episode || 0) || title(a).localeCompare(title(b),'fr',{numeric:true}));
   const first = episodes[0], body = $('detail-content'), row = node('div','detail-row'), poster = node('div','detail-poster'), text = node('div','detail-text');
-  poster.append(image(first)); text.append(node('p','eyebrow','Série'),node('h2','',first.series_name || title(first)),node('p','muted',episodes.length + ' épisodes'));
+  poster.append(image(first)); text.append(node('p','eyebrow','Série'),node('h2','',first.metadata_title || first.series_name || title(first)),node('p','muted',episodes.length + ' épisodes'));
   const resume = [...episodes].filter(e => e.in_progress).sort((a,b) => b.last_played_at - a.last_played_at)[0] || episodes.find(e => !e.watched) || first;
   const actions=node('div','detail-actions');
-  actions.append(button((resume.in_progress?'Reprendre':'Lire')+' · S' + (resume.season || 0) + ' E' + (resume.episode || 0), () => play(resume),'primary'));
+  actions.append(button((resume.in_progress?'Reprendre':'Lire')+' · '+episodeCode(resume), () => play(resume),'primary'));
   const overview=node('p','overview'); text.append(actions,overview); row.append(poster,text);
   const seasons = node('div','season-tabs'), list = node('div','episode-list');
   function showSeason(season) {
     seasons.querySelectorAll('button').forEach(b => b.classList.toggle('active',Number(b.dataset.season) === season));
     list.replaceChildren(...episodes.filter(e => (e.season || 0) === season).map(item => {
-      const e = button('', () => play(item),'episode-row'); e.classList.toggle('is-watched',Boolean(item.watched)); e.append(image(item),node('span','episode-number',String(item.episode || '—')),node('strong','',episodeTitle(item)),node('span','muted',item.watched ? 'Vu' : item.in_progress ? 'Reprendre' : minutes(item)),icon('play')); return e;
+      const e = button('', () => play(item),'episode-row'); e.dataset.mediaId=item.id; e.mediaItem=item; e.classList.toggle('is-watched',Boolean(item.watched)); e.append(image(item),node('span','episode-number',String(item.episode || '—')),node('strong','',episodeTitle(item)),node('span','muted',item.watched ? 'Vu' : item.in_progress ? 'Reprendre' : minutes(item)),icon('play')); return e;
     }));
   }
   for (const season of [...new Set(episodes.map(e => e.season || 0))]) { const e = button(season ? 'Saison ' + season : 'Épisodes spéciaux',() => showSeason(season)); e.dataset.season = season; seasons.append(e); }
   body.replaceChildren(row,seasons,list); showSeason(resume.season || 0); showDialog('details');
   decorateDetails(first,body,row,text,actions,overview);
 }
-function photoState() { try { return JSON.parse(localStorage.getItem('folders:' + connection.url) || '{}'); } catch (_) { return {}; } }
+function photoState() { try { return JSON.parse(localStorage.getItem('folders:' + connection.url + ':' + (prefs.profile || 'default')) || '{}'); } catch (_) { return {}; } }
 function renderPhotos() {
   const roots = new Map(), state = photoState();
   for (const item of items) {
@@ -328,7 +366,7 @@ function renderPhotos() {
     const summary = node('summary','folder-row'); summary.append(icon('chevron'),icon('folder'),node('strong','',folder.name),node('span','muted',folder.images.length ? folder.images.reduce((n,i)=>n+(i.group_count || 1),0) + ' photos' : ''));
     if(folder.images.length) summary.insertBefore(image(folder.images[0],'folder-cover'),summary.querySelector('strong'));
     e.append(summary); e.dataset.folder = folder.key;
-    e.addEventListener('toggle',() => { const saved = photoState(); saved[folder.key] = e.open; try { localStorage.setItem('folders:' + connection.url,JSON.stringify(saved)); } catch (_) { /* Stockage plein. */ } });
+    e.addEventListener('toggle',() => { const saved = photoState(); saved[folder.key] = e.open; try { localStorage.setItem('folders:' + connection.url + ':' + (prefs.profile || 'default'),JSON.stringify(saved)); } catch (_) { /* Stockage plein. */ } });
     if (folder.images.length) {
       const seed=folder.images[0], grid=node('div','media-grid photos'); e.append(grid); let fetching=false;
       const populate=async()=> {
@@ -403,9 +441,12 @@ $('more').addEventListener('click',() => load(true)); $('refresh').addEventListe
 $('clear-filters').addEventListener('click',resetFilters);
 $('fullscreen').addEventListener('click',()=>call('fullscreen').catch(fail));
 document.addEventListener('keydown',event=>{
+  if (['Tab','ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Enter',' '].includes(event.key)) document.documentElement.dataset.input='keyboard';
   if(event.key==='F11') { event.preventDefault(); call('fullscreen').catch(fail); }
   else if(event.key==='Escape' && fullscreen && !document.querySelector('dialog[open]')) { event.preventDefault(); call('fullscreen',{enabled:false}).catch(fail); }
 });
+document.addEventListener('pointermove',()=>{ document.documentElement.dataset.input='pointer'; },{passive:true});
+document.addEventListener('pointerdown',()=>{ document.documentElement.dataset.input='pointer'; },{passive:true});
 function setView(value) {
   document.documentElement.dataset.view=value;
   $('view-grid').setAttribute('aria-pressed',value==='grid'); $('view-list').setAttribute('aria-pressed',value==='list');
@@ -416,8 +457,30 @@ try { setView(localStorage.getItem('library-view')==='list'?'list':'grid'); } ca
 document.addEventListener('keydown',event=>{ if((event.ctrlKey || event.metaKey) && event.key.toLowerCase()==='k') { event.preventDefault(); $('search').focus(); } });
 $('search').addEventListener('input',() => { clearTimeout(searchTimer); searchTimer = setTimeout(() => load(),250); });
 $('preferences').addEventListener('click',() => showDialog('settings'));
+$('show-options').addEventListener('click',()=>{ $('settings').close(); showDialog('secondary-options'); });
+$('secondary-options').addEventListener('cancel',event=>{ event.preventDefault(); $('secondary-options').close(); });
+$('secondary-options').addEventListener('close',()=>{ if(prefs.mode==='reader') { showDialog('settings'); $('show-options').focus(); } });
+$('multiple-profiles').addEventListener('change',async()=>{
+  const enabled=$('multiple-profiles').checked;
+  $('multiple-profiles').disabled=true;
+  try {
+    await call('preferences',{multipleProfiles:enabled});
+    prefs={...prefs,...await call('state')}; applyPreferences(); await loadProfiles();
+    $('details').close(); $('gallery').close(); photoCache.clear(); folderData.clear();
+    await load();
+  } catch(error) { applyPreferences(); fail(error); }
+  finally { $('multiple-profiles').disabled=false; }
+});
+$('player-action-hints').addEventListener('change',async () => {
+  try { await call('preferences',{playerActionHints:$('player-action-hints').checked}); prefs.playerActionHints=$('player-action-hints').checked; }
+  catch(error) { $('player-action-hints').checked=Boolean(prefs.playerActionHints); fail(error); }
+});
+$('player-focus-contrast').addEventListener('change',async () => {
+  try { await call('preferences',{playerFocusContrast:$('player-focus-contrast').checked}); prefs.playerFocusContrast=$('player-focus-contrast').checked; }
+  catch(error) { $('player-focus-contrast').checked=Boolean(prefs.playerFocusContrast); fail(error); }
+});
 ['theme','audio'].forEach(id => $(id).addEventListener('change',async () => { try { await call('preferences',{theme:$('theme').value,audio:$('audio').value}); prefs.theme = $('theme').value; prefs.audio = $('audio').value; applyPreferences(); } catch (error) { fail(error); } }));
-$('change-mode').addEventListener('click',async () => { $('settings').close(); try { await call('chooseMode'); } catch (error) { fail(error); } });
+$('change-mode').addEventListener('click',async () => { prefs.mode=''; $('secondary-options').close(); try { await call('chooseMode'); } catch(error) { prefs.mode='reader'; fail(error); showDialog('settings'); } });
 $('expand-all').addEventListener('click',() => document.querySelectorAll('.folder-tree').forEach(e => e.open = true));
 $('collapse-all').addEventListener('click',() => document.querySelectorAll('.folder-tree').forEach(e => e.open = false));
 $('gallery-close').addEventListener('click',() => $('gallery').close()); $('gallery').addEventListener('close',stopSlideshow);
@@ -434,3 +497,93 @@ setInterval(async () => {
   try { prefs = await call('state'); applyPreferences(); if (prefs.mode === 'reader') await openReader(); else if (prefs.mode === 'server') loading('Ouverture du serveur…'); else hidden('welcome',false); }
   catch (error) { hidden('welcome',false); fail(error); }
 })();
+
+async function loadProfiles() {
+  if(!prefs.multipleProfiles) { hidden('family-settings',true); return; }
+  try {
+    const profiles=await call('profiles');
+    if(!prefs.multipleProfiles) return;
+    $('profile').replaceChildren(...profiles.map(p=>new Option(p.id==='default'?'Général':p.name,p.id)));
+    $('profile').value=prefs.profile || 'default'; hidden('family-settings',false);
+    if(!$('profile').value) { prefs={...prefs,...await call('selectProfile',{profile:'default'})}; $('profile').value='default'; applyPreferences(); }
+  } catch(_) { hidden('family-settings',true); }
+}
+$('profile').addEventListener('change',async()=>{
+  const previous=prefs.profile || 'default';
+  try {
+    prefs={...prefs,...await call('selectProfile',{profile:$('profile').value})};
+    applyPreferences(); $('details').close(); $('gallery').close(); photoCache.clear(); folderData.clear();
+    await load(); toast('Profil : '+$('profile').selectedOptions[0].textContent);
+  } catch(error) { $('profile').value=previous; fail(error); }
+});
+$('create-profile').addEventListener('submit',async event=>{
+  event.preventDefault();
+  try { await call('createProfile',{name:$('profile-name').value.trim()}); $('profile-name').value=''; await loadProfiles(); toast('Profil ajouté.'); } catch(error) { fail(error); }
+});
+
+let musicState={}, musicSeeking=false;
+function musicClock(value) { const seconds=Math.max(0,Math.floor(value || 0)); return Math.floor(seconds/60)+':'+String(seconds%60).padStart(2,'0'); }
+function updateMusic(state) {
+  musicState={...musicState,...state}; hidden('music-player',!state.visible); document.body.classList.toggle('has-music',Boolean(state.visible));
+  if(state.error) { toast(state.error); return; }
+  $('music-title').textContent=state.title || ''; $('music-artist').textContent=state.artist || '';
+  $('music-pause').setAttribute('aria-label',state.paused?'Lire':'Pause'); $('music-pause').replaceChildren(icon(state.paused?'play':'pause'));
+  $('music-time').textContent=musicClock(state.position)+' / '+musicClock(state.duration);
+  if(!musicSeeking) $('music-seek').value=state.duration>0?state.position/state.duration*1000:0;
+}
+for(const action of ['previous','pause','next','stop']) $('music-'+action).addEventListener('click',()=>call('musicControl',{action}).catch(fail));
+$('music-seek').addEventListener('pointerdown',()=>musicSeeking=true);
+$('music-seek').addEventListener('keydown',()=>musicSeeking=true);
+$('music-seek').addEventListener('change',async()=>{ try { await call('musicControl',{action:'seek',value:Number($('music-seek').value)/1000*(musicState.duration || 0)}); } catch(error) { fail(error); } finally { musicSeeking=false; } });
+$('music-seek').addEventListener('blur',()=>musicSeeking=false);
+$('music-queue').addEventListener('click',()=>{
+  $('music-tracks').replaceChildren(...(musicState.queue || []).map((track,index)=>{
+    const e=button((index+1)+' · '+track.title,()=>call('musicControl',{action:'track',value:index}).catch(fail),'episode-row');
+    e.classList.toggle('active',index===musicState.index); return e;
+  })); showDialog('music-list');
+});
+
+let metadataItem=null, metadataSearchVersion=0;
+function openMetadataMatch(item) { metadataItem=item; $('metadata-query').value=item.metadata_title || item.series_name || item.title; $('metadata-results').replaceChildren(); $('metadata-status').textContent=''; showDialog('metadata-match'); $('metadata-query').focus(); }
+$('metadata-search').addEventListener('submit',async event=>{
+  event.preventDefault(); const item=metadataItem, address=connection.url, version=++metadataSearchVersion;
+  $('metadata-status').textContent='Recherche…'; $('metadata-results').replaceChildren();
+  try {
+    const matches=await call('matches',{id:item.id,q:$('metadata-query').value.trim()});
+    if(version!==metadataSearchVersion || connection.url!==address || metadataItem!==item) return;
+    $('metadata-status').textContent=matches.length?'Choisissez la bonne correspondance.':'Aucun résultat. Essayez un autre titre.';
+    $('metadata-results').replaceChildren(...matches.map(match=>{
+      const e=button([match.title,match.year].filter(Boolean).join(' · '),async()=>{
+        if(e.disabled) return;
+        const buttons=[...$('metadata-results').querySelectorAll('button')]; buttons.forEach(b=>b.disabled=true);
+        $('metadata-status').textContent='Enregistrement…';
+        try {
+          const metadata=await call('chooseMatch',{id:item.id,tmdb_id:match.id});
+          if(connection.url!==address) return;
+          document.querySelectorAll('[data-media-id]').forEach(card=>{
+            const media=card.mediaItem;
+            if(media && (media.id===item.id || item.kind==='series' && seriesKey(media)===seriesKey(item))) {
+              Object.assign(media,{metadata_title:metadata.title,poster_url:metadata.poster_url,has_metadata:true});
+              const poster=card.querySelector('.poster');
+              if(poster) { poster.querySelector('img')?.remove(); poster.prepend(image(media)); }
+              const label=card.querySelector('.media-title'); if(label) label.textContent=metadata.title;
+            }
+          });
+          $('metadata-match').close(); $('details').close(); toast('Informations corrigées.');
+        } catch(error) { $('metadata-status').textContent=error.message; }
+        finally { buttons.forEach(b=>b.disabled=false); }
+      },'episode-row'); return e;
+    }));
+  } catch(error) { if(version===metadataSearchVersion) $('metadata-status').textContent=error.message; }
+});
+$('metadata-match').addEventListener('close',()=>{ metadataSearchVersion++; metadataItem=null; });
+
+$('check-update').addEventListener('click',async()=>{
+  $('check-update').disabled=true; $('update-status').textContent='Vérification…';
+  try { const state=await call('checkUpdate'); $('update-status').textContent=state.available?'Version '+state.version+' disponible.':'Votre version '+state.current+' est aussi récente que la version publiée.'; hidden('open-update',!state.available); }
+  catch(error) { $('update-status').textContent='Impossible de vérifier les mises à jour. Réessayez lorsque Internet sera disponible.'; }
+  finally { $('check-update').disabled=false; }
+});
+$('open-update').addEventListener('click',()=>call('openUpdate').catch(fail));
+$('backup-settings').addEventListener('click',()=>call('backup').then(done=>{if(done) toast('Sauvegarde créée.');}).catch(fail));
+$('restore-settings').addEventListener('click',()=>call('restoreBackup').catch(fail));

@@ -1,12 +1,20 @@
 using System;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Drawing.Imaging;
+using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
 namespace Pluxy {
     internal sealed class PlayerButton : Button {
         public string Symbol;
+        public bool StrongFocus;
+        public Color Accent=Color.FromArgb(246,173,132);
         private bool hover;
+        private Bitmap glow;
+        private Size glowSize;
+        private string glowSymbol;
+        private Color glowColor;
         public PlayerButton() {
             SetStyle(ControlStyles.UserPaint|ControlStyles.AllPaintingInWmPaint|ControlStyles.OptimizedDoubleBuffer,true);
             FlatStyle=FlatStyle.Flat; FlatAppearance.BorderSize=0; Cursor=Cursors.Hand;
@@ -18,42 +26,69 @@ namespace Pluxy {
         protected override void OnLostFocus(EventArgs e) { Invalidate(); base.OnLostFocus(e); }
         protected override void OnPaint(PaintEventArgs e) {
             var g=e.Graphics; g.Clear(BackColor); g.SmoothingMode=SmoothingMode.AntiAlias;
-            using(var path=Round(new RectangleF(2,2,Width-4,Height-4),8)) {
-                if(hover || Focused) using(var brush=new SolidBrush(Color.FromArgb(43,45,53))) g.FillPath(brush,path);
-                if(Focused) using(var edge=new Pen(Color.FromArgb(224,228,237),1.2f)) g.DrawPath(edge,path);
-            }
+            g.PixelOffsetMode=PixelOffsetMode.HighQuality;
+            bool active=Enabled && (hover || Focused);
             if(string.IsNullOrEmpty(Symbol)) {
+                using(var path=Round(new RectangleF(2,2,Width-4,Height-4),8*Math.Min(Width,Height)/40f)) {
+                    if(active) using(var brush=new SolidBrush(Color.FromArgb(43,45,53))) g.FillPath(brush,path);
+                    if(Focused) using(var edge=new Pen(Accent,1.2f)) g.DrawPath(edge,path);
+                }
                 TextRenderer.DrawText(g,Text,Font,ClientRectangle,ForeColor,TextFormatFlags.HorizontalCenter|TextFormatFlags.VerticalCenter);
                 return;
             }
-            var saved=g.Save(); g.TranslateTransform(Width/2f-12,Height/2f-12);
-            using(var pen=new Pen(Enabled?ForeColor:Color.FromArgb(100,103,112),1.6f)) {
-                pen.StartCap=pen.EndCap=LineCap.Round; pen.LineJoin=LineJoin.Round;
-                string symbol=Symbol=="pause" && Text=="▶"?"play":Symbol;
-                if(symbol=="play") g.DrawPolygon(pen,new[]{new PointF(8,5),new PointF(19,12),new PointF(8,19)});
-                else if(symbol=="pause") { g.DrawLine(pen,8,5,8,19); g.DrawLine(pen,16,5,16,19); }
-                else if(symbol=="back" || symbol=="forward") {
-                    g.DrawArc(pen,4,4,16,16,symbol=="back"?210:330,285);
-                    if(symbol=="back") g.DrawLines(pen,new[]{new PointF(4,3),new PointF(4,8),new PointF(9,8)});
-                    else g.DrawLines(pen,new[]{new PointF(20,3),new PointF(20,8),new PointF(15,8)});
-                    using(var font=new Font("Segoe UI",6.5f,FontStyle.Regular)) using(var ink=new SolidBrush(Enabled?ForeColor:Color.Gray))
-                    using(var format=new StringFormat { Alignment=StringAlignment.Center,LineAlignment=StringAlignment.Center })
-                        g.DrawString("10",font,ink,new RectangleF(4,5,17,15),format);
-                } else if(symbol=="next") {
-                    g.DrawPolygon(pen,new[]{new PointF(5,5),new PointF(15,12),new PointF(5,19)}); g.DrawLine(pen,19,5,19,19);
-                } else if(symbol=="audio") {
-                    g.DrawLines(pen,new[]{new PointF(4,9),new PointF(8,9),new PointF(12,5),new PointF(12,19),new PointF(8,15),new PointF(4,15),new PointF(4,9)});
-                    g.DrawArc(pen,8,5,12,14,-55,110);
-                } else if(symbol=="subtitles") {
-                    g.DrawRectangle(pen,3,5,18,14); g.DrawLine(pen,6,11,10,11); g.DrawLine(pen,14,11,18,11);
-                    g.DrawLine(pen,6,15,14,15); g.DrawLine(pen,17,15,18,15);
-                } else if(symbol=="fullscreen") {
-                    foreach(var pair in new[]{new[]{3,3,9,3,3,9},new[]{21,3,15,3,21,9},new[]{3,21,9,21,3,15},new[]{21,21,15,21,21,15}}) {
-                        g.DrawLine(pen,pair[0],pair[1],pair[2],pair[3]); g.DrawLine(pen,pair[0],pair[1],pair[4],pair[5]);
-                    }
+            string symbol=Symbol=="pause" && Text=="▶"?"play":Symbol;
+            var highlight=StrongFocus?Color.White:Color.FromArgb((Accent.R*4+255)/5,(Accent.G*4+255)/5,(Accent.B*4+255)/5);
+            var normal=StrongFocus?Color.FromArgb(145,151,164):Color.FromArgb((ForeColor.R*9+BackColor.R)/10,(ForeColor.G*9+BackColor.G)/10,(ForeColor.B*9+BackColor.B)/10);
+            var color=Enabled?(active?highlight:normal):Color.FromArgb(100,103,112);
+            if(active) {
+                if(glow==null || glowSize!=Size || glowSymbol!=symbol || glowColor!=highlight) {
+                    if(glow!=null) glow.Dispose();
+                    glow=CreateGlow(symbol,highlight); glowSize=Size; glowSymbol=symbol; glowColor=highlight;
                 }
+                g.DrawImageUnscaled(glow,0,0);
             }
-            g.Restore(saved);
+            DrawGlyph(g,symbol,color);
+        }
+        private void DrawGlyph(Graphics graphics,string symbol,Color color) {
+            float scale=Math.Min(Width,Height)*(symbol=="play" || symbol=="pause"?.70f:.64f)/24f;
+            var saved=graphics.Save();
+            graphics.TranslateTransform(Width/2f,Height/2f); graphics.ScaleTransform(scale,scale); graphics.TranslateTransform(-12,-12);
+            PlayerGlyphs.Draw(graphics,symbol,color); graphics.Restore(saved);
+        }
+        private Bitmap CreateGlow(string symbol,Color color) {
+            int width=Width,height=Height;
+            var image=new Bitmap(width,height,PixelFormat.Format32bppArgb);
+            using(var graphics=Graphics.FromImage(image)) {
+                graphics.SmoothingMode=SmoothingMode.AntiAlias; graphics.PixelOffsetMode=PixelOffsetMode.HighQuality;
+                DrawGlyph(graphics,symbol,Color.White);
+            }
+            var rectangle=new Rectangle(0,0,width,height);
+            var data=image.LockBits(rectangle,ImageLockMode.ReadWrite,PixelFormat.Format32bppArgb);
+            try {
+                int stride=data.Stride/4;
+                var pixels=new int[stride*height]; Marshal.Copy(data.Scan0,pixels,0,pixels.Length);
+                double sigma=Math.Max(.8,Math.Min(width,height)/44.0*2);
+                int radius=(int)Math.Ceiling(sigma*3); var kernel=new double[radius*2+1]; double sum=0;
+                for(int i=-radius;i<=radius;i++) { double value=Math.Exp(-i*i/(2*sigma*sigma)); kernel[i+radius]=value; sum+=value; }
+                for(int i=0;i<kernel.Length;i++) kernel[i]/=sum;
+                var horizontal=new double[width*height];
+                for(int y=0;y<height;y++) for(int x=0;x<width;x++) {
+                    double alpha=0;
+                    for(int k=-radius;k<=radius;k++) if(x+k>=0 && x+k<width) alpha+=((uint)pixels[y*stride+x+k]>>24)*kernel[k+radius];
+                    horizontal[y*width+x]=alpha;
+                }
+                for(int y=0;y<height;y++) for(int x=0;x<width;x++) {
+                    double alpha=0;
+                    for(int k=-radius;k<=radius;k++) if(y+k>=0 && y+k<height) alpha+=horizontal[(y+k)*width+x]*kernel[k+radius];
+                    pixels[y*stride+x]=((int)Math.Round(alpha*.28)<<24)|(color.R<<16)|(color.G<<8)|color.B;
+                }
+                Marshal.Copy(pixels,0,data.Scan0,pixels.Length);
+            } finally { image.UnlockBits(data); }
+            return image;
+        }
+        protected override void Dispose(bool disposing) {
+            if(disposing && glow!=null) { glow.Dispose(); glow=null; }
+            base.Dispose(disposing);
         }
         private static GraphicsPath Round(RectangleF r,float radius) {
             var path=new GraphicsPath(); float d=radius*2;

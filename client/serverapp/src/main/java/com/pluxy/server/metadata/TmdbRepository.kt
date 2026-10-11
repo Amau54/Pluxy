@@ -79,6 +79,7 @@ class TmdbRepository(
     suspend fun get(item: MediaEntry, force: Boolean = false): JSONObject = withContext(Dispatchers.IO) {
         if (item.kind !in setOf("movie", "series")) return@withContext fallback(item)
         requestMutex.withLock {
+            cached(item.id)?.takeIf { it.optBoolean("manual") && it.optString("lookup_kind") == item.kind }?.let { return@withLock it }
             if (!force) cached(item.id)?.takeIf { it.optInt("lookup_revision") == 2 && it.optString("lookup_kind") == item.kind }
                 ?.let { return@withLock it }
             val key = preferences.tmdbApiKey
@@ -141,23 +142,49 @@ class TmdbRepository(
         }
     }
 
-    private fun fetch(item: MediaEntry, key: String): JSONObject? {
+    suspend fun searchMatches(item: MediaEntry, query: String): JSONArray = withContext(Dispatchers.IO) {
+        val key = preferences.tmdbApiKey
+        require(key.isNotBlank()) { "Configurez une clé TMDB dans le serveur." }
+        val type = if (item.kind == "series") "tv" else "movie"
+        val results = getJson(apiUrl("search/$type", key).newBuilder().addQueryParameter("query", query)
+            .addQueryParameter("language", "fr-FR").addQueryParameter("include_adult", "false").build(), key)?.optJSONArray("results") ?: JSONArray()
+        JSONArray().apply { for (i in 0 until minOf(results.length(), 20)) {
+            val row = results.optJSONObject(i) ?: continue
+            put(JSONObject().put("id", row.getInt("id")).put("title", row.optString(if (type == "tv") "name" else "title"))
+                .put("year", row.optString(if (type == "tv") "first_air_date" else "release_date").take(4)))
+        } }
+    }
+
+    suspend fun chooseMatch(item: MediaEntry, id: Int, related: List<MediaEntry>): JSONObject = withContext(Dispatchers.IO) {
+        requestMutex.withLock {
+            val key = preferences.tmdbApiKey
+            require(key.isNotBlank() && id > 0) { "Correspondance indisponible : vérifiez TMDB." }
+            val value = fetch(item, key, id) ?: throw IOException("Correspondance TMDB indisponible")
+            value.put("lookup_revision", 2).put("lookup_kind", item.kind).put("manual", true)
+            related.forEach { save(it.id, value) }
+            value
+        }
+    }
+
+    private fun fetch(item: MediaEntry, key: String, selectedId: Int? = null): JSONObject? {
         val type = if (item.kind == "series") "tv" else "movie"
         val query = item.seriesName?.takeIf { it.isNotBlank() } ?: item.title
-        val search = apiUrl("search/$type", key).newBuilder()
-            .addQueryParameter("query", query)
-            .addQueryParameter("language", "fr-FR")
-            .addQueryParameter("include_adult", "false")
-            .apply {
-                if (type == "movie") item.parsedYear?.let { addQueryParameter("year", it.toString()) }
-            }
-            .build()
-        val results = getJson(search, key)?.optJSONArray("results") ?: return null
-        val result = (0 until minOf(results.length(), 20)).mapNotNull { results.optJSONObject(it) }.firstOrNull {
-            TitleMatch.matches(query, it.optString(if (type == "tv") "name" else "title"),
-                it.optString(if (type == "tv") "original_name" else "original_title"))
-        } ?: run { diagnostic("Aucune correspondance TMDB pour « $query ». Vérifiez le titre et l’année du fichier."); return null }
-        val id = result.optInt("id", 0).takeIf { it > 0 } ?: return null
+        val id = selectedId ?: run {
+            val search = apiUrl("search/$type", key).newBuilder()
+                .addQueryParameter("query", query)
+                .addQueryParameter("language", "fr-FR")
+                .addQueryParameter("include_adult", "false")
+                .apply {
+                    if (type == "movie") item.parsedYear?.let { addQueryParameter("year", it.toString()) }
+                }
+                .build()
+            val results = getJson(search, key)?.optJSONArray("results") ?: return null
+            val result = (0 until minOf(results.length(), 20)).mapNotNull { results.optJSONObject(it) }.firstOrNull {
+                TitleMatch.matches(query, it.optString(if (type == "tv") "name" else "title"),
+                    it.optString(if (type == "tv") "original_name" else "original_title"))
+            } ?: run { diagnostic("Aucune correspondance TMDB pour « $query ». Vérifiez le titre et l’année du fichier."); return null }
+            result.optInt("id", 0).takeIf { it > 0 } ?: return null
+        }
         val detailsUrl = apiUrl("$type/$id", key).newBuilder()
             .addQueryParameter("language", "fr-FR")
             .addQueryParameter("append_to_response", "credits,videos")

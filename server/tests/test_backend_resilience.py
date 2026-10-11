@@ -102,13 +102,13 @@ def test_cancelled_scan_keeps_complete_previous_index(tmp_path, monkeypatch):
     library, root, _calls = make_library(tmp_path, monkeypatch)
     (root / "Film.mkv").write_bytes(b"video")
     assert library.scan() == 1
-    persisted = library.index_path.read_text(encoding="utf-8")
+    persisted = library.index_path.read_bytes()
     stop = threading.Event()
     stop.set()
     (root / "Film.mkv").unlink()
     assert library.scan(stop_event=stop) == 1
     assert len(library.all()) == 1 and not library.is_scanning
-    assert library.index_path.read_text(encoding="utf-8") == persisted
+    assert library.index_path.read_bytes() == persisted
 
 
 def test_atomic_writers_use_distinct_temporary_files(tmp_path, monkeypatch):

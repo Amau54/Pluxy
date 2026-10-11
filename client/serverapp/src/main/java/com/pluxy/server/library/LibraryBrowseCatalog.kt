@@ -177,9 +177,9 @@ internal fun mediaResolution(width: Int?, height: Int?): String? {
     val knownHeight = height ?: 0
     if (knownWidth <= 0 && knownHeight <= 0) return null
     return when {
-        knownWidth >= 3840 || knownHeight >= 2160 -> "4k"
-        knownWidth >= 1920 || knownHeight >= 1080 -> "1080p"
-        knownWidth >= 1280 || knownHeight >= 720 -> "720p"
+        knownWidth >= 3802 || knownHeight >= 2139 -> "4k"
+        knownWidth >= 1901 || knownHeight >= 1070 -> "1080p"
+        knownWidth >= 1268 || knownHeight >= 713 -> "720p"
         else -> "sd"
     }
 }

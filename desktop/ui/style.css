@@ -29,3 +29,20 @@
 .media-card:focus-visible .quality,.media-card:hover .quality{opacity:1}.quality{opacity:.72;transition:opacity .15s}
 .shelf-items{scrollbar-width:thin}.section-heading{margin-bottom:16px}.topbar{margin-bottom:24px}
 @media(max-width:720px){.details{padding:20px}.detail-row{grid-template-columns:110px minmax(0,1fr);gap:18px}.detail-poster{width:110px}.detail-text h2{font-size:23px}.detail-actions{gap:6px}.episode-row{gap:8px}.episode-row img{width:80px}.episode-row .muted{max-width:95px}.detail-row:has(.album-cover){grid-template-columns:100px minmax(0,1fr)}.detail-poster.album-cover{width:100px}}
+
+.media-card:focus-visible{outline:none}
+.media-card:hover .poster,.media-card:focus-visible .poster{box-shadow:none}
+.poster::after{content:"";position:absolute;inset:0;border:2px solid var(--accent);border-radius:inherit;pointer-events:none;opacity:0;transition:opacity .15s}
+.media-card:focus-visible .poster::after,:root:not([data-input=keyboard]) .media-card:hover .poster::after{opacity:1}
+:root[data-input=keyboard] .media-card:hover:not(:focus-visible) img{transform:none}
+:root[data-input=keyboard] .media-card:hover:not(:focus-visible) .card-play{opacity:0}
+:root[data-input=pointer] .media-card:focus-visible:not(:hover) .poster::after,:root[data-input=pointer] .media-card:focus-visible:not(:hover) .card-play{opacity:0}
+:root[data-view=list] .media-card:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+:root[data-input=pointer][data-view=list] .media-card:focus-visible:not(:hover){outline:none}
+
+.music-player{position:fixed;top:auto;width:auto;height:auto;bottom:16px;left:calc(var(--sidebar-width,200px) + 28px);right:28px;z-index:30;display:flex;align-items:center;gap:16px;padding:10px 16px;border-radius:18px;background:rgba(15,20,29,.93);backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,.09);box-shadow:0 8px 28px #0006}.music-info{flex:1;min-width:100px;display:flex;flex-direction:column}.music-info strong,.music-info span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.music-actions{display:flex;gap:4px}.music-position{display:flex;align-items:center;gap:12px;flex:1;font-size:12px;white-space:nowrap}.music-position input{width:100%;accent-color:var(--accent)}.has-music #content{padding-bottom:100px}#music-tracks .active{background:var(--accent-soft);color:var(--accent)}
+@media(max-width:1050px){.music-player{left:20px;right:20px}.music-position{max-width:220px}.music-player{gap:8px}}
+#settings > .text-button,#secondary-options > .text-button{display:block;margin-top:8px;text-align:left}
+.has-music #toast{bottom:94px}
+
+.metadata-edit{margin-top:12px;opacity:.75}.metadata-edit:hover,.metadata-edit:focus-visible{opacity:1}#metadata-results{max-height:45vh;overflow:auto}#metadata-results .episode-row{width:100%;min-height:48px}.music-actions svg{width:22px;height:22px;flex:none;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}

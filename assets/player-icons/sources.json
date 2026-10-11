@@ -1,0 +1,37 @@
+{
+  "project": "https://github.com/google/material-design-icons",
+  "commit": "49d4db35df873165d6bd6ba09b063c7dafbac2f4",
+  "style": "materialsymbolsrounded",
+  "size": 24,
+  "icons": [
+    "play_arrow",
+    "pause",
+    "replay",
+    "replay_10",
+    "forward_10",
+    "volume_up",
+    "subtitles",
+    "more_horiz",
+    "close",
+    "fullscreen",
+    "skip_next"
+  ],
+  "usage": "Material Symbols digits only; Lucide player controls",
+  "lucide": {
+    "project": "https://github.com/lucide-icons/lucide",
+    "commit": "70562c1ee1c4fdcf736fe97bc893fb8511927934",
+    "stroke_width": 1.75,
+    "icons": [
+      "captions",
+      "ellipsis",
+      "maximize",
+      "pause",
+      "play",
+      "rotate-ccw",
+      "rotate-cw",
+      "skip-forward",
+      "volume-2",
+      "x"
+    ]
+  }
+}

@@ -5,6 +5,22 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class LibraryBrowseCatalogTest {
+    @Test fun `cropped videos keep their source resolution in filters`() {
+        assertEquals("4k", mediaResolution(3836, 1604))
+        assertEquals("1080p", mediaResolution(1916, 804))
+        assertEquals("720p", mediaResolution(1280, 536))
+        assertEquals("sd", mediaResolution(640, 360))
+    }
+    @Test fun `episode folders keep one series across seasons`() {
+        val values = (1..2).flatMap { season -> (1..8).map { episode ->
+            val name = "House.of.the.Dragon.S%02dE%02d.PROPER.MULTi.HDR.DV.2160p.WEB.x265-FW".format(season, episode)
+            FilenameParser.parse("$name.mkv", listOf("SERIES", "House.of.the.Dragon.S%02d.MULTi.HDR.DV.2160p.WEB.x265-FW".format(season), name))
+        } }
+        assertEquals(setOf("House of the Dragon"), values.map { it.seriesName }.toSet())
+        assertEquals(setOf("houseofthedragon"), values.map { it.seriesKey }.toSet())
+        assertEquals(setOf(1, 2), values.map { it.season }.toSet())
+        assertEquals((1..8).toSet(), values.map { it.episode }.toSet())
+    }
     @Test fun `filtered series summaries open the complete season group`() {
         val values = (1..8).map { season -> entry("ep-$season", kind = "series").let {
             it.copy(media = it.media.copy(seriesKey = "boreal", seriesName = "Boreal", season = season, episode = 1))

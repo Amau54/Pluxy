@@ -3,10 +3,10 @@ name: Application PC et installateur Windows
 on:
   push:
     branches: [main]
-    paths: ['desktop/**', 'server/**', 'tools/Build-PC.ps1', 'tools/Test-PC.ps1', 'tools/PC-Launcher.ps1', 'tools/Start-PC.ps1', 'tools/Media-Runtime.ps1', '.github/workflows/pc-installer.yml']
+    paths: ['desktop/**', 'server/**', 'assets/**', 'versions.json', 'tools/sync_versions.py', 'tools/Build-PC.ps1', 'tools/Test-PC.ps1', 'tools/PC-Launcher.ps1', 'tools/Start-PC.ps1', 'tools/Media-Runtime.ps1', '.github/workflows/pc-installer.yml']
   pull_request:
     branches: [main]
-    paths: ['desktop/**', 'server/**', 'tools/Build-PC.ps1', 'tools/Test-PC.ps1', 'tools/PC-Launcher.ps1', 'tools/Start-PC.ps1', 'tools/Media-Runtime.ps1', '.github/workflows/pc-installer.yml']
+    paths: ['desktop/**', 'server/**', 'assets/**', 'versions.json', 'tools/sync_versions.py', 'tools/Build-PC.ps1', 'tools/Test-PC.ps1', 'tools/PC-Launcher.ps1', 'tools/Start-PC.ps1', 'tools/Media-Runtime.ps1', '.github/workflows/pc-installer.yml']
   workflow_dispatch:
 
 permissions:
@@ -14,7 +14,7 @@ permissions:
 
 concurrency:
   group: pc-installer-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build:
@@ -66,6 +66,9 @@ jobs:
           cd pc
           sha256sum -c PC_SHA256SUMS.txt
           printf '%s\n' 'Installez Pluxy-Setup.exe, puis choisissez Lecteur ou Serveur au premier lancement.' > release-notes.txt
+          version="$(python3 -c 'import json; print(json.load(open("PC_BUILD_INFO.json", encoding="utf-8-sig"))["version"])')"
+          archive="pc-v${version}-${GITHUB_SHA:0:7}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          gh release create "$archive" Pluxy-Setup.exe PC_BUILD_INFO.json PC_SHA256SUMS.txt --target "$GITHUB_SHA" --title "Pluxy Windows ${version}" --notes-file release-notes.txt --latest=false
           if gh release view pc-latest >/dev/null 2>&1; then
             gh release edit pc-latest --title 'Pluxy pour Windows' --notes-file release-notes.txt --latest=false
           else

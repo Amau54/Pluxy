@@ -35,6 +35,16 @@ namespace Pluxy {
         public static void Log(Exception error) {
             try { Directory.CreateDirectory(Data); File.AppendAllText(Path.Combine(Data, "desktop.log"), DateTime.UtcNow.ToString("s") + " " + error.ToString() + Environment.NewLine); } catch { }
         }
+        public static void WriteAtomic(string target,string text) {
+            Directory.CreateDirectory(Path.GetDirectoryName(target));
+            var temporary=target+"."+Guid.NewGuid().ToString("N")+".tmp";
+            try {
+                using(var stream=new FileStream(temporary,FileMode.CreateNew,FileAccess.Write,FileShare.None)) {
+                    var bytes=new UTF8Encoding(false).GetBytes(text); stream.Write(bytes,0,bytes.Length); stream.Flush(true);
+                }
+                if(File.Exists(target)) File.Replace(temporary,target,null); else File.Move(temporary,target);
+            } finally { if(File.Exists(temporary)) File.Delete(temporary); }
+        }
         [DllImport("dwmapi.dll")] private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
         public static void DarkFrame(Form form) { try { int enabled = 1; DwmSetWindowAttribute(form.Handle, 20, ref enabled, 4); } catch { } }
         public static Button Button(string label, EventHandler handler) {
@@ -44,12 +54,27 @@ namespace Pluxy {
     }
 
     internal sealed class Preferences {
+        public Dictionary<string,string> profiles = new Dictionary<string,string>();
+        public Dictionary<string,ReaderPreferences> readers = new Dictionary<string,ReaderPreferences>();
         public string mode = "";
         public string server = "";
         public string serverName = "";
         public string theme = "coral";
         public string audio = "auto";
         public bool autoplay = true;
+        public bool playerActionHints = false;
+        public bool playerFocusContrast = false;
+        public bool multipleProfiles = false;
+        public string ProfileFor(string address) { string value; return multipleProfiles && profiles!=null && profiles.TryGetValue(address,out value)?value:"default"; }
+        public void StoreReader(string address,string profile) {
+            if(readers==null) readers=new Dictionary<string,ReaderPreferences>();
+            readers[address+"\n"+profile]=new ReaderPreferences { audio=audio,theme=theme,autoplay=autoplay,hints=playerActionHints,contrast=playerFocusContrast };
+        }
+        public void ApplyReader(string address,string profile) {
+            ReaderPreferences value;
+            if(readers==null || !readers.TryGetValue(address+"\n"+profile,out value)) value=new ReaderPreferences();
+            audio=value.audio; theme=value.theme; autoplay=value.autoplay; playerActionHints=value.hints; playerFocusContrast=value.contrast;
+        }
         public static Preferences Load() {
             try { return Native.Json.Deserialize<Preferences>(File.ReadAllText(Path.Combine(Native.Data,"desktop.json"))) ?? new Preferences(); }
             catch { return new Preferences(); }
@@ -60,5 +85,9 @@ namespace Pluxy {
             try { File.WriteAllText(temporary, Native.Json.Serialize(this), new UTF8Encoding(false)); if(File.Exists(target)) File.Replace(temporary,target,null); else File.Move(temporary,target); }
             finally { if(File.Exists(temporary)) File.Delete(temporary); }
         }
+    }
+    internal sealed class ReaderPreferences {
+        public string audio="auto",theme="coral";
+        public bool autoplay=true,hints=false,contrast=false;
     }
 }

@@ -40,6 +40,7 @@ object CompactChoiceMenu {
         choices: List<Choice>,
         selectedValue: String,
         actions: List<Action> = emptyList(),
+        compact: Boolean = false,
         onSelect: (String) -> Unit,
         onDismiss: (() -> Unit)? = null,
     ): PopupWindow? {
@@ -51,8 +52,8 @@ object CompactChoiceMenu {
         val restoreAnchorFocus = television || !anchor.isInTouchMode
         val density = activity.resources.displayMetrics.density
         fun dp(value: Int) = (value * density).roundToInt()
-        val rowHeight = dp(48)
-        val gap = dp(6)
+        val rowHeight = dp(if (compact && television) 40 else 48)
+        val gap = dp(if (compact) 4 else 6)
         val primary = activity.pluxyColor(R.color.text_primary)
         val secondary = activity.pluxyColor(R.color.text_secondary)
         val accent = activity.pluxyColor(R.color.accent)
@@ -104,7 +105,7 @@ object CompactChoiceMenu {
             textSize = if (television) 14f else 13f
             typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
             setTextColor(secondary)
-            setPadding(dp(10), dp(5), dp(10), dp(9))
+            setPadding(dp(10), dp(5), dp(10), dp(if (compact) 5 else 9))
             maxLines = 2
             ellipsize = TextUtils.TruncateAt.END
             includeFontPadding = false
@@ -165,7 +166,7 @@ object CompactChoiceMenu {
             }
             text.addView(TextView(activity).apply {
                 this.text = choice.label
-                textSize = if (television) 16f else 14f
+                textSize = if (television) (if (compact) 15f else 16f) else 14f
                 setTextColor(primary)
                 typeface = Typeface.create(if (selected) "sans-serif-medium" else "sans-serif", Typeface.NORMAL)
                 includeFontPadding = false
@@ -261,7 +262,8 @@ object CompactChoiceMenu {
 
         fun position(): Position {
             val frame = visibleFrame()
-            val menuWidth = minOf(dp(if (television) 320 else 280), (frame.width() - gap * 2).coerceAtLeast(1))
+            val preferredWidth = if (compact) (if (television) 284 else 244) else (if (television) 320 else 280)
+            val menuWidth = minOf(dp(preferredWidth), (frame.width() - gap * 2).coerceAtLeast(1))
             val maximumHeight = minOf(dp(if (television) 420 else 380), (frame.height() - gap * 2).coerceAtLeast(1))
             val contentWidth = (menuWidth - root.paddingLeft - root.paddingRight).coerceAtLeast(1)
             val widthSpec = View.MeasureSpec.makeMeasureSpec(contentWidth, View.MeasureSpec.EXACTLY)

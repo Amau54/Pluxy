@@ -19,6 +19,21 @@ def test_dirty_season_packs_share_identity_and_keep_season_numbers():
     assert {key for _, key, _, _ in seasons} == {"boreal"}
     assert [season for _, _, season, _ in seasons] == list(range(1, 9))
 
+def test_episode_subdirectories_share_series_identity():
+    from pluxy.library import _parse_series
+    episodes = [_parse_series(Path(f"SERIES/House.of.the.Dragon.S02.MULTi.HDR.DV.2160p.WEB.x265-FW/House.of.the.Dragon.S02E{ep:02}.PROPER.MULTi.HDR.DV.2160p.WEB.x265-FW/House.of.the.Dragon.S02E{ep:02}.mkv")) for ep in range(1, 9)]
+    assert {name for name, _, _, _ in episodes} == {"House of the Dragon"}
+    assert {key for _, key, _, _ in episodes} == {"houseofthedragon"}
+    assert [episode for _, _, season, episode in episodes if season == 2] == list(range(1, 9))
+    assert _parse_series(Path("SERIES/Another.Show.2x03.1080p-WEB/Another.Show.2x03.mkv")) == ("Another Show", "anothershow", 2, 3)
+
+@pytest.mark.parametrize("width,height,expected", [(3840,1608,"4k"), (3836,1604,"4k"), (1920,800,"1080p"), (1916,804,"1080p"), (1280,536,"720p"), (640,360,"sd")])
+def test_cropped_video_resolution(width, height, expected):
+    from pluxy.catalogue import resolution
+    from pluxy.models import MediaItem
+    item = MediaItem(id="film", title="Film", path="film.mkv", container="mkv", size=1, duration=120, width=width, height=height, kind="movie")
+    assert resolution(item) == expected
+
 def test_explicit_photo_and_music_roots_scan_only_their_media_even_with_video_extensions(tmp_path, monkeypatch):
     from pluxy.config import ServerCfg
     state, root, _ = make_state(tmp_path, monkeypatch)
@@ -87,7 +102,7 @@ def test_legacy_index_preserves_added_order_and_reuses_probe(tmp_path, monkeypat
     movie.write_bytes(b"film")
     modified = movie.stat().st_mtime
     item_id = state.library.make_id(str(movie))
-    state.library.index_path.write_text(json.dumps([{
+    state.library.legacy_index_path.write_text(json.dumps([{
         "id": item_id, "title": "Existing", "path": str(movie), "container": "mkv",
         "size": 4, "duration": 120, "added_at": modified,
     }]), encoding="utf-8")

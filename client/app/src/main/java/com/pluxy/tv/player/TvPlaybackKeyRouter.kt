@@ -140,7 +140,7 @@ internal class TvPlaybackKeyRouter(
             Key.CENTER -> Decision(
                 handled = true,
                 commands = buildList {
-                    if (!state.controlsVisible) add(Command.ShowControls)
+                    if (!state.controlsVisible || state.focus == Focus.PLAYBACK) add(Command.ShowControls)
                     if (state.seekActive) add(Command.CommitSeek)
                     add(Command.ToggleOrReplay)
                 },
@@ -156,7 +156,7 @@ internal class TvPlaybackKeyRouter(
 
             Key.UP,
             Key.DOWN,
-            -> if (state.controlsVisible) {
+            -> if (state.controlsVisible && state.focus != Focus.PLAYBACK) {
                 heldKeys.remove(key)
                 Decision(handled = false)
             } else {

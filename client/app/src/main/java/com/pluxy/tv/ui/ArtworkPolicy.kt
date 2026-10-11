@@ -84,14 +84,18 @@ object ArtworkPolicy {
     }
 
     fun resolutionLabel(width: Int?, height: Int?): String? {
-        val h = height?.takeIf { it > 0 } ?: return null
+        val w = width?.coerceAtLeast(0) ?: 0
+        val h = height?.coerceAtLeast(0) ?: 0
+        // Les films panoramiques sont souvent encodés sans les bandes noires.
+        // Une marge de 1 % couvre aussi les quelques pixels rognés à l'encodage.
         return when {
-            h >= 2160 -> "4K"
-            h >= 1440 -> "1440P"
-            h >= 1080 -> "1080P"
-            h >= 720 -> "720P"
-            width != null && width > 0 -> "${width}×$h"
-            else -> "${h}P"
+            w >= 3802 || h >= 2139 -> "4K"
+            w >= 2535 || h >= 1426 -> "1440P"
+            w >= 1901 || h >= 1070 -> "1080P"
+            w >= 1268 || h >= 713 -> "720P"
+            w > 0 && h > 0 -> "${w}×$h"
+            h > 0 -> "${h}P"
+            else -> null
         }
     }
 

@@ -34,6 +34,8 @@
         android:indeterminateTint="?attr/pluxyAccentBright"
         android:visibility="gone" />
 
+
+
     <FrameLayout
         android:id="@+id/controlsOverlay"
         android:layout_width="match_parent"
@@ -68,7 +70,7 @@
                 android:textSize="@dimen/player_title_size" />
         </LinearLayout>
 
-        <ImageButton
+        <com.pluxy.tv.player.PlayerIconButton
             android:id="@+id/btnExitPlayback"
             style="@style/PlayerDeck.Icon"
             android:layout_gravity="top|end"
@@ -76,7 +78,6 @@
             android:layout_marginEnd="@dimen/media_viewer_screen_pad"
             android:contentDescription="@string/player_leave_action"
             android:nextFocusDown="@id/playbackTimeline"
-            android:src="@drawable/ic_player_close"
             android:visibility="gone" />
 
         <LinearLayout
@@ -140,14 +141,17 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="bottom|center_horizontal"
-            android:layout_marginBottom="124dp"
+            android:layout_marginBottom="4dp"
             android:maxLines="1"
             android:ellipsize="end"
-            android:textSize="12sp"
+            android:textSize="11sp"
             android:textColor="?attr/pluxyTextSecondary"
+            android:background="@android:color/transparent"
+            android:paddingHorizontal="8dp"
+            android:paddingVertical="4dp"
             android:shadowColor="#B3000000"
             android:shadowRadius="3"
-            android:visibility="invisible"
+            android:visibility="gone"
             android:importantForAccessibility="no" />
 
         <!-- Le panneau peut défiler lorsque la police ou la hauteur réduit l'espace. -->
@@ -252,42 +256,38 @@
                         android:orientation="horizontal"
                         android:paddingTop="0dp"
                         android:paddingBottom="0dp">
-                        <ImageButton
+                        <com.pluxy.tv.player.PlayerIconButton
                             android:id="@+id/btnRestart"
                             style="@style/PlayerDeck.Icon"
                             android:contentDescription="@string/player_restart"
                             android:nextFocusLeft="@id/btnForward"
                             android:nextFocusRight="@id/btnRewind"
                             android:nextFocusUp="@id/playbackTimeline"
-                            android:nextFocusDown="@id/btnTracks"
-                            android:src="@drawable/ic_player_restart" />
-                        <ImageButton
+                            android:nextFocusDown="@id/btnTracks" />
+                        <com.pluxy.tv.player.PlayerIconButton
                             android:id="@+id/btnRewind"
                             style="@style/PlayerDeck.Icon"
                             android:contentDescription="@string/player_rewind_description"
                             android:nextFocusLeft="@id/btnRestart"
                             android:nextFocusRight="@id/btnPlayPause"
                             android:nextFocusUp="@id/playbackTimeline"
-                            android:nextFocusDown="@id/btnTracks"
-                            android:src="@drawable/ic_player_skip_back_ten" />
-                        <ImageButton
+                            android:nextFocusDown="@id/btnTracks" />
+                        <com.pluxy.tv.player.PlayerIconButton
                             android:id="@+id/btnPlayPause"
                             style="@style/PlayerDeck.Primary"
                             android:contentDescription="@string/player_play_description"
                             android:nextFocusLeft="@id/btnRewind"
                             android:nextFocusRight="@id/btnForward"
                             android:nextFocusUp="@id/playbackTimeline"
-                            android:nextFocusDown="@id/btnTracks"
-                            android:src="@drawable/ic_player_play" />
-                        <ImageButton
+                            android:nextFocusDown="@id/btnTracks" />
+                        <com.pluxy.tv.player.PlayerIconButton
                             android:id="@+id/btnForward"
                             style="@style/PlayerDeck.Icon"
                             android:contentDescription="@string/player_forward_description"
                             android:nextFocusLeft="@id/btnPlayPause"
                             android:nextFocusRight="@id/btnRestart"
                             android:nextFocusUp="@id/playbackTimeline"
-                            android:nextFocusDown="@id/btnSubtitles"
-                            android:src="@drawable/ic_player_skip_forward_ten" />
+                            android:nextFocusDown="@id/btnSubtitles" />
                     </LinearLayout>
 
                     <HorizontalScrollView
@@ -308,28 +308,24 @@
                             android:orientation="horizontal"
                             android:paddingTop="0dp"
                             android:paddingBottom="0dp">
-                            <Button
+                            <com.pluxy.tv.player.PlayerIconButton
                                 android:id="@+id/btnTracks"
-                                style="@style/PlayerDeck.Action"
+                                style="@style/PlayerDeck.Icon"
                                 android:contentDescription="@string/player_audio_action"
-                                android:drawableStart="@drawable/ic_player_audio"
-                                android:text="@string/player_audio_action"
                                 android:nextFocusLeft="@id/btnGear"
                                 android:nextFocusRight="@id/btnSubtitles"
                                 android:nextFocusUp="@id/btnPlayPause"
                                 android:nextFocusDown="@id/btnPlayPause" />
-                            <Button
+                            <com.pluxy.tv.player.PlayerIconButton
                                 android:id="@+id/btnSubtitles"
-                                style="@style/PlayerDeck.Action"
+                                style="@style/PlayerDeck.Icon"
                                 android:layout_marginStart="4dp"
                                 android:contentDescription="@string/player_subtitles_action"
-                                android:drawableStart="@drawable/ic_player_subtitles"
-                                android:text="@string/player_subtitles_action"
                                 android:nextFocusLeft="@id/btnTracks"
                                 android:nextFocusRight="@id/btnGear"
                                 android:nextFocusUp="@id/btnPlayPause"
                                 android:nextFocusDown="@id/btnPlayPause" />
-                            <ImageButton
+                            <com.pluxy.tv.player.PlayerIconButton
                                 android:id="@+id/btnGear"
                                 style="@style/PlayerDeck.Icon"
                                 android:layout_marginStart="4dp"
@@ -337,8 +333,7 @@
                                 android:nextFocusLeft="@id/btnSubtitles"
                                 android:nextFocusRight="@id/btnTracks"
                                 android:nextFocusUp="@id/btnForward"
-                                android:nextFocusDown="@id/btnForward"
-                                android:src="@drawable/ic_more_horizontal" />
+                                android:nextFocusDown="@id/btnForward" />
                         </LinearLayout>
                     </HorizontalScrollView>
                 </LinearLayout>
@@ -434,4 +429,21 @@
                 android:text="@string/player_leave_action" />
         </LinearLayout>
     </ScrollView>
+    <Button
+        android:id="@+id/skipSegment"
+        android:layout_width="wrap_content"
+        android:layout_height="48dp"
+        android:layout_gravity="bottom|end"
+        android:layout_marginEnd="@dimen/media_viewer_screen_pad"
+        android:layout_marginBottom="112dp"
+        android:background="@drawable/bg_player_skip"
+        android:textColor="?attr/pluxyTextPrimary"
+        android:textSize="14sp"
+        android:textAllCaps="false"
+        android:fontFamily="sans-serif-medium"
+        android:paddingHorizontal="18dp"
+        android:minWidth="0dp"
+        android:stateListAnimator="@null"
+        android:nextFocusDown="@id/playbackTimeline"
+        android:visibility="gone" />
 </FrameLayout>

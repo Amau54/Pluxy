@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Lucide ISC; seek digits Material Symbols Apache 2.0. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="28dp" android:height="28dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:fillColor="#00000000" android:strokeColor="#FFFFFFFF" android:strokeWidth="1.75" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M21,4 L21,20" />
+    <path android:fillColor="#00000000" android:strokeColor="#FFFFFFFF" android:strokeWidth="1.75" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M6.029,4.285 C5.411136,3.914277,4.641619,3.904568,4.014598,4.259583 C3.387577,4.614598,2.999993,5.279451,3,6 L3,18 C2.999993,18.720549,3.387577,19.385402,4.014598,19.740417 C4.641619,20.095432,5.411136,20.085723,6.029,19.715 L16.026,13.717 C16.629687,13.356314,16.999587,12.705079,17.000201,12.00185 C17.000816,11.298621,16.632055,10.64674,16.029,10.285 Z" />
+</vector>

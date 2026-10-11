@@ -1,6 +1,6 @@
 """Scanner de bibliothèque : indexe les fichiers média + sous-titres externes.
 
-L'index est PERSISTÉ sur disque (`.pluxy_library.json`) : au redémarrage la liste
+L'index SQLite est conservé sur disque : au redémarrage la liste
 est disponible immédiatement, puis un nouveau scan peut être lancé en tâche de fond.
 """
 from __future__ import annotations
@@ -10,6 +10,8 @@ import json
 import os
 import re
 import shutil
+import sqlite3
+import logging
 import stat as _stat
 import threading
 import time
@@ -23,6 +25,7 @@ from . import filename as _fn
 from .models import MediaItem, SubtitleTrack
 from .probe import probe
 from .video_kind import classify_video
+from .library_index import LibraryIndex, media_fingerprint
 
 # Motif d'épisode de SÉRIE dans un nom de fichier : S01E02, 1x02, "saison 1", "episode 3"…
 _SERIES_RE = re.compile(
@@ -43,7 +46,7 @@ _LANG_CODES = {
     "ko", "kor", "zh", "chi", "ar", "ara", "vff", "vfq", "vostfr",
 }
 
-MAX_MEDIA_ITEMS = 10_000
+MAX_MEDIA_ITEMS = 100_000
 PHOTO_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".tif", ".tiff"}
 AUDIO_EXTENSIONS = {".mp3", ".flac", ".m4a", ".m4b", ".aac", ".ogg", ".oga", ".opus", ".wav", ".wma"}
 AUDIO_ARTWORK_NAMES = {"cover.jpg", "folder.jpg", "album.jpg", "front.jpg", "cover.png", "folder.png", "cover.jpeg", "folder.jpeg"}
@@ -52,13 +55,15 @@ AUDIO_ARTWORK_NAMES = {"cover.jpg", "folder.jpg", "album.jpg", "front.jpg", "cov
 class Library:
     def __init__(self, cfgm: ConfigManager, data_dir: Path, legacy_dir: Path | None = None):
         self.cfgm = cfgm
-        self.index_path = data_dir / ".pluxy_library.json"
+        self.legacy_index_path = data_dir / ".pluxy_library.json"
+        self.index_path = data_dir / "library.sqlite3"
+        self.index = LibraryIndex(self.index_path)
         # Migration : récupère l'ancien index s'il existe et que le nouveau non.
-        if legacy_dir and not self.index_path.exists():
+        if legacy_dir and not self.legacy_index_path.exists() and not self.index_path.exists():
             legacy = legacy_dir / ".pluxy_library.json"
             if legacy.exists():
                 try:
-                    self.index_path.write_text(legacy.read_text(encoding="utf-8"), encoding="utf-8")
+                    self.legacy_index_path.write_text(legacy.read_text(encoding="utf-8"), encoding="utf-8")
                 except Exception:
                     pass
         self._items: Dict[str, MediaItem] = {}
@@ -85,8 +90,11 @@ class Library:
     def _refresh_snapshot(self) -> None:
         with self._lock:
             self._sorted_items = sorted(self._items.values(), key=lambda item: item.title.lower())
-            payload = [item.model_dump() for item in self._sorted_items]
-            self._revision = hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:24]
+            digest = hashlib.sha256()
+            for item in self._sorted_items:
+                digest.update(item.model_dump_json().encode())
+                digest.update(b"\n")
+            self._revision = digest.hexdigest()[:24]
 
     def page(self, offset: int, limit: int, revision: str | None = None):
         with self._lock:
@@ -107,11 +115,23 @@ class Library:
     def _load_index(self) -> None:
         from .config import _read_config_text
         try:
-            data = json.loads(_read_config_text(self.index_path))
+            try:
+                data = self.index.load()
+            except sqlite3.DatabaseError as error:
+                if getattr(error, "sqlite_errorcode", None) not in (sqlite3.SQLITE_CORRUPT, sqlite3.SQLITE_NOTADB):
+                    raise
+                saved = self.index_path.with_name(f"{self.index_path.name}.invalid-{time.time_ns()}")
+                shutil.move(self.index_path, saved)
+                logging.getLogger(__name__).warning("Index endommagé conservé dans %s ; un scan reconstruira le catalogue.", saved.name)
+                self.scan_status["warning"] = "L'index a été récupéré. Relancez un scan pour actualiser le catalogue."
+                data = None
+            if data is None:
+                data = json.loads(_read_config_text(self.legacy_index_path))
         except FileNotFoundError:
             return
         except (ValueError, TypeError):
-            shutil.copy2(self.index_path, self.index_path.with_name(f"{self.index_path.name}.invalid-{time.time_ns()}"))
+            if self.legacy_index_path.exists():
+                shutil.copy2(self.legacy_index_path, self.legacy_index_path.with_name(f"{self.legacy_index_path.name}.invalid-{time.time_ns()}"))
             return
         if isinstance(data, list):
             try:
@@ -133,10 +153,9 @@ class Library:
                 return
 
     def _save_index(self, items: dict[str, MediaItem] | None = None) -> None:
-        from .paths import atomic_write_text
         with self._lock:
-            payload = [i.model_dump() for i in (self._items if items is None else items).values()]
-        atomic_write_text(self.index_path, json.dumps(payload, ensure_ascii=False))
+            values = self._items if items is None else items
+        self.index.save(values)
 
     # -- Scan -------------------------------------------------------------- #
     def scan(self, stop_event: threading.Event | None = None) -> int:
@@ -157,6 +176,10 @@ class Library:
             previous = {item_id: item.model_copy(deep=True) for item_id, item in self._items.items()}
         missing_roots: list[Path] = []
         discovered_at = time.time()
+        moved_candidates: dict[str, list[MediaItem]] = {}
+        for old in previous.values():
+            if old.fingerprint and not Path(old.path).exists():
+                moved_candidates.setdefault(old.fingerprint, []).append(old)
         try:
             for root in cfg.server.media_dirs:
                 if stop_event is not None and stop_event.is_set():
@@ -209,6 +232,13 @@ class Library:
                         if not _stat.S_ISREG(stat.st_mode):
                             continue
                         existing = previous.get(item_id)
+                        fingerprint = (existing.fingerprint if existing and existing.size == stat.st_size and
+                                       existing.modified_at == stat.st_mtime and existing.fingerprint else
+                                       media_fingerprint(f, stat.st_size))
+                        candidates = moved_candidates.get(fingerprint, [])
+                        if existing is None and len(candidates) == 1 and candidates[0].id not in found:
+                            existing = candidates[0]
+                            item_id = existing.id
                         category = cfg.server.media_dir_types.get(root, "auto")
                         kind = _detect_kind(f, category, existing.duration if existing else 0,
                                             existing.embedded_title or "" if existing else "")
@@ -222,6 +252,7 @@ class Library:
                         if folder == ".":
                             folder = base.name or "Médias"
                         album_fields = {
+                            "fingerprint": fingerprint,
                             "folder": folder,
                             "folder_id": self.make_id(str(f.parent)),
                             "relative_path": relative,
@@ -240,6 +271,7 @@ class Library:
                                 and ((existing.probe_complete and (existing.duration > 0 or kind == "photo"))
                                      or existing.probe_retry_at > time.time())):
                             found[item_id] = existing.model_copy(update={
+                                "path": str(f), "title": f.stem,
                                 "kind": kind,
                                 "series_name": sname,
                                 "series_key": skey,
@@ -315,7 +347,8 @@ class Library:
             truncated = len(found) >= MAX_MEDIA_ITEMS
             self.scan_status = {"status": "warning" if missing_roots or truncated else "success", "error": None,
                                 "finished_at": time.time(), "unavailable_sources": len(missing_roots),
-                                "truncated": truncated}
+                                "truncated": truncated, "limit": MAX_MEDIA_ITEMS,
+                                "message": f"Limite de {MAX_MEDIA_ITEMS} médias atteinte : certains dossiers restent à analyser." if truncated else None}
             return len(found)
         except Exception:
             self.scan_status = {"status": "error", "error": "Analyse impossible", "finished_at": time.time()}
@@ -463,7 +496,7 @@ def _clean_series_name(raw: str) -> str:
     if not raw:
         return ""
     # Season packs can end in codec/source/release tags, not in the season itself.
-    marker = re.search(r"(?i)(?:^|[\s._-])(?:saison|season|s)[\s._-]*(\d{1,3})(?=$|[\s._-])", raw)
+    marker = re.search(r"(?i)(?:^|[\s._-])(?:(?:saison|season|s)[\s._-]*\d{1,3}(?:[\s._-]?e\d{1,3})?|\d{1,3}x\d{2,3})(?=$|[\s._-])", raw)
     if marker and marker.start() > 0:
         raw = raw[:marker.start()]
     s = _fn._to_spaces(raw)

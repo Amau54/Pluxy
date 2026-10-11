@@ -1,5 +1,11 @@
 Pluxy pour Windows — composants tiers
 
+Pictogrammes Lucide — ISC. Voir Lucide.txt.
+Sources : https://github.com/lucide-icons/lucide
+Chiffres des commandes de saut : Material Symbols Rounded, Google — Apache 2.0.
+Voir Material-Symbols.txt. Sources : https://github.com/google/material-design-icons
+Tracés vectoriels intégrés, sans police téléchargée.
+
 Microsoft WebView2 SDK et WebView2Loader
 Microsoft Corporation. Voir WebView2.txt.
 https://www.nuget.org/packages/Microsoft.Web.WebView2/1.0.4258.31

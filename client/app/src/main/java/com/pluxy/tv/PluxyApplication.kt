@@ -46,6 +46,12 @@ class PluxyApplication : Application() {
                 .apply()
         }
 
+        private fun readerPrefs(ctx: Context): android.content.SharedPreferences {
+            val server = serverBaseUrl(ctx)
+            val profile = com.pluxy.tv.ui.FamilyProfileSelection.selected(server)
+            return if (profile == "default") prefs(ctx) else ctx.getSharedPreferences("reader:$server:$profile", Context.MODE_PRIVATE)
+        }
+
         // --- Préférences de lecture (réglées en amont depuis la fiche film) --- //
         private const val KEY_AUDIO_LANG = "pref_audio_lang"
         private const val KEY_SUBS_MODE = "pref_subs_mode"   // auto | off
@@ -54,13 +60,13 @@ class PluxyApplication : Application() {
         private const val KEY_AUTO_PLAY_NEXT = "auto_play_next_episode"
 
         fun audioLang(ctx: Context): String =
-            prefs(ctx).getString(KEY_AUDIO_LANG, "fr") ?: "fr"
+            readerPrefs(ctx).getString(KEY_AUDIO_LANG, "fr") ?: "fr"
 
         fun subsMode(ctx: Context): String =
-            prefs(ctx).getString(KEY_SUBS_MODE, "auto") ?: "auto"
+            readerPrefs(ctx).getString(KEY_SUBS_MODE, "auto") ?: "auto"
 
         fun setPlaybackPrefs(ctx: Context, audioLang: String, subsMode: String) {
-            prefs(ctx).edit()
+            readerPrefs(ctx).edit()
                 .putString(KEY_AUDIO_LANG, audioLang)
                 .putString(KEY_SUBS_MODE, subsMode)
                 .apply()
@@ -68,28 +74,40 @@ class PluxyApplication : Application() {
 
         /** auto | direct | compatibility. Une valeur inconnue migre sans risque vers auto. */
         fun playbackStrategy(ctx: Context): String {
-            val stored = prefs(ctx).getString(KEY_PLAYBACK_STRATEGY, "auto")
+            val stored = readerPrefs(ctx).getString(KEY_PLAYBACK_STRATEGY, "auto")
             return stored?.takeIf { it in setOf("auto", "direct", "compatibility") } ?: "auto"
         }
 
         fun setPlaybackStrategy(ctx: Context, value: String) {
             if (value !in setOf("auto", "direct", "compatibility")) return
-            prefs(ctx).edit().putString(KEY_PLAYBACK_STRATEGY, value).apply()
+            readerPrefs(ctx).edit().putString(KEY_PLAYBACK_STRATEGY, value).apply()
         }
 
         fun autoPlayNextEpisode(ctx: Context): Boolean =
-            prefs(ctx).getBoolean(KEY_AUTO_PLAY_NEXT, true)
+            readerPrefs(ctx).getBoolean(KEY_AUTO_PLAY_NEXT, true)
+
+        fun playerActionHints(ctx: Context): Boolean =
+            readerPrefs(ctx).getBoolean("player_action_hints", false)
+
+        fun playerFocusContrast(ctx: Context): Boolean = readerPrefs(ctx).getBoolean("player_focus_contrast", false)
+        fun setPlayerFocusContrast(ctx: Context, enabled: Boolean) {
+            readerPrefs(ctx).edit().putBoolean("player_focus_contrast", enabled).apply()
+        }
+
+        fun setPlayerActionHints(ctx: Context, enabled: Boolean) {
+            readerPrefs(ctx).edit().putBoolean("player_action_hints", enabled).apply()
+        }
 
         fun audioOutputMode(ctx: Context): String =
-            prefs(ctx).getString(KEY_AUDIO_OUTPUT_MODE, "auto")
+            readerPrefs(ctx).getString(KEY_AUDIO_OUTPUT_MODE, "auto")
                 ?.takeIf { it in setOf("auto", "passthrough", "compatible") } ?: "auto"
 
         fun setAudioOutputMode(ctx: Context, value: String) {
             if (value in setOf("auto", "passthrough", "compatible"))
-                prefs(ctx).edit().putString(KEY_AUDIO_OUTPUT_MODE, value).apply()
+                readerPrefs(ctx).edit().putString(KEY_AUDIO_OUTPUT_MODE, value).apply()
         }
 
-        fun setAutoPlayNextEpisode(ctx: Context, enabled: Boolean) = prefs(ctx).edit()
+        fun setAutoPlayNextEpisode(ctx: Context, enabled: Boolean) = readerPrefs(ctx).edit()
             .putBoolean(KEY_AUTO_PLAY_NEXT, enabled)
             .apply()
 

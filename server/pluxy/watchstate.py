@@ -11,7 +11,7 @@ import uuid
 from pathlib import Path
 from typing import Dict
 
-MAX_WATCH_ENTRIES = 10_000
+MAX_WATCH_ENTRIES = 100_000
 MAX_PROGRESS_SESSIONS = 128
 SESSION_TOKEN_RE = re.compile(r"^[A-Za-z0-9_-]{8,64}$")
 

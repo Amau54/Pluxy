@@ -19,11 +19,11 @@ def resolution(item: MediaItem) -> str | None:
     if item.kind not in {"movie", "series", "clip"}:
         return None
     height, width = item.height or 0, item.width or 0
-    if height >= 2160 or width >= 3840:
+    if height >= 2139 or width >= 3802:
         return "4k"
-    if height >= 1080 or width >= 1920:
+    if height >= 1070 or width >= 1901:
         return "1080p"
-    if height >= 720 or width >= 1280:
+    if height >= 713 or width >= 1268:
         return "720p"
     return "sd" if height > 0 or width > 0 else None
 
@@ -31,6 +31,7 @@ def resolution(item: MediaItem) -> str | None:
 def public_item(item: MediaItem, meta: MovieMetadata | None, watch: dict) -> MediaItem:
     pub = item.model_copy()
     pub.path = ""
+    pub.fingerprint = ""
     pub.external_subs = []
     if meta and item.kind in {"movie", "series"}:
         pub.year, pub.poster_url = meta.year or item.year, meta.poster_url

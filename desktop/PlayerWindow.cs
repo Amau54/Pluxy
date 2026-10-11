@@ -9,10 +9,25 @@ using System.Windows.Forms;
 namespace Pluxy {
     internal sealed class PlayerWindow : Form {
         private MpvSession mpv=new MpvSession();
+        private IDictionary<string,object> media;
+        private readonly SkipMarkerStore skipStore=new SkipMarkerStore();
+        private SkipMarkers skipMarkers=new SkipMarkers();
+        private SkipMarkers ownSkipMarkers=new SkipMarkers();
+        private object[] skipChapters=new object[0];
+        private SkipSegment activeSkip;
+        private Button skipButton,optionsButton;
         private readonly LibraryClient api;
         private string server,id,url;
+        public string MediaId { get { return id; } }
+        public readonly HashSet<string> ProgressIds = new HashSet<string>();
         private readonly string audio;
+        private readonly string profile;
         private readonly double start;
+        private readonly float uiScale;
+        private readonly Color accent;
+        private FlowLayoutPanel actionButtons;
+        private PlayerSlider volume;
+        private Button audioButton,subtitlesButton;
         private readonly Panel screen=new Panel { Dock=DockStyle.Fill,BackColor=Color.Black };
         private readonly PlayerSlider timeline=new PlayerSlider { Dock=DockStyle.Top,Height=22,Maximum=10000,AccessibleName="Position dans la vidéo" };
         private readonly Label time=new Label { AutoSize=true,ForeColor=Color.FromArgb(185,196,212),Margin=new Padding(12,14,8,0) };
@@ -31,7 +46,8 @@ namespace Pluxy {
         private Button pause;
         private Button fullscreenButton;
         private Panel controls;
-        private readonly ToolTip hints=new ToolTip();
+        private readonly bool hintsEnabled;
+        private readonly Label actionHint=new Label { Dock=DockStyle.Bottom,TextAlign=ContentAlignment.MiddleCenter,ForeColor=Color.FromArgb(170,177,190),AutoEllipsis=true };
         private Point lastPointer;
         private DateTime lastInteraction=DateTime.UtcNow;
         private Rectangle windowBounds;
@@ -46,7 +62,7 @@ namespace Pluxy {
         private DateTime stalledSince=DateTime.MinValue,healthySince=DateTime.MinValue;
         private Button retryButton,nextButton;
         private readonly Timer previewTimer=new Timer { Interval=400 };
-        private readonly Panel previewPanel=new Panel { Size=new Size(176,122),BackColor=Color.FromArgb(23,24,29),Visible=false };
+        private readonly PlayerSurface previewPanel=new PlayerSurface { Size=new Size(176,122),Visible=false };
         private readonly PictureBox previewImage=new PictureBox { Dock=DockStyle.Top,Height=94,SizeMode=PictureBoxSizeMode.Zoom };
         private readonly Label previewTime=new Label { Dock=DockStyle.Bottom,Height=28,TextAlign=ContentAlignment.MiddleCenter,ForeColor=Color.FromArgb(240,242,247) };
         private readonly Dictionary<string,Bitmap> previewCache=new Dictionary<string,Bitmap>();
@@ -54,41 +70,55 @@ namespace Pluxy {
         private bool previewBusy;
         private string previewUnsupported;
         private DateTime previewRetryAt=DateTime.MinValue;
-        private readonly Panel nextPrompt=new Panel { Size=new Size(350,140),BackColor=Color.FromArgb(23,24,29),Padding=new Padding(16),Visible=false };
+        private readonly PlayerSurface nextPrompt=new PlayerSurface { Size=new Size(350,140),Padding=new Padding(16),Visible=false };
         private readonly Label nextTitle=new Label { Dock=DockStyle.Top,Height=50,AutoEllipsis=true,ForeColor=Color.FromArgb(241,243,248) };
         private readonly Label nextCountdown=new Label { Dock=DockStyle.Top,Height=24,ForeColor=Color.FromArgb(173,180,195) };
         private readonly System.Diagnostics.Stopwatch nextClock=new System.Diagnostics.Stopwatch();
         private bool nextHandled;
         public PlayerWindow(LibraryClient api,string id,string title,string url,string audio,double start,object[] subtitles=null)
             : this(api,id,title,url,audio,start,subtitles,null) { }
-        public PlayerWindow(LibraryClient api,string id,string title,string url,string audio,double start,object[] subtitles,object[] queue) {
-            this.api=api; this.id=id; server=api.Server; this.url=url; this.audio=audio; this.start=start;
+        public PlayerWindow(LibraryClient api,string id,string title,string url,string audio,double start,object[] subtitles,object[] queue,IDictionary<string,object> media=null) {
+            this.media=media ?? new Dictionary<string,object>{{"id",id}};
+            this.api=api; profile=api.ProfileId; this.id=id; server=api.Server; this.url=url; this.audio=audio; this.start=start;
             subtitleTracks=subtitles; position=start; autoplay=Preferences.Load().autoplay;
+            hintsEnabled=Preferences.Load().playerActionHints;
             episodes=(queue ?? new object[0]).OrderBy(e=>Native.Number(Native.Object(e),"season")).ThenBy(e=>Native.Number(Native.Object(e),"episode")).ThenBy(e=>Native.Text(Native.Object(e),"id")).ToList();
             Text=title+" · Pluxy"; Size=new Size(1180,760); MinimumSize=new Size(700,440); StartPosition=FormStartPosition.CenterParent;
-            BackColor=Color.FromArgb(12,16,22); Font=new Font("Segoe UI",10); KeyPreview=true;
+            BackColor=Color.FromArgb(12,16,22); AutoScaleMode=AutoScaleMode.None; Font=new Font("Segoe UI",10); KeyPreview=true;
+            using(var graphics=CreateGraphics()) uiScale=graphics.DpiX/96f;
+            MinimumSize=new Size(Scale(700),Scale(440));
             string theme=Preferences.Load().theme;
-            var accent=theme=="ocean"?Color.FromArgb(131,217,229):theme=="midnight"?Color.FromArgb(196,207,235):Color.FromArgb(246,173,132);
+            accent=theme=="ocean"?Color.FromArgb(131,217,229):theme=="midnight"?Color.FromArgb(196,207,235):Color.FromArgb(246,173,132);
             timeline.Accent=accent; status.ForeColor=accent;
-            controls=new Panel { Height=76,Padding=new Padding(12,2,12,6),BackColor=Color.FromArgb(23,24,29),Anchor=AnchorStyles.Top|AnchorStyles.Left };
-            var buttons=new FlowLayoutPanel { Dock=DockStyle.Fill,WrapContents=false };
+            timeline.Height=Scale(22); status.Height=Scale(28);
+            previewPanel.Accent=nextPrompt.Accent=accent;
+            previewPanel.Size=new Size(Scale(176),Scale(122)); previewImage.Height=Scale(94); previewTime.Height=Scale(28);
+            nextPrompt.Size=new Size(Scale(350),Scale(140)); nextPrompt.Padding=new Padding(Scale(16)); nextTitle.Height=Scale(50); nextCountdown.Height=Scale(24);
+            controls=new PlayerSurface { Accent=accent,Height=Scale(hintsEnabled?102:84),Padding=new Padding(Scale(12),Scale(3),Scale(12),Scale(8)),Anchor=AnchorStyles.Top|AnchorStyles.Left };
+            var buttons=new FlowLayoutPanel { Dock=DockStyle.Fill,WrapContents=false,BackColor=controls.BackColor }; actionButtons=buttons;
             pause=ControlButton("Ⅱ","Lire / pause · Espace",async(s,e)=> { if(!ready || closing) return; try { if(Convert.ToBoolean(await mpv.Command("get_property","eof-reached"))) { await Run("seek",0,"absolute+exact"); await Run("set_property","pause",false); } else await Run("cycle","pause"); } catch(Exception error) { Native.Log(error); } });
             buttons.Controls.Add(ControlButton("−10","Reculer de 10 secondes · Flèche gauche",async(s,e)=>await Run("seek",-10,"relative+exact")));
             buttons.Controls.Add(pause); buttons.Controls.Add(ControlButton("+10","Avancer de 10 secondes · Flèche droite",async(s,e)=>await Run("seek",10,"relative+exact")));
             nextButton=ControlButton("▷|","Épisode suivant",async(s,e)=>await NextEpisode()); nextButton.Visible=episodes.Count>1; buttons.Controls.Add(nextButton);
-            var episodeMenu=new ContextMenuStrip(); var automatic=new ToolStripMenuItem("Enchaîner les épisodes") { Checked=autoplay,CheckOnClick=true };
+            var episodeMenu=new PlayerMenu(accent); Disposed+=(s,e)=>episodeMenu.Dispose(); var automatic=new ToolStripMenuItem("Enchaîner les épisodes") { Checked=autoplay,CheckOnClick=true };
             automatic.CheckedChanged+=(s,e)=> { autoplay=automatic.Checked; var settings=Preferences.Load(); settings.autoplay=autoplay; settings.Save(); }; episodeMenu.Items.Add(automatic); nextButton.ContextMenuStrip=episodeMenu;
             buttons.Controls.Add(time);
-            buttons.Controls.Add(ControlButton("Audio","Choisir la piste audio",async(s,e)=>await ChooseTracks("audio")));
-            buttons.Controls.Add(ControlButton("Sous-titres","Choisir les sous-titres",async(s,e)=>await ChooseTracks("sub")));
+            audioButton=ControlButton("Audio","Choisir la piste audio",async(s,e)=>await ChooseTracks("audio")); buttons.Controls.Add(audioButton);
+            subtitlesButton=ControlButton("Sous-titres","Choisir les sous-titres",async(s,e)=>await ChooseTracks("sub")); buttons.Controls.Add(subtitlesButton);
             fullscreenButton=ControlButton("⛶","Plein écran · F11",(s,e)=>ToggleFull()); buttons.Controls.Add(fullscreenButton);
-            var volume=new PlayerSlider { Maximum=100,Value=100,Width=88,Height=32,Accent=accent,BackColor=controls.BackColor,AccessibleName="Volume",Margin=new Padding(12,3,0,0) };
+            optionsButton=ControlButton("Options","Options du lecteur",(s,e)=>ShowSkipMenu()); buttons.Controls.Add(optionsButton);
+            skipButton=new PlayerButton {Text="Passer l’intro",Accent=accent,Size=new Size(Scale(192),Scale(40)),Visible=false,Font=new Font("Segoe UI",9),AccessibleName="Passer l’intro"};
+            skipButton.Click+=async(s,e)=>{ var target=activeSkip; if(target!=null) { await Run("seek",target.endMs/1000.0,"absolute+exact"); UpdateSkip(); } };
+            Controls.Add(skipButton);
+            volume=new PlayerSlider { Maximum=100,Value=100,Width=Scale(88),Height=Scale(40),Accent=accent,BackColor=controls.BackColor,AccessibleName="Volume",Margin=new Padding(Scale(12),Scale(3),0,0) };
             volume.MouseUp+=async(s,e)=>await Run("set_property","volume",volume.Value); volume.KeyUp+=async(s,e)=>await Run("set_property","volume",volume.Value); buttons.Controls.Add(volume);
             controls.Controls.Add(buttons); controls.Controls.Add(timeline);
+            actionHint.Height=Scale(18); actionHint.Font=new Font("Segoe UI",8); actionHint.BackColor=controls.BackColor;
+            if(hintsEnabled) controls.Controls.Add(actionHint);
             Controls.Add(screen); Controls.Add(controls); Controls.Add(status);
             previewPanel.Controls.Add(previewImage); previewPanel.Controls.Add(previewTime); Controls.Add(previewPanel);
             previewTimer.Tick+=async(s,e)=>await UpdatePreview(); previewTimer.Start();
-            var nextActions=new FlowLayoutPanel { Dock=DockStyle.Bottom,Height=44,FlowDirection=FlowDirection.RightToLeft };
+            var nextActions=new FlowLayoutPanel { Dock=DockStyle.Bottom,Height=Scale(44),FlowDirection=FlowDirection.RightToLeft };
             nextActions.Controls.Add(ControlButton("Rester","Rester sur cet épisode",(s,e)=>CancelNextPrompt()));
             nextActions.Controls.Add(ControlButton("Lire maintenant","Lire l'épisode suivant",async(s,e)=>await NextEpisode()));
             nextPrompt.Controls.Add(nextCountdown); nextPrompt.Controls.Add(nextTitle); nextPrompt.Controls.Add(nextActions); Controls.Add(nextPrompt);
@@ -96,7 +126,7 @@ namespace Pluxy {
             controls.BringToFront();
             Resize+=(s,e)=>LayoutControls();
             LayoutControls();
-            time.Margin=new Padding(10,10,15,0); time.Font=new Font("Segoe UI",9);
+            time.Margin=new Padding(Scale(10),Scale(14),Scale(12),0); time.Font=new Font("Segoe UI",9);
             timeline.AccessibleName="Position dans la vidéo";
             timeline.MouseDown+=(s,e)=>dragging=true;
             timeline.MouseUp+=async(s,e)=> { if(ready && duration>0) await Run("seek",duration*timeline.Value/10000,"absolute+exact"); dragging=false; };
@@ -109,7 +139,7 @@ namespace Pluxy {
                 if(e.KeyCode==Keys.Escape) { e.Handled=true; e.SuppressKeyPress=true; if(full) ToggleFull(); else Close(); return; }
                 if(e.KeyCode==Keys.F || e.KeyCode==Keys.F11) { e.Handled=true; e.SuppressKeyPress=true; ToggleFull(); return; }
                 if(ActiveControl is PlayerSlider) return;
-                if(e.KeyCode==Keys.Space) { e.Handled=true; await Run("cycle","pause"); }
+                if(e.KeyCode==Keys.Space) { e.Handled=true; e.SuppressKeyPress=true; await Run("cycle","pause"); }
                 if(e.KeyCode==Keys.Right || e.KeyCode==Keys.Left) { e.Handled=true; StartSeek(e.KeyCode==Keys.Right?1:-1); }
             };
             KeyUp+=async(s,e)=> { if((e.KeyCode==Keys.Right || e.KeyCode==Keys.Left) && seekDirection!=0) { e.Handled=true; UpdateSeek(); seekDirection=0; seekTimer.Stop(); seekClock.Stop(); await Run("seek",seekTarget,"absolute+exact"); } };
@@ -131,8 +161,8 @@ namespace Pluxy {
             if(closing) return; closing=true; timer.Stop(); seekTimer.Stop(); mpv.Dispose();
             previewTimer.Stop(); previewLifetime.Cancel(); previewImage.Image=null;
             foreach(var bitmap in previewCache.Values) bitmap.Dispose(); previewCache.Clear();
-            try { var save=api.SaveProgress(server,id,position,duration,progressSession,++progressSequence); await Task.WhenAny(save,Task.Delay(2000)); if(save.IsCompleted) await save; else saveObserver=save.ContinueWith(t=>Native.Log(t.Exception),TaskContinuationOptions.OnlyOnFaulted); } catch(Exception error) { Native.Log(error); }
-            timer.Dispose(); seekTimer.Dispose(); previewTimer.Dispose(); previewLifetime.Dispose(); hints.Dispose(); Close();
+            try { var save=api.SaveProgress(server,id,position,duration,progressSession,++progressSequence,profile); await Task.WhenAny(save,Task.Delay(2000)); if(save.IsCompleted) await save; else saveObserver=save.ContinueWith(t=>Native.Log(t.Exception),TaskContinuationOptions.OnlyOnFaulted); } catch(Exception error) { Native.Log(error); }
+            timer.Dispose(); seekTimer.Dispose(); previewTimer.Dispose(); previewLifetime.Dispose(); Close();
         }
         protected override bool ProcessCmdKey(ref Message message,Keys keyData) {
             if(keyData==Keys.F11 || keyData==Keys.F) { ToggleFull(); return true; }
@@ -155,10 +185,12 @@ namespace Pluxy {
                     await mpv.Command("set_property","cache-pause-wait",3);
                 }
                 await mpv.Command(command);
+                if(command.Length>0 && Convert.ToString(command[0])=="seek") { position=resume; UpdateSkip(); }
             } catch(Exception error) { Native.Log(error); failed=true; }
             if(failed) await Recover(resume);
         }
         private async Task OpenMedia(double resume) {
+            activeSkip=null; skipButton.Visible=false;
             ready=false; timer.Stop();
             await mpv.Start(url,screen.Handle,audio,resume);
             if(closing) return;
@@ -166,6 +198,13 @@ namespace Pluxy {
                 try { await mpv.Command("sub-add",server+"/stream/subs/"+LibraryClient.ItemPath(id)+"/"+index,"auto",Native.Text(sub,"label"),Native.Text(sub,"lang")); } catch(Exception error) { Native.Log(error); }
             }
             if(wasPaused) await mpv.Command("set_property","pause",true);
+            skipChapters=new object[0];
+            try {
+                var chapters=await mpv.Command("get_property","chapter-list") as object[] ?? new object[0];
+                double length=Convert.ToDouble(await mpv.Command("get_property","duration"),CultureInfo.InvariantCulture);
+                skipChapters=SkipSegments.Chapters(chapters,length);
+            } catch(Exception error) { Native.Log(error); }
+            ReloadSkipMarkers();
             position=resume; ready=true; retryButton.Visible=false; stalledSince=DateTime.MinValue; healthySince=DateTime.UtcNow; timer.Start();
         }
         private async Task Recover(double resume) {
@@ -191,9 +230,10 @@ namespace Pluxy {
             CancelNextPrompt(); nextHandled=false;
             recovering=true; ready=false; timer.Stop(); bool failed=false;
             try {
-                await api.SaveProgress(server,id,position,duration,progressSession,++progressSequence);
-                var item=Native.Object(episodes[index+1]); id=Native.Text(item,"id"); position=duration=0; ticks=0; recoveryAttempts=0; wasPaused=false;
-                Text=Native.Text(item,"title")+" · Pluxy"; url=server+"/stream/direct/"+LibraryClient.ItemPath(id);
+                try { await api.SaveProgress(server,id,position,duration,progressSession,++progressSequence,profile); } catch(Exception error) { Native.Log(error); }
+                ProgressIds.Add(id);
+                var item=Native.Object(episodes[index+1]); media=item; id=Native.Text(item,"id"); position=duration=0; ticks=0; recoveryAttempts=0; wasPaused=false;
+                Text=MediaPresentation.PlaybackTitle(item)+" · Pluxy"; url=server+"/stream/direct/"+LibraryClient.ItemPath(id);
                 subtitleTracks=item.ContainsKey("subtitles")?item["subtitles"] as object[]:null;
                 mpv.Dispose(); mpv=new MpvSession(); await OpenMedia(0);
             } catch(Exception error) { Native.Log(error); failed=true; }
@@ -218,6 +258,7 @@ namespace Pluxy {
                     restoreReserveAfterSeek=false;
                 }
                 position=Convert.ToDouble(pos,CultureInfo.InvariantCulture); duration=Convert.ToDouble(dur,CultureInfo.InvariantCulture);
+                UpdateSkip();
                 int episodeIndex=episodes.FindIndex(e=>Native.Text(Native.Object(e),"id")==id);
                 nextButton.Enabled=episodeIndex>=0 && episodeIndex+1<episodes.Count;
                 bool ended=Convert.ToBoolean(await mpv.Command("get_property","eof-reached"));
@@ -234,7 +275,7 @@ namespace Pluxy {
                 lastPointer=pointer;
                 if(ready && !Convert.ToBoolean(paused) && !buffering && !dragging && seekDirection==0 && !controls.RectangleToScreen(controls.ClientRectangle).Contains(pointer) && DateTime.UtcNow-lastInteraction>TimeSpan.FromSeconds(3)) controls.Visible=false;
                 if(seekDirection==0) { status.Visible=buffering; if(buffering) status.Text="Chargement en avance…"; }
-                if(++ticks%20==0) { try { await api.SaveProgress(server,id,position,duration,progressSession,++progressSequence); } catch(Exception error) { Native.Log(error); } }
+                if(++ticks%20==0) { try { await api.SaveProgress(server,id,position,duration,progressSession,++progressSequence,profile); } catch(Exception error) { Native.Log(error); } }
             } catch(Exception error) { if(!closing) { Native.Log(error); failed=true; } }
             finally { ticking=false; }
             if(failed) await Recover(position);
@@ -243,7 +284,7 @@ namespace Pluxy {
             if(!ready) return;
             try {
                 var tracks=await mpv.Command("get_property","track-list") as object[];
-                var menu=new ContextMenuStrip { BackColor=Color.FromArgb(25,33,44),ForeColor=Color.White };
+                var menu=new PlayerMenu(accent,true);
                 string selected=Convert.ToString(await mpv.Command("get_property",type=="sub"?"sid":"aid"),CultureInfo.InvariantCulture);
                 if(type=="sub") { var off=new ToolStripMenuItem("Désactivés") { Checked=selected=="no" || selected=="False" }; off.Click+=async(s,e)=>await Run("set_property","sid","no"); menu.Items.Add(off); }
                 foreach(var value in tracks ?? new object[0]) { var track=Native.Object(value); if(Native.Text(track,"type")!=type) continue;
@@ -252,31 +293,92 @@ namespace Pluxy {
                 }
                 if(type=="audio") {
                     menu.Items.Add(new ToolStripSeparator()); string device=Convert.ToString(await mpv.Command("get_property","audio-device"));
-                    foreach(var value in await mpv.Command("get_property","audio-device-list") as object[] ?? new object[0]) { var output=Native.Object(value); string name=Native.Text(output,"name"); var entry=new ToolStripMenuItem(Native.Text(output,"description",name)) { Checked=name==device }; entry.Click+=async(s,e)=>await Run("set_property","audio-device",name); menu.Items.Add(entry); }
+                    foreach(var value in await mpv.Command("get_property","audio-device-list") as object[] ?? new object[0]) { var output=Native.Object(value); string name=Native.Text(output,"name"); var entry=new ToolStripMenuItem(AudioDeviceLabel(name,Native.Text(output,"description",name))) { Checked=name==device }; entry.Click+=async(s,e)=>await Run("set_property","audio-device",name); menu.Items.Add(entry); }
                 }
                 if(menu.Items.Count==0) menu.Items.Add(new ToolStripMenuItem("Aucune piste disponible") { Enabled=false });
-                menu.Show(Cursor.Position);
+                var anchor=type=="audio"?audioButton:subtitlesButton;
+                int available=Screen.FromControl(this).WorkingArea.Width;
+                menu.MaximumSize=new Size(Math.Max(1,Math.Min(Scale(420),available)),0);
+                menu.Show(anchor,new Point(0,0),ToolStripDropDownDirection.AboveRight);
             } catch(Exception error) { Native.Log(error); }
         }
+        internal static string AudioDeviceLabel(string name,string description) {
+            if(name=="auto") return "Sortie automatique";
+            if(description.StartsWith("Default",StringComparison.OrdinalIgnoreCase)) return "Sortie par défaut"+description.Substring(7);
+            if(description.Equals("Autoselect device",StringComparison.OrdinalIgnoreCase)) return "Sortie automatique";
+            return description;
+        }
+        private int Scale(int value) { return Math.Max(1,(int)Math.Round(value*uiScale)); }
         private Button ControlButton(string text,string help,EventHandler action) {
-            string symbol=text=="−10"?"back":text=="+10"?"forward":text=="Ⅱ"?"pause":text=="▷|"?"next":text=="Audio"?"audio":text=="Sous-titres"?"subtitles":text=="⛶"?"fullscreen":null;
-            var button=new PlayerButton { Text=text,Symbol=symbol,AutoSize=symbol==null,Size=new Size(40,40),MinimumSize=new Size(40,40) }; button.Click+=action;
-            button.Font=new Font("Segoe UI",9); button.Margin=new Padding(3,1,3,0); button.Padding=new Padding(7,2,7,2);
+            string symbol=text=="−10"?"back":text=="+10"?"forward":text=="Ⅱ"?"pause":text=="▷|"?"next":text=="Audio"?"audio":text=="Sous-titres"?"subtitles":text=="⛶"?"fullscreen":text=="Options"?"more":null;
+            var button=new PlayerButton { Text=text,Symbol=symbol,Accent=accent,StrongFocus=Preferences.Load().playerFocusContrast,AutoSize=symbol==null,Size=new Size(Scale(44),Scale(44)),MinimumSize=new Size(Scale(40),Scale(40)) }; button.Click+=action;
+            button.Font=new Font("Segoe UI",9); button.Margin=new Padding(Scale(3),Scale(1),Scale(3),0); button.Padding=new Padding(Scale(7),Scale(2),Scale(7),Scale(2));
             button.BackColor=Color.FromArgb(23,24,29); button.FlatAppearance.BorderSize=0;
-            button.FlatAppearance.MouseOverBackColor=Color.FromArgb(43,44,51); button.AccessibleName=help; hints.SetToolTip(button,help); return button;
+            button.FlatAppearance.MouseOverBackColor=Color.FromArgb(43,44,51); button.AccessibleName=help;
+            if(hintsEnabled) {
+                button.GotFocus+=(s,e)=>actionHint.Text=button.AccessibleName;
+                button.MouseEnter+=(s,e)=>actionHint.Text=button.AccessibleName;
+                button.LostFocus+=(s,e)=>actionHint.Text="";
+                button.MouseLeave+=(s,e)=>actionHint.Text=ActiveControl is PlayerButton?ActiveControl.AccessibleName:"";
+            }
+            return button;
         }
         private void LayoutControls() {
-            int width=Math.Min(800,Math.Max(100,ClientSize.Width-24));
-            controls.SetBounds((ClientSize.Width-width)/2,ClientSize.Height-controls.Height-12,width,controls.Height);
-            nextPrompt.Location=new Point(Math.Max(12,ClientSize.Width-nextPrompt.Width-24),Math.Max(12,controls.Top-nextPrompt.Height-12));
+            int width=Math.Min(Scale(800),Math.Max(Scale(100),ClientSize.Width-Scale(24)));
+            controls.SetBounds((ClientSize.Width-width)/2,ClientSize.Height-controls.Height-Scale(12),width,controls.Height);
+            bool compact=width<Scale(720);
+            foreach(Control control in actionButtons.Controls) {
+                var button=control as PlayerButton;
+                if(button!=null) { int size=Scale(compact?40:44); button.Size=new Size(size,size); button.Margin=new Padding(Scale(compact?2:3),Scale(1),Scale(compact?2:3),0); }
+            }
+            volume.Width=Scale(compact?60:88); time.Margin=new Padding(Scale(compact?5:10),Scale(14),Scale(compact?6:12),0);
+            skipButton.Location=new Point(Math.Max(Scale(12),ClientSize.Width-skipButton.Width-Scale(24)),Math.Max(Scale(12),controls.Top-skipButton.Height-Scale(12)));
+            nextPrompt.Location=new Point(Math.Max(Scale(12),ClientSize.Width-nextPrompt.Width-Scale(24)),Math.Max(Scale(12),controls.Top-nextPrompt.Height-Scale(12)));
+        }
+        private void ReloadSkipMarkers() {
+            try { ownSkipMarkers=skipStore.Own(server,media); skipMarkers=skipStore.Effective(server,media); }
+            catch(Exception error) { Native.Log(error); skipMarkers=new SkipMarkers(); ownSkipMarkers=new SkipMarkers(); }
+        }
+        private void UpdateSkip() {
+            activeSkip=ready && !closing && !recovering && !dragging && seekDirection==0 && !nextPrompt.Visible?
+                SkipSegments.Active(SkipSegments.Resolve(SkipSegments.Detect(skipChapters,(long)(duration*1000)),ownSkipMarkers.Segments((long)(duration*1000)),skipMarkers.Segments((long)(duration*1000))),(long)(position*1000)):null;
+            if(activeSkip==null && skipButton.Focused) pause.Focus();
+            skipButton.Visible=activeSkip!=null;
+            skipButton.Text=activeSkip!=null && activeSkip.kind=="intro"?"Passer l’intro":"Passer le générique";
+            skipButton.AccessibleName=skipButton.Text;
+            if(skipButton.Visible) skipButton.BringToFront();
+        }
+        private void ShowSkipMenu() {
+            if(!ready || closing || duration<=0) return;
+            ShowControls();
+            var menu=new PlayerMenu(accent);
+            menu.Closed+=(s,e)=>{ menu.Dispose(); if(!closing) ShowControls(); };
+            long at=(long)(position*1000),length=(long)(duration*1000);
+            SkipMarkers own;
+            try { own=skipStore.Own(server,media); } catch(Exception error) { Native.Log(error); return; }
+            var caption=new ToolStripMenuItem("Repères à "+Clock(position)) {Enabled=false}; menu.Items.Add(caption);
+            Action<string,Action> add=(label,action)=>{
+                var entry=new ToolStripMenuItem(label); entry.Click+=(s,e)=>{
+                    try { action(); ReloadSkipMarkers(); UpdateSkip(); }
+                    catch(Exception error) { Native.Log(error); MessageBox.Show(this,error is ArgumentException?error.Message:"Impossible d’enregistrer ce repère.","Intro et générique",MessageBoxButtons.OK,MessageBoxIcon.Information); }
+                }; menu.Items.Add(entry);
+            };
+            add("Début de l’intro ici",()=>{ own.introStartMs=at; own.introEndMs=null; skipStore.Save(server,media,own); });
+            add("Fin de l’intro ici",()=>{ if(at<=own.introStartMs || at>=length) throw new ArgumentException("La fin doit suivre le début de l’intro."); own.introEndMs=at; skipStore.Save(server,media,own); });
+            add("Début du générique ici",()=>{ if(at>=length) throw new ArgumentException("Choisissez une position avant la fin du média."); own.creditsStartMs=at; own.creditsEndMs=null; skipStore.Save(server,media,own); });
+            add("Fin du générique ici",()=>{ if(!own.creditsStartMs.HasValue || at<=own.creditsStartMs || at>length) throw new ArgumentException("Marquez d’abord le début du générique."); own.creditsEndMs=at; skipStore.Save(server,media,own); });
+            if(skipStore.CanShare(media) && skipMarkers.Segments(length).Any(segment=>segment.kind=="intro"))
+                add("Réutiliser l’intro pour cette saison",()=>skipStore.Share(server,media,skipMarkers));
+            menu.Items.Add(new ToolStripSeparator());
+            add("Effacer les repères de ce média",()=>skipStore.Clear(server,media));
+            if(skipStore.HasSeason(server,media)) add("Effacer l’intro de cette saison",()=>skipStore.ClearSeason(server,media));
+            menu.MaximumSize=new Size(Scale(420),0);
+            menu.Show(optionsButton,new Point(0,0),ToolStripDropDownDirection.AboveRight);
         }
         private void ShowNextPrompt(int index) {
             nextHandled=true; var episode=Native.Object(episodes[index]);
-            string title=Native.Text(episode,"title");
-            var marker=System.Text.RegularExpressions.Regex.Match(title,@"s\d{1,2}[ ._-]?e\d{1,2}|\b\d{1,2}x\d{2}\b",System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-            if(marker.Success) title=title.Substring(marker.Index+marker.Length);
-            title=System.Text.RegularExpressions.Regex.Replace(title,@"[._]+|\s+"," ").Trim(' ','-');
-            string code="S"+((int)Native.Number(episode,"season")).ToString("00")+"E"+((int)Native.Number(episode,"episode")).ToString("00");
+            string title=MediaPresentation.EpisodeTitle(episode);
+            string code=MediaPresentation.EpisodeCode(episode);
             nextTitle.Text="Épisode suivant\n"+(title.Length>0?title:"Épisode "+Native.Number(episode,"episode"))+" · "+code;
             nextCountdown.Text=autoplay?"Lecture dans 8 s":"Prêt lorsque vous l'êtes";
             nextClock.Restart(); nextPrompt.Visible=true; nextPrompt.BringToFront();
@@ -321,7 +423,7 @@ namespace Pluxy {
             if(!full) { windowBounds=WindowState==FormWindowState.Normal?Bounds:RestoreBounds; windowState=WindowState; full=true; WindowState=FormWindowState.Normal; FormBorderStyle=FormBorderStyle.None; Bounds=Screen.FromControl(this).Bounds; }
             else { full=false; WindowState=FormWindowState.Normal; FormBorderStyle=FormBorderStyle.Sizable; Bounds=windowBounds; WindowState=windowState; }
             fullscreenButton.AccessibleName=full?"Quitter le plein écran · Échap":"Plein écran · F11";
-            hints.SetToolTip(fullscreenButton,fullscreenButton.AccessibleName);
+            if(hintsEnabled && fullscreenButton.Focused) actionHint.Text=fullscreenButton.AccessibleName;
             ShowControls();
         }
         protected override void WndProc(ref Message message) {

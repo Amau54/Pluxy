@@ -62,6 +62,9 @@ class PhotoActivity : ThemedActivity() {
     private lateinit var errorView: TextView
     private lateinit var folderNotice: TextView
     private var folderPages: List<PhotoFolderPage> = emptyList()
+    private var pagedFolders = false
+    private val folderCache = linkedMapOf<String, List<MediaItem>>()
+    private var folderLoad: kotlinx.coroutines.Job? = null
     private var photoById: Map<String, MediaItem> = emptyMap()
     private val folderPositions = mutableMapOf<String, String>()
     private var prefetchJob: Job? = null
@@ -170,6 +173,7 @@ class PhotoActivity : ThemedActivity() {
         if (chromeVisible) scheduleChromeHide()
 
         lifecycleScope.launch {
+            if (collectionId.isBlank() && selectedAlbumKey.isNotBlank()) { loadPagedFolders(initial); return@launch }
             val snapshot = networkOrNull { CatalogueRepository.load(api.abs("/"), mediaKind = "photo") {
                 val reader = PluxyApi(api.baseUrl)
                 try { reader.listItems(LibraryRequest(kind = "photo")) } finally { reader.close() }
@@ -311,17 +315,62 @@ class PhotoActivity : ThemedActivity() {
         if (folderPages.isEmpty()) return
         val key = LibraryOrganizer.photoAlbumKey(current)
         folderPositions[key] = current.id
-        val pageIndex = folderPages.indexOfFirst { it.key == key }.coerceAtLeast(0)
+        val requested = selectedAlbumKey.takeIf { folderLoad?.isActive == true } ?: key
+        val pageIndex = folderPages.indexOfFirst { it.key == requested }.coerceAtLeast(0)
         val nextIndex = wrappedPhotoIndex(pageIndex + offset, folderPages.size)
         val page = folderPages[nextIndex]
         selectedAlbumKey = page.key
         selectedFolder = ""
-        photos = page.photos
-        showAt(restoredPhotoIndex(photos, folderPositions[page.key]))
+        if (pagedFolders) {
+            folderLoad?.cancel()
+            folderLoad = lifecycleScope.launch {
+                val loaded = networkOrNull { folderPhotos(page) } ?: run { selectedAlbumKey = key; return@launch }
+                photos = loaded
+                showAt(restoredPhotoIndex(photos, folderPositions[page.key]))
+                prefetchFolderData(nextIndex)
+            }
+        } else {
+            photos = page.photos
+            showAt(restoredPhotoIndex(photos, folderPositions[page.key]))
+        }
         folderNotice.text = "${page.label} · ${nextIndex + 1}/${folderPages.size}"
         folderNotice.visibility = View.VISIBLE
         handler.removeCallbacks(hideFolderNotice)
         handler.postDelayed(hideFolderNotice, 2_400L)
+    }
+
+    private suspend fun loadPagedFolders(initial: MediaItem) {
+        val heads = networkOrNull { api.listItems(LibraryRequest(kind = "photo", grouped = true)) } ?: return
+        folderPages = photoFolderPages(heads)
+        pagedFolders = true
+        photoById = heads.associateBy { it.id }
+        val page = folderPages.firstOrNull { it.key == LibraryOrganizer.photoAlbumKey(initial) } ?: return
+        val loaded = networkOrNull { folderPhotos(page) } ?: return
+        photos = loaded
+        index = restoredPhotoIndex(photos, initial.id)
+        updatePhotoLabel(); updateSlideshowControls(); scheduleSlideshow(); prefetchNearby()
+        prefetchFolderData(folderPages.indexOf(page))
+    }
+
+    private suspend fun folderPhotos(page: PhotoFolderPage): List<MediaItem> {
+        folderCache[page.key]?.let { return it }
+        val fetched = api.listItems(LibraryRequest(kind = "photo", groupId = page.photos.first().id,
+            sort = folderSort.ifBlank { "added" }, descending = if (folderSort.isBlank()) true else folderDescending))
+            .filter { it.available }.ifEmpty { page.photos }
+        val values = if (folderSort.isBlank()) fetched.sortedWith(compareByDescending<MediaItem> { LibraryOrganizer.captureTime(it) ?: -1.0 }.thenBy { it.title.lowercase() }) else fetched
+        folderCache.remove(page.key); folderCache[page.key] = values
+        while (folderCache.size > 3) folderCache.remove(folderCache.keys.first())
+        photoById = folderPages.flatMap { it.photos }.plus(folderCache.values.flatten()).associateBy { it.id }
+        return values
+    }
+
+    private fun prefetchFolderData(center: Int) {
+        lifecycleScope.launch {
+            for (offset in listOf(1, -1)) {
+                val page = folderPages.getOrNull(wrappedPhotoIndex(center + offset, folderPages.size)) ?: continue
+                networkOrNull { folderPhotos(page) }
+            }
+        }
     }
 
     private fun photoWidth() = photoView.width.takeIf { it > 0 } ?: resources.displayMetrics.widthPixels

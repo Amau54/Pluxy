@@ -84,6 +84,7 @@ class MediaItem(BaseModel):
     kind: str = "movie"                # movie | series | photo | audio
     added_at: float = 0.0              # Première découverte par Pluxy
     modified_at: float = 0.0           # mtime technique : invalidation de l'analyse
+    fingerprint: str = ""             # Privé : association lors d'un déplacement
     captured_at: Optional[float] = None  # Date EXIF, absente si inconnue
     # Regroupement des séries : nom (affichage) + CLÉ CANONIQUE de regroupement
     # (insensible casse/accents/tags/saison -> les épisodes d'une même série fusionnent

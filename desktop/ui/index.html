@@ -21,7 +21,7 @@
 <symbol id="icon-close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol>
 <symbol id="icon-back" viewBox="0 0 24 24"><path d="m15 5-7 7 7 7"/></symbol>
 <symbol id="icon-refresh" viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5M20 12a8 8 0 0 0-14-5M4 12a8 8 0 0 0 14 5"/></symbol>
-</defs></svg>
+<symbol id="icon-pause" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16" rx="1.5"/><rect x="14" y="4" width="4" height="16" rx="1.5"/></symbol></defs></svg>
 <main id="welcome" class="welcome hidden">
   <img src="logo.png" class="welcome-logo" alt="Pluxy"><h1>Comment utiliser Pluxy ?</h1>
   <div class="mode-choices"><button class="mode-card" data-mode="reader"><svg><use href="#icon-play"/></svg><strong>Lecteur</strong><span>Parcourir et lire les médias d’un serveur Pluxy.</span></button><button class="mode-card" data-mode="server"><svg><use href="#icon-server"/></svg><strong>Serveur</strong><span>Partager les dossiers de ce PC sur votre réseau.</span></button></div>
@@ -41,7 +41,34 @@
 <div id="loading" class="loading hidden" role="status"><span class="spinner"></span><strong id="loading-text">Ouverture de Pluxy…</strong><p class="muted">La première préparation peut prendre quelques minutes.</p></div>
 <dialog id="connection"><form method="dialog" class="dialog-top"><h2>Votre serveur</h2><button class="icon-button" aria-label="Fermer"><svg><use href="#icon-close"/></svg></button></form><p class="muted">Choisissez un serveur du réseau ou saisissez son adresse.</p><div id="server-list"></div><form id="connect-manual" class="manual"><input id="address" placeholder="192.168.1.20:8420" aria-label="Adresse du serveur" required maxlength="256"><button class="primary">Connecter</button></form><button id="discover" class="text-button">Rechercher à nouveau</button><p id="connection-status" class="muted" role="status"></p></dialog>
 <dialog id="details" class="details"><form method="dialog" class="dialog-top"><button id="detail-back" class="icon-button" aria-label="Fermer"><svg><use href="#icon-close"/></svg></button></form><div id="detail-content"></div></dialog>
-<dialog id="settings"><form method="dialog" class="dialog-top"><h2>Réglages du lecteur</h2><button class="icon-button" aria-label="Fermer"><svg><use href="#icon-close"/></svg></button></form><label class="setting">Thème<select id="theme"><option value="coral">Corail</option><option value="ocean">Océan</option><option value="midnight">Minuit</option></select></label><label class="setting">Sortie audio<select id="audio"><option value="auto">Automatique</option><option value="passthrough">Passthrough forcé</option><option value="compatible">Stéréo compatible</option></select></label><p class="muted">Le passthrough transmet le son d’origine à votre ampli, si la sortie Windows et la liaison le permettent. Le choix s’applique à la prochaine lecture.</p><button id="change-mode" class="text-button">Changer de mode</button></dialog>
+<dialog id="settings">
+<form method="dialog" class="dialog-top"><h2>Réglages du lecteur</h2><button class="icon-button" aria-label="Fermer"><svg><use href="#icon-close"/></svg></button></form>
+<div id="family-settings" class="hidden"><label class="setting">Profil<select id="profile" aria-label="Profil familial"></select></label></div>
+<label class="setting">Sortie audio<select id="audio"><option value="auto">Automatique</option><option value="passthrough">Passthrough forcé</option><option value="compatible">Stéréo compatible</option></select></label>
+<p class="muted">Le choix s’applique à la prochaine lecture.</p>
+<label class="setting">Thème<select id="theme"><option value="coral">Corail</option><option value="ocean">Océan</option><option value="midnight">Minuit</option></select></label>
+<button id="show-options" class="text-button">Options ›</button>
+</dialog>
+<dialog id="secondary-options">
+<form method="dialog" class="dialog-top"><h2>Options</h2><button class="icon-button" aria-label="Retour aux réglages"><svg><use href="#icon-back"/></svg></button></form>
+<h3>Profils</h3>
+<label class="setting">Activer plusieurs profils<input id="multiple-profiles" type="checkbox"></label>
+<p id="general-profile-note" class="muted">Profil Général : votre historique est conservé.</p>
+<div id="profile-management" class="hidden"><form id="create-profile" class="manual"><input id="profile-name" aria-label="Nom du nouveau profil" placeholder="Nouveau profil" maxlength="40" required><button>Ajouter</button></form></div>
+<h3>Accessibilité</h3>
+<label class="setting">Libellés sous les commandes du lecteur<input id="player-action-hints" type="checkbox"></label>
+<label class="setting">Focus du lecteur plus contrasté<input id="player-focus-contrast" type="checkbox"></label>
+<h3>Installation et sauvegardes</h3>
+<button id="check-update" class="text-button">Rechercher une mise à jour</button><p id="update-status" class="muted" role="status"></p>
+<button id="open-update" class="text-button hidden">Ouvrir le téléchargement officiel</button>
+<button id="backup-settings" class="text-button">Sauvegarder les réglages et l’historique</button>
+<button id="restore-settings" class="text-button">Restaurer une sauvegarde</button>
+<p class="muted">Les médias et les clés API ne sont pas inclus dans la sauvegarde.</p>
+<button id="change-mode" class="text-button">Changer de mode</button>
+</dialog>
 <dialog id="gallery" class="gallery"><button id="gallery-close" class="icon-button" aria-label="Fermer"><svg><use href="#icon-close"/></svg></button><button id="photo-previous" class="icon-button gallery-previous" aria-label="Image précédente"><svg><use href="#icon-back"/></svg></button><img id="gallery-image" alt=""><button id="photo-next" class="icon-button gallery-next" aria-label="Image suivante"><svg><use href="#icon-chevron"/></svg></button><div class="gallery-caption"><span id="gallery-name"></span><button id="slideshow">Diaporama</button></div></dialog>
+<aside id="music-player" class="music-player hidden" aria-label="Lecteur musical"><div class="music-info"><strong id="music-title"></strong><span id="music-artist" class="muted"></span></div><div class="music-actions"><button id="music-previous" class="icon-button" aria-label="Piste précédente"><svg><use href="#icon-back"/></svg></button><button id="music-pause" class="icon-button" aria-label="Pause"><svg><use href="#icon-play"/></svg></button><button id="music-next" class="icon-button" aria-label="Piste suivante"><svg><use href="#icon-chevron"/></svg></button></div><label class="music-position"><span id="music-time">0:00</span><input id="music-seek" type="range" min="0" max="1000" value="0" aria-label="Position dans la piste"></label><button id="music-queue" class="text-button">File de lecture</button><button id="music-stop" class="icon-button" aria-label="Arrêter la musique"><svg><use href="#icon-close"/></svg></button></aside>
+<dialog id="music-list"><form method="dialog" class="dialog-top"><h2>File de lecture</h2><button class="icon-button" aria-label="Fermer"><svg><use href="#icon-close"/></svg></button></form><div id="music-tracks"></div></dialog>
+<dialog id="metadata-match"><form method="dialog" class="dialog-top"><h2>Corriger les informations</h2><button class="icon-button" aria-label="Fermer"><svg><use href="#icon-close"/></svg></button></form><p class="muted">Votre choix sera conservé lors des prochains scans.</p><form id="metadata-search" class="manual"><input id="metadata-query" aria-label="Titre à rechercher" maxlength="160" required><button>Rechercher</button></form><p id="metadata-status" role="status"></p><div id="metadata-results"></div></dialog>
 <div id="toast" class="toast hidden" role="status"></div>
 </body></html>

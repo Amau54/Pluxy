@@ -13,11 +13,14 @@ using System.Threading.Tasks;
 namespace Pluxy {
     internal sealed class LibraryClient : IDisposable {
         private readonly HttpClient http;
+        private readonly ProgressOutbox progress;
         public string Server { get; private set; }
+        public string ProfileId="default";
         public string Session = Guid.NewGuid().ToString("N");
         public LibraryClient() {
             http = new HttpClient(new HttpClientHandler { UseProxy = false, AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(15) };
             http.DefaultRequestHeaders.Add("X-Pluxy-Session", Session);
+            progress=new ProgressOutbox(Path.Combine(Native.Data,"progress-outbox.json"),SendProgress);
         }
         public static string NormalizeServer(string value) {
             value = (value ?? "").Trim(); if(!value.Contains("://")) value = "http://" + value;
@@ -53,7 +56,9 @@ namespace Pluxy {
             }
         }
         private async Task<object> Get(string server, string path) {
-            using(var response = await http.GetAsync(server + path,HttpCompletionOption.ResponseHeadersRead)) {
+            using(var request=new HttpRequestMessage(HttpMethod.Get,server+path)) {
+            request.Headers.Add("X-Pluxy-Profile",ProfileId);
+            using(var response = await http.SendAsync(request,HttpCompletionOption.ResponseHeadersRead)) {
                 if(!response.IsSuccessStatusCode) throw new IOException("Le serveur ne répond pas correctement (" + (int)response.StatusCode + ").");
                 const int limit=16*1024*1024;
                 if(response.Content.Headers.ContentLength>limit) throw new IOException("Réponse trop volumineuse.");
@@ -68,7 +73,7 @@ namespace Pluxy {
                     return Native.Json.DeserializeObject(Encoding.UTF8.GetString(output.ToArray()).TrimStart('\uFEFF'));
                 }
             }
-        }
+        }}
         public async Task<object> Connect(string address) {
             var candidate = NormalizeServer(address); var health = Native.Object(await Get(candidate,"/health"));
             if(Native.Text(health,"app")!="pluxy" || Native.Text(health,"status")!="ok") throw new IOException("Aucun serveur Pluxy à cette adresse.");
@@ -133,11 +138,29 @@ namespace Pluxy {
             var server=Server; if(string.IsNullOrEmpty(server)) throw new IOException("Choisissez un serveur.");
             string id=Native.Text(args,"id");
             if(method=="ping") return await Get(server,"/health");
+            if(method=="profiles") return await Get(server,"/api/profiles");
+            if(method=="createProfile") {
+                using(var response=await http.PostAsync(server+"/api/profiles",new StringContent(Native.Json.Serialize(new {name=Native.Text(args,"name")}),Encoding.UTF8,"application/json"))) {
+                    if(!response.IsSuccessStatusCode) throw new IOException("Impossible de créer ce profil. Vérifiez son nom et le nombre de profils.");
+                    return Native.Json.DeserializeObject(await response.Content.ReadAsStringAsync());
+                }
+            }
             if(method=="home") return await Get(server,"/api/library/home");
             if(method=="facets") return await Get(server,"/api/library/facets?kind="+Uri.EscapeDataString(Native.Text(args,"kind","movie")));
+            if(method=="matches") return await Get(server,"/api/library/items/"+ItemPath(id)+"/matches?q="+Uri.EscapeDataString(Native.Text(args,"q")));
+            if(method=="chooseMatch") {
+                using(var response=await http.PostAsync(server+"/api/library/items/"+ItemPath(id)+"/match",new StringContent(Native.Json.Serialize(new{tmdb_id=(int)Native.Number(args,"tmdb_id")}),Encoding.UTF8,"application/json"))) {
+                    if(!response.IsSuccessStatusCode) throw new IOException("Cette correspondance est indisponible. Vérifiez TMDB et réessayez.");
+                    return Native.Json.DeserializeObject(await response.Content.ReadAsStringAsync());
+                }
+            }
             if(method=="metadata") return await Get(server,"/api/library/items/"+ItemPath(id)+"/metadata");
             if(method=="item") return await Get(server,"/api/library/items/"+ItemPath(id));
-            if(method=="progress") return await Get(server,"/api/playback/progress/"+ItemPath(id));
+            if(method=="progress") {
+                var local=progress.Get(server,ProfileId,id);
+                if(local!=null) return new { position_ms=local.positionMs>local.durationMs*.95?0:local.positionMs,duration_ms=local.durationMs,watched=local.positionMs>local.durationMs*.95 };
+                return await Get(server,"/api/playback/progress/"+ItemPath(id));
+            }
             if(method=="page") {
                 string[] fields={"kind","q","sort","descending","year","genre","watched","resolution","hdr_only","offset","revision","grouped","group_id"};
                 var query=new List<string>{"limit=500"};
@@ -146,10 +169,20 @@ namespace Pluxy {
             }
             throw new ArgumentException("Commande inconnue.");
         }
-        public async Task SaveProgress(string server,string id,double position,double duration,string sessionId=null,long? sequence=null) {
-            if(duration<=0) return;
-            var body=Native.Json.Serialize(new { position_ms=(long)(Math.Max(0,position)*1000),duration_ms=(long)(duration*1000),session_id=sessionId,sequence=sequence });
-            using(var response=await http.PostAsync(server+"/api/playback/progress/"+ItemPath(id),new StringContent(body,Encoding.UTF8,"application/json"))) response.EnsureSuccessStatusCode();
+        public Task SaveProgress(string server,string id,double position,double duration,string sessionId=null,long? sequence=null,string profileId=null) {
+            if(duration>0 && !double.IsNaN(position) && !double.IsInfinity(position) && !double.IsInfinity(duration)) {
+                server=NormalizeServer(server); ItemPath(id);
+                progress.Enqueue(new ProgressUpdate { server=server,id=id,profile=profileId ?? ProfileId,session=sessionId ?? Session,sequence=sequence ?? DateTime.UtcNow.Ticks,positionMs=(long)(Math.Max(0,Math.Min(position,duration))*1000),durationMs=(long)(duration*1000) });
+            }
+            return Task.FromResult(true);
+        }
+        private async Task SendProgress(ProgressUpdate update) {
+            var body=Native.Json.Serialize(new { position_ms=update.positionMs,duration_ms=update.durationMs,session_id=update.session,sequence=update.sequence });
+            using(var request=new HttpRequestMessage(HttpMethod.Post,update.server+"/api/playback/progress/"+ItemPath(update.id))) {
+                request.Headers.Add("X-Pluxy-Profile",update.profile);
+                request.Content=new StringContent(body,Encoding.UTF8,"application/json");
+                using(var response=await http.SendAsync(request)) response.EnsureSuccessStatusCode();
+            }
         }
         public async Task<object[]> Group(string id,string kind) {
             var values=new List<object>(); int offset=0; string revision="";
@@ -188,6 +221,8 @@ namespace Pluxy {
                 } output.Position=0; return output; } catch { output.Dispose(); throw; }
             }
         }
-        public void Dispose() { http.Dispose(); }
+        public void Dispose() { progress.Dispose(); http.Dispose(); }
+        public Task SuspendProgress() { return progress.Suspend(); }
+        public void ResumeProgress() { progress.Resume(); }
     }
 }

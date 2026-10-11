@@ -154,22 +154,58 @@ class ServerPreferences(context: Context) {
     val discoveryPort: Int get() = DEFAULT_DISCOVERY_PORT
 
     @Synchronized
-    fun watchState(itemId: String): WatchState {
-        return watchStore.get(itemId).state
+    fun watchState(itemId: String, profile: String = "default"): WatchState {
+        return watchStore.get(watchKey(itemId, profile)).state
     }
 
     internal val watchRevision: Long get() = watchStore.revision
 
     @Synchronized
-    fun setWatchState(itemId: String, positionMs: Long, durationMs: Long, sessionId: String? = null, sequence: Long? = null): WatchState {
-        return watchStore.update(itemId, positionMs, durationMs, sessionId, sequence).state
+    fun setWatchState(itemId: String, positionMs: Long, durationMs: Long, sessionId: String? = null, sequence: Long? = null, profile: String = "default"): WatchState {
+        return watchStore.update(watchKey(itemId, profile), positionMs, durationMs, sessionId, sequence).state
     }
 
     /** Wait for pending preference writes before dropping a persisted SAF permission. */
     fun flushFolders(): Boolean = prefs.edit().commit()
 
+    private var profileRaw: String? = null
+    private var profileCache: List<Pair<String, String>> = emptyList()
+
+    @Synchronized
+    fun familyProfiles(): List<Pair<String, String>> {
+        val raw = prefs.getString("family_profiles", "{}") ?: "{}"
+        if (raw == profileRaw) return profileCache
+        val data = JSONObject(raw)
+        profileCache = listOf("default" to "Général") + data.keys().asSequence().filter { it.matches(Regex("[0-9a-f]{32}")) }
+            .map { it to data.getString(it) }.toList()
+        profileRaw = raw
+        return profileCache
+    }
+
+    @Synchronized
+    fun addFamilyProfile(name: String): Pair<String, String> {
+        val cleaned = name.trim().replace(Regex("\\s+"), " ")
+        require(cleaned.isNotEmpty() && cleaned.length <= 40) { "Nom de profil invalide" }
+        require(familyProfiles().size < 12) { "Maximum : douze profils" }
+        val data = JSONObject(prefs.getString("family_profiles", "{}") ?: "{}")
+        val id = java.util.UUID.randomUUID().toString().replace("-", "")
+        data.put(id, cleaned)
+        if (!prefs.edit().putString("family_profiles", data.toString()).commit()) throw IOException("Profil non enregistré")
+        return id to cleaned
+    }
+
+    fun validateProfile(profile: String) {
+        if (profile == "default") return
+        require(familyProfiles().any { it.first == profile }) { "Profil indisponible" }
+    }
+
+    private fun watchKey(id: String, profile: String): String {
+        validateProfile(profile)
+        return if (profile == "default") id else "${profile}_$id"
+    }
+
     private fun watchFile(id: String): AtomicFile {
-        require(id.matches(Regex("[0-9a-f]+"))) { "Identifiant média invalide" }
+        require(id.matches(Regex("(?:[0-9a-f]{32}_)?[0-9a-f]+"))) { "Identifiant média invalide" }
         return AtomicFile(File(watchDirectory, "$id.json"))
     }
 
@@ -216,7 +252,7 @@ class ServerPreferences(context: Context) {
     @Synchronized
     fun pruneWatchState(validIds: Set<String>) {
         val stale = (watch.all.keys + watchDirectory.listFiles().orEmpty().map { it.name.substringBefore('.') })
-            .filter { it.matches(Regex("[0-9a-f]+")) && it !in validIds }.toSet()
+            .filter { it.matches(Regex("(?:[0-9a-f]{32}_)?[0-9a-f]+")) && it.substringAfter('_') !in validIds }.toSet()
         if (stale.isEmpty()) return
         watch.edit().also { editor -> stale.forEach(editor::remove) }.apply()
         watchStore.forget(stale) { watchFile(it).delete() }

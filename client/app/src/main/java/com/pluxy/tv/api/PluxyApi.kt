@@ -27,7 +27,8 @@ import java.util.UUID
 class ApiException(val code: Int, message: String) : IOException(message)
 
 /** Client réseau Pluxy (OkHttp + Moshi). Toutes les méthodes sont suspend. */
-class PluxyApi(val baseUrl: String, val sessionId: String = UUID.randomUUID().toString(), timeoutMs: Long? = null) {
+class PluxyApi(val baseUrl: String, val sessionId: String = UUID.randomUUID().toString(), timeoutMs: Long? = null,
+    val profileId: String = com.pluxy.tv.ui.FamilyProfileSelection.selected(baseUrl)) {
 
     init { require(sessionId.matches(Regex("[A-Za-z0-9_-]{8,64}"))) }
 
@@ -36,7 +37,7 @@ class PluxyApi(val baseUrl: String, val sessionId: String = UUID.randomUUID().to
         if (!LanUrlPolicy.isSameServer(baseUrl, chain.request().url.toString())) {
             throw IOException("Requête hors du serveur Pluxy sélectionné")
         }
-        chain.proceed(chain.request().newBuilder().header("X-Pluxy-Session", sessionId).build())
+        chain.proceed(chain.request().newBuilder().header("X-Pluxy-Session", sessionId).header("X-Pluxy-Profile", profileId).build())
     }
 
     private val http = OkHttpClient.Builder()
@@ -139,6 +140,28 @@ class PluxyApi(val baseUrl: String, val sessionId: String = UUID.randomUUID().to
         }
 
     // --- Endpoints ------------------------------------------------------- //
+    suspend fun chapters(itemId: String): List<com.pluxy.tv.player.MediaChapter> = withContext(Dispatchers.IO) {
+        getJson<Array<com.pluxy.tv.player.MediaChapter>>("/api/library/items/${android.net.Uri.encode(itemId)}/chapters").toList()
+    }
+    suspend fun familyProfiles(): List<com.pluxy.tv.ui.FamilyProfile> = withContext(Dispatchers.IO) {
+        getJson<Array<com.pluxy.tv.ui.FamilyProfile>>("/api/profiles").toList()
+    }
+    data class MetadataMatch(val id: Int, val title: String, val year: String = "")
+    suspend fun searchMatches(itemId: String, query: String): List<MetadataMatch> = withContext(Dispatchers.IO) {
+        getJson<Array<MetadataMatch>>("/api/library/items/${android.net.Uri.encode(itemId)}/matches?q=${java.net.URLEncoder.encode(query, "UTF-8")}").toList()
+    }
+    suspend fun chooseMatch(itemId: String, tmdbId: Int) = withContext(Dispatchers.IO) {
+        val body = org.json.JSONObject().put("tmdb_id", tmdbId).toString().toRequestBody(jsonMedia)
+        http.newCall(Request.Builder().url("$baseUrl/api/library/items/${android.net.Uri.encode(itemId)}/match").post(body).build())
+            .awaitResult { it.bodyOrThrow(); Unit }
+    }
+    suspend fun createFamilyProfile(name: String): com.pluxy.tv.ui.FamilyProfile = withContext(Dispatchers.IO) {
+        val body = org.json.JSONObject().put("name", name).toString().toRequestBody(jsonMedia)
+        http.newCall(Request.Builder().url("$baseUrl/api/profiles").post(body).build()).awaitResult { response ->
+            moshi.adapter(com.pluxy.tv.ui.FamilyProfile::class.java).fromJson(response.bodyOrThrow())
+                ?: throw ApiException(response.code, "Profil non enregistré")
+        }
+    }
     suspend fun listItems(query: LibraryRequest = LibraryRequest()): List<MediaItem> = withContext(Dispatchers.IO) {
         repeat(2) { attempt ->
             try {

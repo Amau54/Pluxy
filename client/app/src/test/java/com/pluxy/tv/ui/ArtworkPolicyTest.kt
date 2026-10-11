@@ -5,6 +5,17 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ArtworkPolicyTest {
+    @Test fun `films panoramiques gardent la resolution de leur source`() {
+        assertEquals("4K", ArtworkPolicy.resolutionLabel(3840, 1608))
+        assertEquals("4K", ArtworkPolicy.resolutionLabel(3836, 1604))
+        assertEquals("1080P", ArtworkPolicy.resolutionLabel(1920, 800))
+        assertEquals("1080P", ArtworkPolicy.resolutionLabel(1916, 804))
+        assertEquals("1440P", ArtworkPolicy.resolutionLabel(2560, 1080))
+        assertEquals("720P", ArtworkPolicy.resolutionLabel(1280, 536))
+        assertEquals("4K", ArtworkPolicy.resolutionLabel(1608, 2160))
+        assertEquals(null, ArtworkPolicy.resolutionLabel(null, null))
+    }
+
     @Test
     fun `poster local puis tmdb precedent la capture paysage`() {
         val plan = ArtworkPolicy.plan(

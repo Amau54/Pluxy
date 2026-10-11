@@ -10,7 +10,7 @@ from typing import Callable
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 
-from .api import routes_library, routes_server, routes_settings, routes_stream
+from .api import routes_library, routes_server, routes_settings, routes_stream, routes_profiles
 from . import __version__
 from .state import AppState
 from .security import is_lan_address, is_loopback_request, require_local_admin, trusted_host, validate_browser_origin
@@ -147,6 +147,7 @@ async def trusted_lan_only(request: Request, call_next):
 app.include_router(routes_settings.router)
 app.include_router(routes_library.router)
 app.include_router(routes_stream.router)
+app.include_router(routes_profiles.router)
 app.include_router(routes_server.router)
 
 

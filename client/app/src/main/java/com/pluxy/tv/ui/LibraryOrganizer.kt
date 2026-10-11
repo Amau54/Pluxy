@@ -22,6 +22,16 @@ object LibraryOrganizer {
     fun displayTitle(item: MediaItem): String = if (item.kind == "movie")
         item.metadataTitle?.trim()?.takeIf { it.isNotEmpty() } ?: item.title else item.title
 
+    fun playbackTitle(item: MediaItem): String = when (item.kind) {
+        "movie" -> item.metadataTitle?.trim()?.takeIf { it.isNotEmpty() } ?: item.title
+        "series" -> listOfNotNull(
+            item.metadataTitle?.trim()?.takeIf { it.isNotEmpty() } ?: SeriesIdentity.displayName(item),
+            item.episode?.let { episodeCode(item) },
+            cleanEpisodeTitle(item, 0).takeUnless { item.episode != null && it == "Épisode ${item.episode}" },
+        ).filter { it.isNotBlank() }.joinToString(" · ")
+        else -> item.title
+    }
+
     /** Kotlin's sortedBy evaluates its selector for each comparison. Prepare expensive
      * Unicode keys once while retaining the stable order of equal normalized values. */
     internal fun <T> sortedBySearchKey(values: Iterable<T>, text: (T) -> String): List<T> =
@@ -59,14 +69,12 @@ object LibraryOrganizer {
     )
 
     fun resolution(item: MediaItem): String? {
-        val width = item.width?.coerceAtLeast(0) ?: 0
-        val height = item.height?.coerceAtLeast(0) ?: 0
-        return when {
-            width >= 3840 || height >= 2160 -> "4k"
-            width >= 1920 || height >= 1080 -> "1080p"
-            width >= 1280 || height >= 720 -> "720p"
-            width > 0 || height > 0 -> "sd"
-            else -> null
+        return when (ArtworkPolicy.resolutionLabel(item.width, item.height)) {
+            "4K" -> "4k"
+            "1440P", "1080P" -> "1080p"
+            "720P" -> "720p"
+            null -> null
+            else -> "sd"
         }
     }
 

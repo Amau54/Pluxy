@@ -3,11 +3,16 @@ from __future__ import annotations
 
 from typing import Literal
 
+import httpx
+from pydantic import BaseModel, Field
+
 from fastapi import APIRouter, HTTPException, Request, Query
 from fastapi.responses import FileResponse, Response
 
+from ..profiles import reader_watch, reader_catalogue
 from ..models import MediaInfo, MediaItem, MovieMetadata
 from ..probe import probe
+from ..chapters import read_chapters
 from ..state import AppState, get_state
 from ..security import is_loopback_request, require_local_admin
 from ..thumbnails import ThumbnailBusy
@@ -16,13 +21,13 @@ from ..catalogue import Catalogue, Query as CatalogueQuery, public_item
 router = APIRouter(prefix="/api/library", tags=["library"])
 
 
-def _enrich(item: MediaItem, st: AppState) -> MediaItem:
+def _enrich(item: MediaItem, st: AppState, request: Request | None = None) -> MediaItem:
     """Copie publique enrichie : poster/année depuis le cache + chemin disque MASQUÉ.
 
     On ne renvoie jamais le chemin absolu réel au client (fuite d'info sur le
     serveur). On travaille sur une COPIE pour ne pas muter l'objet indexé.
     """
-    return public_item(item, st.metadata.cached(item.id), st.watch.get(item.id))
+    return public_item(item, st.metadata.cached(item.id), (reader_watch(st, request) if request else st.watch).get(item.id))
 
 
 Kind = Literal["all", "video", "movie", "series", "clip", "photo", "audio"]
@@ -57,7 +62,7 @@ def scan_status(request: Request) -> dict:
 @router.get("/items", response_model=list[MediaItem])
 def items(request: Request) -> list[MediaItem]:
     st = get_state(request)
-    return _catalogue(st).page(CatalogueQuery(), 0, 10_000)[0]
+    return reader_catalogue(st, request).page(CatalogueQuery(), 0, 10_000)[0]
 
 
 @router.get("/items/page")
@@ -79,7 +84,7 @@ def items_page(request: Request, limit: int = Query(default=500, ge=1, le=500),
     if any(len(value) > 128 for value in genre):
         raise HTTPException(422, "Genre trop long")
     try:
-        values, total, current = _catalogue(st).page(
+        values, total, current = reader_catalogue(st, request).page(
             CatalogueQuery(kind, q, watched, tuple(genre), year, duration_max_minutes,
                            resolution, hdr_only, sort, descending, title_prefix, grouped, group_id), offset, limit, revision)
     except ValueError as error:
@@ -90,12 +95,12 @@ def items_page(request: Request, limit: int = Query(default=500, ge=1, le=500),
 
 @router.get("/facets")
 def facets(request: Request, kind: Kind = "all") -> dict:
-    return _catalogue(get_state(request)).facets(kind)
+    return reader_catalogue(get_state(request), request).facets(kind)
 
 
 @router.get("/home")
 def home(request: Request) -> dict:
-    return _catalogue(get_state(request)).home()
+    return reader_catalogue(get_state(request), request).home()
 
 
 @router.get("/items/{item_id}", response_model=MediaItem)
@@ -104,7 +109,7 @@ def item(item_id: str, request: Request) -> MediaItem:
     it = st.library.get(item_id)
     if not it:
         raise HTTPException(404, "Média introuvable")
-    return _enrich(it, st)
+    return _enrich(it, st, request)
 
 
 @router.get("/items/{item_id}/thumbnail")
@@ -157,6 +162,17 @@ def item_probe(item_id: str, request: Request) -> MediaInfo:
     return probe(st.cfgm.cfg.ffmpeg.ffprobe_path, it.path)
 
 
+@router.get("/items/{item_id}/chapters")
+def item_chapters(item_id: str, request: Request):
+    st = get_state(request)
+    item = st.library.get(item_id)
+    if not item:
+        raise HTTPException(404, "Média introuvable")
+    if item.kind not in ("movie", "series", "video"):
+        return []
+    return read_chapters(st.cfgm.cfg.ffmpeg.ffprobe_path, item.path)
+
+
 @router.get("/items/{item_id}/metadata", response_model=MovieMetadata)
 def item_metadata(item_id: str, request: Request, refresh: bool = False) -> MovieMetadata:
     """Métadonnées enrichies (TMDB). `?refresh=true` force une nouvelle résolution."""
@@ -174,3 +190,42 @@ def refresh_metadata(request: Request) -> dict:
     st = get_state(request)
     started = st.enrich_library_async(force=True)
     return {"status": "started" if started else "already_running"}
+
+
+class MatchBody(BaseModel):
+    tmdb_id: int = Field(ge=1, le=2_147_483_647)
+
+
+def _match_item(st, item_id):
+    value = st.library.get(item_id)
+    if not value:
+        raise HTTPException(404, "Média introuvable")
+    if value.kind not in {"movie", "series"}:
+        raise HTTPException(422, "Les correspondances concernent les films et séries.")
+    return value
+
+
+@router.get("/items/{item_id}/matches")
+def search_matches(item_id: str, request: Request, q: str = Query(min_length=1, max_length=160)):
+    st = get_state(request)
+    value = _match_item(st, item_id)
+    try:
+        return st.metadata.search_matches(value, q.strip())
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
+    except httpx.HTTPError as error:
+        raise HTTPException(503, "TMDB est indisponible. Vérifiez sa configuration et réessayez.") from error
+
+
+@router.post("/items/{item_id}/match", response_model=MovieMetadata)
+def choose_match(item_id: str, body: MatchBody, request: Request):
+    st = get_state(request)
+    value = _match_item(st, item_id)
+    related = [item for item in st.library.all() if value.kind == "series" and item.kind == "series" and
+               item.series_key == value.series_key] if value.kind == "series" and value.series_key else [value]
+    try:
+        return st.metadata.choose_match(value, body.tmdb_id, related)
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
+    except httpx.HTTPError as error:
+        raise HTTPException(503, "Cette correspondance TMDB est indisponible. Réessayez.") from error

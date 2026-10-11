@@ -2,6 +2,7 @@ package com.pluxy.tv.player
 
 import com.pluxy.tv.ui.ThemedActivity
 import com.pluxy.tv.ui.CompactChoiceMenu
+import com.pluxy.tv.ui.LibraryOrganizer
 import android.content.Context
 import android.app.Dialog
 import android.content.Intent
@@ -128,6 +129,7 @@ class PlayerActivity : ThemedActivity() {
     private lateinit var item: PluxyItem
     private val tvProfileStore by lazy { TvProfileStore(this) }
     private var forceDirectForLaunch = false
+    private var strategyOverride: PlaybackStrategy? = null
     private var audioFallbackLevel = 0
     private var failedAudioCodec: String? = null
     private var audioAdaptationPending = false
@@ -249,6 +251,7 @@ class PlayerActivity : ThemedActivity() {
                 updatePlayPauseButton()
                 updateMediaSessionPlaybackState()
                 maybeRecoverQuality()
+                updateSkipSegment()
             }
             handler.postDelayed(this, 1_000)
         }
@@ -267,6 +270,7 @@ class PlayerActivity : ThemedActivity() {
                 .withEndAction {
                     if (controlsOverlay.alpha == 0f) {
                         controlsOverlay.visibility = View.GONE
+                        updateSubtitleClearance()
                         playerView.requestFocus()
                     }
                 }
@@ -536,7 +540,7 @@ class PlayerActivity : ThemedActivity() {
             // Some HDMI-CEC bridges report a constant/zero KeyEvent.eventTime.
             eventTimeMs = SystemClock.elapsedRealtime(),
             state = TvPlaybackKeyRouter.State(
-                controlsVisible = controlsOverlay.visibility == View.VISIBLE,
+                controlsVisible = controlsOverlay.visibility == View.VISIBLE || findViewById<View>(R.id.skipSegment).hasFocus(),
                 seekActive = isSeeking || timelineScrubbing,
                 focus = playbackFocus(),
             ),
@@ -554,6 +558,10 @@ class PlayerActivity : ThemedActivity() {
             playPauseButton.isPressed = phase == TvPlaybackKeyRouter.Phase.DOWN
         }
         decision.commands.forEach(::executeRemoteCommand)
+        if (key == TvPlaybackKeyRouter.Key.UP && phase == TvPlaybackKeyRouter.Phase.DOWN &&
+            TvPlaybackKeyRouter.Command.ShowControls in decision.commands) {
+            findViewById<View>(R.id.skipSegment).takeIf { it.visibility == View.VISIBLE }?.requestFocus()
+        }
         return true
     }
 
@@ -590,7 +598,7 @@ class PlayerActivity : ThemedActivity() {
 
     private fun executeRemoteCommand(command: TvPlaybackKeyRouter.Command) {
         when (command) {
-            TvPlaybackKeyRouter.Command.ShowControls -> showControls(focusPlayPause = true)
+            TvPlaybackKeyRouter.Command.ShowControls -> showControls(focusPlayPause = true, fromRemote = true)
             TvPlaybackKeyRouter.Command.ToggleOrReplay -> togglePlayPause()
             TvPlaybackKeyRouter.Command.PlayOrReplay -> playOrReplay()
             TvPlaybackKeyRouter.Command.Pause -> pausePlayback()
@@ -643,6 +651,7 @@ class PlayerActivity : ThemedActivity() {
         subtitleChoice = restored?.subtitleChoice
         aspectIdx = (restored?.aspectIndex ?: 0).coerceIn(aspectModes.indices)
         forceDirectForLaunch = restored?.forceDirect ?: intent.getBooleanExtra(EXTRA_FORCE_DIRECT, false)
+        strategyOverride = restored?.strategyOverride?.let(PlaybackStrategy::fromKey)
         audioFallbackLevel = restored?.audioFallbackLevel?.takeIf { it > 0 }
             ?: if (restored?.compatibleAudio == true) 2 else 0
         failedAudioCodec = restored?.failedAudioCodec
@@ -679,6 +688,10 @@ class PlayerActivity : ThemedActivity() {
         seekDeltaView = findViewById(R.id.seekDelta)
         seekTargetView= findViewById(R.id.seekTarget)
         setupModernControls()
+        findViewById<Button>(R.id.skipSegment).setOnClickListener {
+            activeSkipSegment?.let { goToAbsolute(it.endMs); updateSkipSegment() }
+        }
+        loadSkipChapters()
         playerView.resizeMode = aspectModes[aspectIdx].first
         setupBackNavigation()
         setupMediaSession()
@@ -694,6 +707,7 @@ class PlayerActivity : ThemedActivity() {
                 item, api.baseUrl, reliablePositionMs(), playIntent, playbackSpeed,
                 subtitlesDisabled, audioChoice, subtitleChoice, aspectIdx, forceDirectForLaunch,
                 audioFallbackLevel > 0, audioFallbackLevel, failedAudioCodec,
+                strategyOverride?.key,
             )))
         }
         super.onSaveInstanceState(outState)
@@ -706,6 +720,7 @@ class PlayerActivity : ThemedActivity() {
         } ?: return
         setIntent(newIntent)
         forceDirectForLaunch = newIntent.getBooleanExtra(EXTRA_FORCE_DIRECT, false)
+        strategyOverride = null
         playNextEpisode(next, markPreviousCompleted = false,
             serverUrl = PluxyApplication.serverBaseUrl(this))
     }
@@ -714,11 +729,11 @@ class PlayerActivity : ThemedActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             for (id in listOf(R.id.btnPlayPause, R.id.btnRewind, R.id.btnForward, R.id.btnRestart,
                 R.id.btnTracks, R.id.btnSubtitles, R.id.btnGear, R.id.btnExitPlayback,
-                R.id.btnRetryPlayback, R.id.btnAudioOutputError, R.id.btnLeavePlayback)) {
+                R.id.btnRetryPlayback, R.id.btnAudioOutputError, R.id.btnLeavePlayback, R.id.skipSegment)) {
                 findViewById<View>(id).defaultFocusHighlightEnabled = false
             }
         }
-        mediaTitleView.text = item.title
+        mediaTitleView.text = LibraryOrganizer.playbackTitle(item)
         timeDurationView.text = fmtPlayerTime(durationMs)
         timeline.setDuration(durationMs.coerceAtLeast(0L))
         setupResponsiveControls()
@@ -733,16 +748,15 @@ class PlayerActivity : ThemedActivity() {
             showControls()
         }
         findViewById<ImageButton>(R.id.btnRestart).apply {
-            androidx.appcompat.widget.TooltipCompat.setTooltipText(this, getString(R.string.player_restart))
             setOnClickListener {
                 player?.let(::replayFromBeginning)
                 showControls(focusPlayPause = true)
             }
         }
-        findViewById<Button>(R.id.btnTracks).setOnClickListener {
+        findViewById<PlayerIconButton>(R.id.btnTracks).setOnClickListener {
             pickTrack(C.TRACK_TYPE_AUDIO, getString(R.string.player_audio_action))
         }
-        findViewById<Button>(R.id.btnSubtitles).setOnClickListener {
+        findViewById<PlayerIconButton>(R.id.btnSubtitles).setOnClickListener {
             pickSubtitles()
         }
         findViewById<ImageButton>(R.id.btnGear).setOnClickListener {
@@ -793,25 +807,10 @@ class PlayerActivity : ThemedActivity() {
         findViewById<ImageButton>(R.id.btnExitPlayback).apply {
             visibility = if (television) View.GONE else View.VISIBLE
             setOnClickListener { finish() }
-            androidx.appcompat.widget.TooltipCompat.setTooltipText(this, getString(R.string.player_leave_action))
         }
         setupImmersivePlayback()
         controlsOverlay.viewTreeObserver.addOnGlobalFocusChangeListener { _, focused ->
-            findViewById<TextView>(R.id.playerActionHint).apply {
-                val ids = setOf(R.id.btnRestart, R.id.btnRewind, R.id.btnPlayPause,
-                    R.id.btnForward, R.id.btnTracks, R.id.btnSubtitles, R.id.btnGear)
-                text = if (focused?.id in ids) focused?.contentDescription ?: "" else ""
-                visibility = if (text.isNotEmpty()) View.VISIBLE else View.INVISIBLE
-            }
-        }
-        for ((id, description) in listOf(
-            R.id.btnRewind to R.string.player_rewind_description,
-            R.id.btnForward to R.string.player_forward_description,
-            R.id.btnTracks to R.string.player_audio_action,
-            R.id.btnSubtitles to R.string.player_subtitles_action,
-            R.id.btnGear to R.string.player_more,
-        )) {
-            androidx.appcompat.widget.TooltipCompat.setTooltipText(findViewById(id), getString(description))
+            updatePlayerActionHint(focused)
         }
     }
 
@@ -877,6 +876,13 @@ class PlayerActivity : ThemedActivity() {
             controlsOverlay.paddingRight - edge * 2
         val compact = availableWidth / density >= 400f
         val scroll = findViewById<ScrollView>(R.id.playerPanelScroll)
+        val hintsEnabled = PluxyApplication.playerActionHints(this)
+        val edgeGap = resources.getDimensionPixelSize(R.dimen.player_edge_gap)
+        val requestedMargin = edgeGap + if (hintsEnabled) (24 * density).toInt() else 0
+        val scrollParams = scroll.layoutParams as FrameLayout.LayoutParams
+        if (scrollParams.bottomMargin != requestedMargin) {
+            scroll.layoutParams = scrollParams.apply { bottomMargin = requestedMargin }
+        }
         val deckWidth = minOf(availableWidth, resources.getDimensionPixelSize(R.dimen.player_deck_max_width))
             .coerceAtLeast((48 * density).toInt())
         if (scroll.layoutParams.width != deckWidth) {
@@ -902,25 +908,6 @@ class PlayerActivity : ThemedActivity() {
                 width = if (compact) ViewGroup.LayoutParams.WRAP_CONTENT else ViewGroup.LayoutParams.MATCH_PARENT
                 weight = 0f
                 marginStart = if (compact) (16 * density).toInt() else 0
-            }
-            for ((id, label, icon) in listOf(
-                Triple(R.id.btnTracks, R.string.player_audio_action, R.drawable.ic_player_audio),
-                Triple(R.id.btnSubtitles, R.string.player_subtitles_action, R.drawable.ic_player_subtitles),
-            )) {
-                findViewById<Button>(id).apply {
-                    text = if (compact) "" else getString(label)
-                    // Sans libellé, l'icône se centre dans le bouton, indépendamment
-                    // des métriques de texte propres au fabricant de la TV.
-                    setCompoundDrawablesRelativeWithIntrinsicBounds(if (compact) 0 else icon, 0, 0, 0)
-                    foreground = if (compact) getDrawable(icon) else null
-                    foregroundGravity = Gravity.CENTER
-                    compoundDrawablePadding = if (compact) 0 else (6 * density).toInt()
-                    val horizontalPadding = if (compact) 0 else (10 * density).toInt()
-                    setPaddingRelative(horizontalPadding, paddingTop, horizontalPadding, paddingBottom)
-                    layoutParams = layoutParams.apply {
-                        width = if (compact) (48 * density).toInt() else ViewGroup.LayoutParams.WRAP_CONTENT
-                    }
-                }
             }
             val restart = findViewById<View>(R.id.btnRestart)
             val rewind = findViewById<View>(R.id.btnRewind)
@@ -956,7 +943,7 @@ class PlayerActivity : ThemedActivity() {
         val margin = (scroll.layoutParams as FrameLayout.LayoutParams).bottomMargin
         val hint = findViewById<View>(R.id.playerActionHint)
         val hintParams = hint.layoutParams as FrameLayout.LayoutParams
-        val hintMargin = margin + panel.measuredHeight + (4 * density).toInt()
+        val hintMargin = edgeGap
         if (hintParams.bottomMargin != hintMargin) {
             hint.layoutParams = hintParams.apply { bottomMargin = hintMargin }
         }
@@ -966,6 +953,7 @@ class PlayerActivity : ThemedActivity() {
         if (height > 0 && scroll.layoutParams.height != height) {
             scroll.layoutParams = scroll.layoutParams.apply { this.height = height }
         }
+        updateSubtitleClearance()
     }
 
     private fun setupBackNavigation() {
@@ -978,7 +966,7 @@ class PlayerActivity : ThemedActivity() {
                     repeatCount = 0,
                     eventTimeMs = SystemClock.elapsedRealtime(),
                     state = TvPlaybackKeyRouter.State(
-                        controlsVisible = controlsOverlay.visibility == View.VISIBLE,
+                        controlsVisible = controlsOverlay.visibility == View.VISIBLE || findViewById<View>(R.id.skipSegment).hasFocus(),
                         seekActive = isSeeking || timelineScrubbing,
                         focus = playbackFocus(),
                     ),
@@ -1000,19 +988,22 @@ class PlayerActivity : ThemedActivity() {
         timePositionView.text = fmtPlayerTime(target)
     }
 
-    private fun showControls(focusPlayPause: Boolean = false) {
+    private fun showControls(focusPlayPause: Boolean = false, fromRemote: Boolean = false) {
         if (!::controlsOverlay.isInitialized) return
         val wasHidden = controlsOverlay.visibility != View.VISIBLE
         controlsOverlay.animate().cancel()
         if (wasHidden) controlsOverlay.alpha = 0f
         controlsOverlay.visibility = View.VISIBLE
+        controlsOverlay.post { updateResponsiveControls() }
         controlsOverlay.animate().alpha(1f).setDuration(if (wasHidden) 170L else 80L).start()
         updateControlsMetadata()
         updateTimeline(reliablePositionMs())
         updatePlayPauseButton()
+        updatePlayerActionHint(currentFocus)
         scheduleControlsHide()
         if (focusPlayPause) {
-            if (terminalPlaybackError) retryPlaybackButton.requestFocus() else playPauseButton.requestFocus()
+            val target = if (terminalPlaybackError) retryPlaybackButton else playPauseButton
+            if (fromRemote) target.requestFocusFromTouch() else target.requestFocus()
         }
     }
 
@@ -1022,6 +1013,7 @@ class PlayerActivity : ThemedActivity() {
         controlsOverlay.animate().cancel()
         controlsOverlay.alpha = 0f
         controlsOverlay.visibility = View.GONE
+        updateSubtitleClearance()
         playerView.requestFocus()
     }
 
@@ -1101,13 +1093,24 @@ class PlayerActivity : ThemedActivity() {
         val p = player
         val ended = p?.playbackState == Player.STATE_ENDED
         val playing = p?.playWhenReady == true && !ended
-        playPauseButton.setImageResource(
-            if (playing) R.drawable.ic_player_pause else R.drawable.ic_player_play,
+        (playPauseButton as PlayerIconButton).setIcon(
+            if (playing) PlayerIconButton.Icon.PAUSE else PlayerIconButton.Icon.PLAY,
         )
         playPauseButton.contentDescription = when {
             ended -> "Rejouer"
             playing -> "Pause"
             else -> "Lecture"
+        }
+        if (playPauseButton.hasFocus()) updatePlayerActionHint(playPauseButton)
+    }
+
+    private fun updatePlayerActionHint(focused: View?) {
+        val ids = setOf(R.id.btnRestart, R.id.btnRewind, R.id.btnPlayPause,
+            R.id.btnForward, R.id.btnTracks, R.id.btnSubtitles, R.id.btnGear)
+        findViewById<TextView>(R.id.playerActionHint).apply {
+            text = if (PluxyApplication.playerActionHints(this@PlayerActivity) && focused?.id in ids)
+                focused?.contentDescription ?: "" else ""
+            visibility = if (text.isNotEmpty()) View.VISIBLE else View.GONE
         }
     }
 
@@ -1126,7 +1129,7 @@ class PlayerActivity : ThemedActivity() {
 
     private fun updateControlsMetadata() {
         if (!::modeTextView.isInitialized) return
-        mediaTitleView.text = item.title
+        mediaTitleView.text = LibraryOrganizer.playbackTitle(item)
         modeTextView.text = if (modeLabel.isBlank()) {
             activeStrategy.title
         } else {
@@ -1173,7 +1176,7 @@ class PlayerActivity : ThemedActivity() {
         if (!::item.isInitialized) return
         mediaSession?.setMetadata(
             MediaMetadata.Builder()
-                .putString(MediaMetadata.METADATA_KEY_TITLE, item.title)
+                .putString(MediaMetadata.METADATA_KEY_TITLE, LibraryOrganizer.playbackTitle(item))
                 .putLong(MediaMetadata.METADATA_KEY_DURATION, durationMs.coerceAtLeast(0L))
                 .build(),
         )
@@ -1222,7 +1225,7 @@ class PlayerActivity : ThemedActivity() {
         else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     }
 
-    private fun showTerminalPlaybackError(message: String) {
+    private fun showTerminalPlaybackError(message: String, videoFailure: Boolean = false, audioFailure: Boolean = false) {
         savedPositionMs = reliablePositionMs().coerceAtLeast(0L)
         lastGoodPositionMs = savedPositionMs
         savedPlayWhenReady = player?.playWhenReady ?: savedPlayWhenReady
@@ -1235,6 +1238,31 @@ class PlayerActivity : ThemedActivity() {
         setLoadingVisible(false)
         setStatus("")
         playbackErrorMessage.text = message
+        val action = findViewById<Button>(R.id.btnAudioOutputError)
+        val offerCompatibility = videoFailure && PlaybackFailurePolicy.canOfferVideoCompatibility(
+            transcodingAvailable,
+            AudioOutputMode.fromKey(PluxyApplication.audioOutputMode(this)) == AudioOutputMode.PASSTHROUGH,
+        )
+        action.visibility = if (offerCompatibility || videoFailure || audioFailure) View.VISIBLE else View.GONE
+        action.text = when {
+            offerCompatibility -> "Essayer en H.264 · 1080p"
+            videoFailure -> "Ouvrir dans un autre lecteur"
+            else -> getString(R.string.player_audio_output_action)
+        }
+        action.setOnClickListener {
+            when {
+                offerCompatibility -> {
+                    forceDirectForLaunch = false
+                    strategyOverride = PlaybackStrategy.COMPATIBILITY
+                    reprepareForStrategy(PlaybackStrategy.COMPATIBILITY)
+                }
+                videoFailure -> openExternalPlayer()
+                else -> pickAudioOutput(it)
+            }
+        }
+        retryPlaybackButton.nextFocusDownId = if (action.visibility == View.VISIBLE) action.id else R.id.btnLeavePlayback
+        findViewById<View>(R.id.btnLeavePlayback).nextFocusUpId =
+            if (action.visibility == View.VISIBLE) action.id else R.id.btnRetryPlayback
         playbackErrorPanel.visibility = View.VISIBLE
         findViewById<View>(R.id.playerBottomPanel).visibility = View.INVISIBLE
         showControls()
@@ -1296,6 +1324,7 @@ class PlayerActivity : ThemedActivity() {
             title = title,
             choices = choices,
             selectedValue = selectedValue,
+            compact = true,
             onSelect = { value ->
                 if (generation == playerChoiceMenuGeneration && activityStarted && !isFinishing && !isDestroyed) {
                     onSelect(value)
@@ -1315,9 +1344,92 @@ class PlayerActivity : ThemedActivity() {
         }
     }
 
-    /** Menu secondaire volontairement court : aucune option technique dans le film. */
+    private val skipDurationMs get() = durationMs.takeIf { it > 0 }
+        ?: ((player?.duration?.takeIf { it > 0 } ?: 0) + streamPositionOffsetMs)
+    private val skipStore by lazy { SkipMarkerStore(this) }
+    private var skipChapters: List<MediaChapter> = emptyList()
+    private var skipChaptersJob: Job? = null
+    private var activeSkipSegment: SkipSegment? = null
+
+    private fun loadSkipChapters(server: String = api.baseUrl) {
+        skipChaptersJob?.cancel()
+        skipChapters = emptyList()
+        activeSkipSegment = null
+        findViewById<View>(R.id.skipSegment).visibility = View.GONE
+        val ownerId = item.id
+        skipChaptersJob = lifecycleScope.launch {
+            val chapterApi = PluxyApi(server)
+            try {
+                val chapters = kotlinx.coroutines.withTimeout(10_000) { chapterApi.chapters(ownerId) }
+                if (item.id == ownerId && api.baseUrl == server) { skipChapters = chapters; updateSkipSegment() }
+            } catch (e: kotlinx.coroutines.TimeoutCancellationException) { /* Chapitres facultatifs. */ }
+            catch (e: CancellationException) { throw e }
+            catch (_: Exception) { /* Les anciens serveurs restent compatibles avec les repères locaux. */ }
+            finally { chapterApi.close() }
+        }
+    }
+
+    private fun updateSkipSegment() {
+        if (!::item.isInitialized || !::api.isInitialized) return
+        val button = findViewById<Button>(R.id.skipSegment)
+        val segments = SkipSegments.resolve(SkipSegments.detected(skipChapters, skipDurationMs),
+            skipStore.own(api.baseUrl, item).segments(skipDurationMs),
+            skipStore.effective(api.baseUrl, item).segments(skipDurationMs))
+        activeSkipSegment = if (player?.playbackState == Player.STATE_READY && !terminalPlaybackError &&
+            !isSeeking && !timelineScrubbing && !playerChoiceMenuShowing && nextEpisodeDialog?.isShowing != true)
+            SkipSegments.active(segments, reliablePositionMs()) else null
+        val visible = activeSkipSegment != null
+        if (!visible && button.hasFocus()) {
+            if (controlsOverlay.visibility == View.VISIBLE) playPauseButton.requestFocus() else playerView.requestFocus()
+        }
+        button.visibility = if (visible) View.VISIBLE else View.GONE
+        button.text = if (activeSkipSegment?.kind == "intro") "Passer l’intro" else "Passer le générique"
+        timeline.nextFocusUpId = if (visible) R.id.skipSegment else R.id.btnExitPlayback
+    }
+
+    private fun editSkipMarkers() {
+        val ownerId = item.id
+        val ownerServer = api.baseUrl
+        val at = reliablePositionMs().coerceAtLeast(0)
+        val own = skipStore.own(api.baseUrl, item)
+        val effective = skipStore.effective(api.baseUrl, item)
+        fun save(markers: SkipMarkers) {
+            try { skipStore.save(api.baseUrl, item, markers); updateSkipSegment()
+                Toast.makeText(this, "Repère enregistré", Toast.LENGTH_SHORT).show()
+            } catch (_: Exception) { Toast.makeText(this, "Impossible d’enregistrer ce repère", Toast.LENGTH_LONG).show() }
+        }
+        val actions = mutableListOf<Pair<String, () -> Unit>>(
+            "Début de l’intro ici" to { save(own.copy(introStartMs = at, introEndMs = null)) },
+            "Fin de l’intro ici" to {
+                if (at > own.introStartMs && at < skipDurationMs) save(own.copy(introEndMs = at))
+                else Toast.makeText(this, "La fin doit suivre le début de l’intro", Toast.LENGTH_LONG).show()
+            },
+            "Début du générique ici" to { if (at < skipDurationMs) save(own.copy(creditsStartMs = at, creditsEndMs = null)) },
+            "Fin du générique ici" to {
+                if (own.creditsStartMs != null && at > own.creditsStartMs && at <= skipDurationMs) save(own.copy(creditsEndMs = at))
+                else Toast.makeText(this, "Marquez d’abord le début du générique", Toast.LENGTH_LONG).show()
+            },
+        )
+        if (skipStore.canShare(item) && effective.segments(skipDurationMs).any { it.kind == "intro" })
+            actions += "Réutiliser l’intro pour cette saison" to {
+                runCatching { skipStore.share(api.baseUrl, item, effective) }
+                    .onSuccess { Toast.makeText(this, "Intro mémorisée pour cette saison", Toast.LENGTH_SHORT).show() }
+                    .onFailure { Toast.makeText(this, "Impossible d’enregistrer l’intro", Toast.LENGTH_LONG).show() }
+            }
+        actions += "Effacer les repères de ce média" to { runCatching { skipStore.clear(api.baseUrl, item) }; updateSkipSegment() }
+        if (skipStore.hasSeason(api.baseUrl, item)) actions += "Effacer l’intro de cette saison" to {
+            runCatching { skipStore.clearSeason(api.baseUrl, item) }; updateSkipSegment()
+        }
+        showPlayerChoices(findViewById(R.id.btnGear), "Repères à ${fmtPlayerTime(at)}",
+            actions.mapIndexed { index, action -> CompactChoiceMenu.Choice(action.first, index.toString()) }) { value ->
+            if (item.id != ownerId || api.baseUrl != ownerServer) return@showPlayerChoices
+            value.toIntOrNull()?.let { actions.getOrNull(it)?.second?.invoke() }
+        }
+    }
+
     private fun openMenu() {
         val entries = listOf(
+            "Intro et générique" to { editSkipMarkers() },
             "Vitesse" to { pickSpeed() },
             "Format de l’image" to { cycleAspect() },
             "Compatibilité de lecture" to { pickPlaybackStrategy() },
@@ -1341,7 +1453,7 @@ class PlayerActivity : ThemedActivity() {
         val directUrl = api.abs("/stream/direct/${item.id}")
         val intent = Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(Uri.parse(directUrl), "video/*")
-            putExtra(Intent.EXTRA_TITLE, item.title)
+            putExtra(Intent.EXTRA_TITLE, LibraryOrganizer.playbackTitle(item))
         }
         runCatching { startActivity(Intent.createChooser(intent, "Lire avec…")) }
             .onFailure {
@@ -1365,6 +1477,8 @@ class PlayerActivity : ThemedActivity() {
             val selected = choices.firstOrNull { it.key == value } ?: return@showPlayerChoices
             if (selected == activeStrategy) return@showPlayerChoices
             PluxyApplication.setPlaybackStrategy(this, selected.key)
+            forceDirectForLaunch = false
+            strategyOverride = null
             reprepareForStrategy(selected)
         }
     }
@@ -1424,7 +1538,7 @@ class PlayerActivity : ThemedActivity() {
         mediaSession?.isActive = true
         // Récupération du son si la sortie audio change (changement de source HDMI, ARC).
         runCatching { audioManager.registerAudioDeviceCallback(audioDeviceCallback, handler) }
-        val selected = if (forceDirectForLaunch) PlaybackStrategy.DIRECT
+        val selected = strategyOverride ?: if (forceDirectForLaunch) PlaybackStrategy.DIRECT
             else PlaybackStrategy.fromKey(PluxyApplication.playbackStrategy(this))
         // A previous onStop cleanup can finish late. A new owner prevents it from
         // deleting the resumed HLS stream, even when its DELETE was delayed.
@@ -1522,7 +1636,7 @@ class PlayerActivity : ThemedActivity() {
                     if (audioMode == AudioOutputMode.PASSTHROUGH &&
                         (decision.audioAction != "copy" || strategy == PlaybackStrategy.COMPATIBILITY)) {
                         showTerminalPlaybackError("Ce flux demande une conversion audio. Le passthrough forcé conserve le son original. " +
-                            "Choisissez une autre sortie audio ou le mode Vidéo originale.")
+                            "Choisissez une autre sortie audio ou le mode Vidéo originale.", audioFailure = true)
                         return@launch
                     }
                     if (strategy == PlaybackStrategy.DIRECT && !PlaybackPlanner.preservesOriginalVideo(decision)) {
@@ -1836,6 +1950,28 @@ class PlayerActivity : ThemedActivity() {
             setStyle(CaptionStyleCompat(Color.WHITE, Color.TRANSPARENT, Color.TRANSPARENT,
                 CaptionStyleCompat.EDGE_TYPE_OUTLINE, Color.BLACK, null))
         }
+        playerView.post { updateSubtitleClearance() }
+    }
+
+    private fun updateSubtitleClearance() {
+        val subtitles = playerView.subtitleView ?: return
+        if (subtitles.height <= 0) return
+        val controlsVisible = ::controlsOverlay.isInitialized && controlsOverlay.visibility == View.VISIBLE &&
+            findViewById<View>(R.id.playerBottomPanel).visibility == View.VISIBLE
+        val subtitlePosition = IntArray(2)
+        val panelPosition = IntArray(2)
+        subtitles.getLocationInWindow(subtitlePosition)
+        val panel = findViewById<View>(R.id.playerPanelScroll)
+        panel.getLocationInWindow(panelPosition)
+        val gap = (28 * resources.displayMetrics.density).toInt()
+        val clearance = if (controlsVisible && panel.height > 0)
+            (subtitlePosition[1] + subtitles.height - panelPosition[1] + gap)
+                .coerceIn(0, (subtitles.height * 0.45f).toInt()) else 0
+        if (subtitles.paddingBottom != clearance) {
+            subtitles.setPadding(subtitles.paddingLeft, subtitles.paddingTop, subtitles.paddingRight, clearance)
+        }
+        // La taille du texte reste stable quand la zone réservée aux commandes change.
+        subtitles.setFixedTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, subtitles.height * 0.058f)
     }
 
     // ----- Sélection de pistes ------------------------------------------- //
@@ -2047,7 +2183,7 @@ class PlayerActivity : ThemedActivity() {
                 if (tryAudioAdaptation(mime)) return
                 if (audioFallbackLevel >= 2 || !transcodingAvailable || AudioOutputMode.fromKey(PluxyApplication.audioOutputMode(this@PlayerActivity)) != AudioOutputMode.AUTO) {
                     showTerminalPlaybackError("La piste audio n'est pas prise en charge par cet appareil ou sa sortie HDMI. " +
-                        "Choisissez Automatique ou Audio compatible dans Sortie audio, ou essayez un autre lecteur.")
+                        "Choisissez Automatique ou Audio compatible dans Sortie audio, ou essayez un autre lecteur.", audioFailure = true)
                     return
                 }
             }
@@ -2176,7 +2312,7 @@ class PlayerActivity : ThemedActivity() {
             if (tryAudioAdaptation(rendererMime)) return
             if (rendererMime?.startsWith("audio/") == true) {
                 showTerminalPlaybackError("La lecture du son a échoué sur cet appareil ou sa sortie HDMI. " +
-                    "Changer la résolution vidéo ne corrige pas ce problème. Essayez un autre lecteur ou une autre piste audio.")
+                    "Changer la résolution vidéo ne corrige pas ce problème. Essayez un autre lecteur ou une autre piste audio.", audioFailure = true)
                 return
             }
             val httpError = generateSequence(error as Throwable) { it.cause }
@@ -2194,6 +2330,15 @@ class PlayerActivity : ThemedActivity() {
             if (attemptIdx + 1 < attempts.size) {
                 setStatus("${attempts[attemptIdx + 1].label} (repli)…")
                 loadAttempt(attemptIdx + 1, restorePos = reliablePositionMs())
+                return
+            }
+            if (PlaybackFailurePolicy.isVideoDecoderFailure(error.errorCode, rendererMime)) {
+                val format = listOfNotNull(item.videoCodec?.uppercase(),
+                    com.pluxy.tv.ui.ArtworkPolicy.resolutionLabel(item.width, item.height),
+                    "HDR".takeIf { item.isHdr }).joinToString(" · ")
+                showTerminalPlaybackError("Cet appareil ne parvient pas à décoder la vidéo ($format). " +
+                    "Le fichier original est conservé. Vous pouvez choisir une version compatible ou essayer un autre lecteur.",
+                    videoFailure = true)
                 return
             }
             // 2) Chaîne épuisée : on RECHARGE la tentative courante (pas un prepare()
@@ -2451,6 +2596,7 @@ class PlayerActivity : ThemedActivity() {
         ioScope.launch { previousApi.stopHls(previousId) }
 
         item = next
+        loadSkipChapters(serverUrl)
         audioFallbackLevel = 0
         failedAudioCodec = null
         intent.putExtra(EXTRA_ITEM, itemAdapter.toJson(next))
@@ -2477,7 +2623,7 @@ class PlayerActivity : ThemedActivity() {
         nextEpisodeHandled = false
         networkConstraintRecorded = false
         stableProfileRecorded = false
-        mediaTitleView.text = item.title
+        mediaTitleView.text = LibraryOrganizer.playbackTitle(item)
         timePositionView.text = fmtPlayerTime(0L)
         timeDurationView.text = fmtPlayerTime(durationMs)
         timeline.setDuration(durationMs.coerceAtLeast(0L))
@@ -2485,7 +2631,7 @@ class PlayerActivity : ThemedActivity() {
         updateMediaSessionMetadata()
         setLoadingVisible(true)
         setStatus("Préparation de l'épisode suivant…")
-        prepareAndPlay(if (forceDirectForLaunch) PlaybackStrategy.DIRECT
+        prepareAndPlay(strategyOverride ?: if (forceDirectForLaunch) PlaybackStrategy.DIRECT
             else PlaybackStrategy.fromKey(PluxyApplication.playbackStrategy(this)))
         prefetchNextEpisode()
     }

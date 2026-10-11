@@ -8,6 +8,21 @@ import java.io.IOException
 import java.util.concurrent.atomic.AtomicLong
 
 class CatalogueRepositoryTest {
+    @Test fun `profile switch isolates snapshots and server invalidation clears every profile`() = runBlocking {
+        var profile = "default"
+        val store = CatalogueStore(profile = { profile }, scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined))
+        val shared = store.load("http://server:8420") { listOf(media("shared")) }
+        profile = "a".repeat(32)
+        assertNull(store.cached("http://server:8420"))
+        val family = store.load("http://server:8420") { listOf(media("family")) }
+        assertNotSame(shared, family)
+        profile = "default"
+        assertSame(shared, store.cached("http://server:8420"))
+        store.invalidate("http://server:8420")
+        assertNull(store.cached("http://server:8420"))
+        profile = "a".repeat(32)
+        assertNull(store.cached("http://server:8420"))
+    }
     private fun store(clock: () -> Long = { 0L }) = CatalogueStore(
         clockMs = clock, scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined),
     )

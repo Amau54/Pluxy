@@ -11,6 +11,16 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TvPlaybackKeyRouterTest {
+    @Test fun `direction restores button focus after touch without seeking or toggling`() {
+        val surface = State(controlsVisible = true, seekActive = false, focus = Focus.PLAYBACK)
+        for (key in listOf(Key.UP, Key.DOWN)) {
+            val router = TvPlaybackKeyRouter()
+            assertDecision(router.route(key, Phase.DOWN, 0, 100L, surface), Command.ShowControls)
+            assertDecision(router.route(key, Phase.UP, 0, 150L, surface))
+        }
+        assertDecision(TvPlaybackKeyRouter().route(Key.CENTER, Phase.DOWN, 0, 100L, surface),
+            Command.ShowControls, Command.ToggleOrReplay)
+    }
     private val hidden = State(
         controlsVisible = false,
         seekActive = false,

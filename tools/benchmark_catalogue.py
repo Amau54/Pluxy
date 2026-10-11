@@ -58,8 +58,8 @@ def main():
     parser.add_argument("--iterations", type=int, default=100)
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
-    if not 100 <= args.items <= 10_000 or not 20 <= args.iterations <= 100_000:
-        parser.error("items : 100–10 000 ; iterations : 20–100 000")
+    if not 100 <= args.items <= 100_000 or not 20 <= args.iterations <= 100_000:
+        parser.error("items : 100–100 000 ; iterations : 20–100 000")
     result = benchmark(args.items, args.iterations)
     payload = json.dumps(result, ensure_ascii=False, indent=2)
     if args.output:

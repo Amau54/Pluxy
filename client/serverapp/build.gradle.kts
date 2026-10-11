@@ -16,6 +16,7 @@ android {
     }
     kotlinOptions { jvmTarget = "17" }
     lint { abortOnError = true; checkReleaseBuilds = true }
+    sourceSets.getByName("test").resources.srcDir(rootProject.file("../assets/contracts"))
 }
 
 dependencies {

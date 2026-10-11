@@ -532,7 +532,7 @@ private fun bindMediaCard(
     onQuickPlay: (MediaItem) -> Unit,
     forcedAspect: ArtworkPolicy.Aspect?,
 ) {
-    val displayTitle = LibraryOrganizer.displayTitle(media)
+    val displayTitle = LibraryOrganizer.playbackTitle(media)
     holder.title.text = displayTitle
     val details = contextualSubtitle?.takeIf { it.isNotBlank() } ?: if (media.kind == "photo" && environment.photoFolderInHeader) "" else mediaMeta(
         media,

@@ -94,7 +94,7 @@ class MetadataProvider:
                 values = {item_id: meta for item_id, meta in (self._catalogue or {}).items()
                           if item_ids is None or item_id in item_ids}
                 for path in self.meta_dir.glob("*.json"):
-                    if len(values) >= 10_000:
+                    if len(values) >= 100_000:
                         break
                     if path.stem in values or (item_ids is not None and path.stem not in item_ids):
                         continue
@@ -106,6 +106,43 @@ class MetadataProvider:
                 self._catalogue = values
                 self._catalogue_ids = item_ids
             return f"{self._epoch}-{self._revision}", self._catalogue
+
+    def search_matches(self, item: MediaItem, query: str) -> list[dict]:
+        cfg = self.cfgm.cfg.metadata
+        if not cfg.tmdb_api_key:
+            raise ValueError("Configurez une clé TMDB dans les options du serveur.")
+        media_type = "tv" if item.kind == "series" else "movie"
+        with tmdb_client(cfg.tmdb_api_key) as cli:
+            response = cli.get(f"{TMDB_API}/search/{media_type}", params={"query": query, "language": cfg.language, "include_adult": "false"})
+            response.raise_for_status()
+            results = response.json().get("results", [])[:20]
+        return [{"id": row["id"], "title": row.get("name") or row.get("title") or "Sans titre",
+                 "year": (row.get("first_air_date") or row.get("release_date") or "")[:4],
+                 "poster_url": f"{IMG}/w185{row['poster_path']}" if row.get("poster_path") else None} for row in results]
+
+    def choose_match(self, item: MediaItem, selected_id: int, related: list[MediaItem]) -> MovieMetadata:
+        cfg = self.cfgm.cfg.metadata
+        if not cfg.tmdb_api_key:
+            raise ValueError("Configurez une clé TMDB dans les options du serveur.")
+        if item.kind == "series":
+            meta = self._fetch_tmdb_tv(item.series_name or item.title, cfg.tmdb_api_key, cfg.language, selected_id=selected_id)
+        else:
+            meta = self._fetch_tmdb(item.title, item.year, cfg.tmdb_api_key, cfg.language, selected_id=selected_id)
+        if not meta or not meta.matched:
+            raise ValueError("Cette correspondance est indisponible.")
+        from .paths import atomic_write_text
+        for value in related:
+            with self._lock:
+                lock = self._key_locks.setdefault(value.id, threading.Lock())
+            with lock:
+                record = {"metadata": meta.model_dump(), "manual": True, "manual_kind": value.kind}
+                atomic_write_text(self._cache_path(value.id), json.dumps(record, ensure_ascii=False))
+                with self._lock:
+                    self._memory.pop(value.id, None)
+                    if self._catalogue is not None:
+                        self._catalogue = {**self._catalogue, value.id: self._summary(meta)}
+                    self._revision += 1
+        return meta
 
     # -- Cache ------------------------------------------------------------- #
     def _cache_path(self, item_id: str) -> Path:
@@ -170,6 +207,10 @@ class MetadataProvider:
             cfg.model_dump(), item.kind, item.title, item.series_key, item.modified_at, item.size,
         ], sort_keys=True).encode()).hexdigest()
         is_series = item.kind == "series" and bool(item.series_name)
+
+        manual = self._record(item.id)
+        if manual and manual.get("manual") and manual.get("manual_kind") == item.kind:
+            return MovieMetadata.model_validate(manual["metadata"])
 
         if not force:
             c = self.cached(item.id)
@@ -247,19 +288,22 @@ class MetadataProvider:
 
     # -- TMDB séries (TV) -------------------------------------------------- #
     def _fetch_tmdb_tv(self, name: str, key: str, lang: str,
-                       omdb_key: str = "") -> Optional[MovieMetadata]:
+                       omdb_key: str = "", selected_id: int | None = None) -> Optional[MovieMetadata]:
         """Recherche une SÉRIE sur TMDB (/search/tv) et renvoie l'affiche + infos show."""
         with tmdb_client(key) as cli:
-            r = cli.get(f"{TMDB_API}/search/tv",
-                        params={"query": name, "language": lang})
-            r.raise_for_status()
-            results = r.json().get("results", [])
-            results = [result for result in results[:20] if _confident(name, result.get("name"), result.get("original_name"))]
-            if not results or not _confident(
-                name, results[0].get("name"), results[0].get("original_name")
-            ):
-                return MovieMetadata(title=name, matched=False)   # pas d'affiche arbitraire
-            tid = results[0]["id"]
+            if selected_id is None:
+                r = cli.get(f"{TMDB_API}/search/tv",
+                            params={"query": name, "language": lang})
+                r.raise_for_status()
+                results = r.json().get("results", [])
+                results = [result for result in results[:20] if _confident(name, result.get("name"), result.get("original_name"))]
+                if not results or not _confident(
+                    name, results[0].get("name"), results[0].get("original_name")
+                ):
+                    return MovieMetadata(title=name, matched=False)   # pas d'affiche arbitraire
+                tid = results[0]["id"]
+            else:
+                tid = selected_id
             d = cli.get(f"{TMDB_API}/tv/{tid}",
                         params={"language": lang,
                                 "append_to_response": "credits,videos,external_ids"})
@@ -305,39 +349,42 @@ class MetadataProvider:
 
     # -- TMDB films -------------------------------------------------------- #
     def _fetch_tmdb(self, title: str, year: Optional[int],
-                    key: str, lang: str, omdb_key: str = "") -> Optional[MovieMetadata]:
+                    key: str, lang: str, omdb_key: str = "", selected_id: int | None = None) -> Optional[MovieMetadata]:
         with tmdb_client(key) as cli:
-            def _search(with_year: bool):
-                params = {"query": title, "language": lang}
-                if with_year and year:
-                    params["primary_release_year"] = year
-                r = cli.get(f"{TMDB_API}/search/movie", params=params)
-                r.raise_for_status()
-                return r.json().get("results", [])
+            if selected_id is None:
+                def _search(with_year: bool):
+                    params = {"query": title, "language": lang}
+                    if with_year and year:
+                        params["primary_release_year"] = year
+                    r = cli.get(f"{TMDB_API}/search/movie", params=params)
+                    r.raise_for_status()
+                    return r.json().get("results", [])
 
-            # 1) recherche avec année (filtre fort), 2) repli sans année.
-            results = _search(with_year=True)
-            if not results:
-                results = _search(with_year=False)
-            if not results:
-                return MovieMetadata(title=title, year=year, matched=False)
+                # 1) recherche avec année (filtre fort), 2) repli sans année.
+                results = _search(with_year=True)
+                if not results:
+                    results = _search(with_year=False)
+                if not results:
+                    return MovieMetadata(title=title, year=year, matched=False)
 
-            results = [result for result in results[:20] if _confident(title, result.get("title"), result.get("original_title"))]
-            if not results:
-                return MovieMetadata(title=title, year=year, matched=False)
+                results = [result for result in results[:20] if _confident(title, result.get("title"), result.get("original_title"))]
+                if not results:
+                    return MovieMetadata(title=title, year=year, matched=False)
 
-            # Si une année est connue, privilégier un résultat à year ±1
-            # (décalages de sortie régionale), sinon le 1er (mieux noté).
-            best = results[0]
-            if year:
-                for c in results:
-                    rd = (c.get("release_date") or "")[:4]
-                    if rd.isdigit() and abs(int(rd) - year) <= 1:
-                        best = c
-                        break
-            if not _confident(title, best.get("title"), best.get("original_title")):
-                return MovieMetadata(title=title, year=year, matched=False)  # évite un mauvais film
-            mid = best["id"]
+                # Si une année est connue, privilégier un résultat à year ±1
+                # (décalages de sortie régionale), sinon le 1er (mieux noté).
+                best = results[0]
+                if year:
+                    for c in results:
+                        rd = (c.get("release_date") or "")[:4]
+                        if rd.isdigit() and abs(int(rd) - year) <= 1:
+                            best = c
+                            break
+                if not _confident(title, best.get("title"), best.get("original_title")):
+                    return MovieMetadata(title=title, year=year, matched=False)  # évite un mauvais film
+                mid = best["id"]
+            else:
+                mid = selected_id
             d = cli.get(
                 f"{TMDB_API}/movie/{mid}",
                 params={"language": lang,

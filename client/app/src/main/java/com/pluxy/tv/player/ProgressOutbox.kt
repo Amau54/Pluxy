@@ -30,8 +30,9 @@ internal data class PendingProgress(
     val durationMs: Long,
     val createdAtMs: Long,
     val intentOrder: Long = createdAtMs,
+    val profileId: String = "default",
 ) {
-    val key: String get() = "$serverUrl\n$itemId"
+    val key: String get() = "$serverUrl\n$profileId\n$itemId"
 }
 
 /** A success may acknowledge only the exact update sent, never a newer user seek. */
@@ -85,7 +86,7 @@ object ProgressOutbox {
         // Capture before dispatch: activity/API/media can change while IO is pending.
         val update = PendingProgress(api.baseUrl, itemId, api.sessionId, sequence,
             positionMs.coerceAtLeast(0), durationMs.coerceAtLeast(0), System.currentTimeMillis(),
-            intentOrder.incrementAndGet())
+            intentOrder.incrementAndGet(), api.profileId)
         scope.launch {
             try {
                 mutex.withLock {
@@ -111,9 +112,9 @@ object ProgressOutbox {
             // An unreadable journal is not proof that there is no local resume.
             // Propagate that failure instead of replacing it with an older server value.
             readOnce()
-            pending.snapshot().firstOrNull { it.serverUrl == serverUrl && it.itemId == itemId }
+            pending.snapshot().firstOrNull { it.serverUrl == serverUrl && it.itemId == itemId && it.profileId == com.pluxy.tv.ui.FamilyProfileSelection.selected(serverUrl) }
                 ?.let { update ->
-                    val watched = update.durationMs > 0 && update.positionMs >= update.durationMs * .95
+                    val watched = update.durationMs > 0 && update.positionMs > update.durationMs * .95
                     PlaybackProgress(if (watched) 0 else update.positionMs, update.durationMs, watched)
                 }
         }
@@ -138,7 +139,7 @@ object ProgressOutbox {
                 PendingProgress(entry.getString("server"), entry.getString("item"),
                     entry.getString("session"), entry.getLong("sequence"), entry.getLong("position"),
                     entry.getLong("duration"), entry.getLong("created"),
-                    entry.optLong("order", entry.getLong("created")))
+                    entry.optLong("order", entry.getLong("created")), entry.optString("profile", "default"))
             }
         } catch (_: Exception) {
             // Preserve corrupt bytes for recovery, but allow new resumptions to be saved.
@@ -156,6 +157,7 @@ object ProgressOutbox {
                     it.scheme == "http" && it.host != null && it.userInfo == null
                 } }.getOrDefault(false) &&
                 update.itemId.matches(Regex("[A-Za-z0-9_-]{1,64}")) &&
+                update.profileId.matches(Regex("(?:default|[0-9a-f]{32})")) &&
                 update.sessionId.matches(Regex("[A-Za-z0-9_-]{8,64}")) &&
                 now - update.createdAtMs in 0..7 * 24 * 60 * 60 * 1000L
             ) pending.add(update)
@@ -175,7 +177,7 @@ object ProgressOutbox {
             put("server", entry.serverUrl); put("item", entry.itemId); put("session", entry.sessionId)
             put("sequence", entry.sequence); put("position", entry.positionMs)
             put("duration", entry.durationMs); put("created", entry.createdAtMs)
-            put("order", entry.intentOrder)
+            put("order", entry.intentOrder); put("profile", entry.profileId)
         })
         val bytes = values.toString().toByteArray(Charsets.UTF_8)
         val stream = journal.startWrite()
@@ -213,9 +215,9 @@ object ProgressOutbox {
                 continue
             }
             try {
-                if (connection?.baseUrl != update.serverUrl || connection?.sessionId != update.sessionId) {
+                if (connection?.baseUrl != update.serverUrl || connection?.sessionId != update.sessionId || connection?.profileId != update.profileId) {
                     connection?.close()
-                    connection = PluxyApi(update.serverUrl, update.sessionId)
+                    connection = PluxyApi(update.serverUrl, update.sessionId, profileId = update.profileId)
                 }
                 checkNotNull(connection).setProgress(update.itemId,
                     update.positionMs, update.durationMs, update.sequence)

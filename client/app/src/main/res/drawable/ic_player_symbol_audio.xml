@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Lucide ISC; seek digits Material Symbols Apache 2.0. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="28dp" android:height="28dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:fillColor="#00000000" android:strokeColor="#FFFFFFFF" android:strokeWidth="1.75" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M11,4.702 C10.999588,4.417171,10.827825,4.160571,10.564654,4.051627 C10.301483,3.942683,9.99861,4.002801,9.797,4.204 L6.413,7.587 C6.14921,7.852367,5.790171,8.001097,5.416,8 L3,8 C2.447715,8,2,8.447715,2,9 L2,15 C2,15.552285,2.447715,16,3,16 L5.416,16 C5.790171,15.998903,6.14921,16.147633,6.413,16.413 L9.796,19.797 C9.997645,19.999043,10.301225,20.059552,10.564925,19.950261 C10.828625,19.84097,11.000397,19.58345,11,19.298 Z" />
+    <path android:fillColor="#00000000" android:strokeColor="#FFFFFFFF" android:strokeWidth="1.75" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M16,9 C17.333333,10.777778,17.333333,13.222222,16,15" />
+    <path android:fillColor="#00000000" android:strokeColor="#FFFFFFFF" android:strokeWidth="1.75" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M19.364,18.364 C21.051851,16.676169,22.000078,14.386968,22.000078,12 C22.000078,9.613032,21.051851,7.323831,19.364,5.636" />
+</vector>

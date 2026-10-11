@@ -98,6 +98,7 @@ class MainActivity : ThemedActivity() {
     private var loadedOnce = false
     private var allItems: List<MediaItem> = emptyList()
     private var catalogueServerUrl: String? = null
+    private var catalogueProfile: String = "default"
     /** Une catégorie déjà trouvée ne disparaît jamais durant cette session à cause
      * d'une réponse provisoirement incomplète du serveur. */
     private val discoveredKinds = mutableSetOf<String>()
@@ -238,7 +239,7 @@ class MainActivity : ThemedActivity() {
             return
         }
         lanImages = LanMediaImages.loader(this)
-        if (catalogueServerUrl != null && catalogueServerUrl != PluxyApplication.serverBaseUrl(this)) {
+        if (catalogueServerUrl != null && (catalogueServerUrl != PluxyApplication.serverBaseUrl(this) || catalogueProfile != FamilyProfileSelection.selected(PluxyApplication.serverBaseUrl(this)))) {
             allItems = emptyList()
             discoveredKinds.clear()
             focusByDestination.clear()
@@ -761,6 +762,25 @@ class MainActivity : ThemedActivity() {
                 }
                 return BrowserSnapshot(items, total, next, revision, available, paged = true)
             }
+            if (query.destination == "photo" && query.search.isBlank()) {
+                val heads = api.listItems(LibraryRequest(kind = "photo", grouped = true))
+                val saved = LibraryPreferences.photoFolders(this@MainActivity)
+                val known = knownPhotoFolders.ifEmpty { saved.first }
+                val collapsed = if (knownPhotoFolders.isEmpty()) saved.second else collapsedPhotoFolders
+                val visible = heads.filter { head ->
+                    val id = PhotoFolderTree.folderKey(head)
+                    val root = id.substringBefore('/')
+                    val ancestors = id.removePrefix(root).split('/').filter(String::isNotBlank)
+                    var path = root
+                    root !in collapsed && ancestors.all { part -> path += "/$part"; path in known && path !in collapsed }
+                }
+                val values = heads.associateBy { it.id }.toMutableMap()
+                for (head in visible) {
+                    values.remove(head.id)
+                    api.listItems(LibraryRequest(kind = "photo", groupId = head.id)).forEach { values[it.id] = it.copy(groupCount = 1) }
+                }
+                return BrowserSnapshot(values.values.toList(), heads.sumOf { it.groupCount.coerceAtLeast(1) }, facets = available)
+            }
             // Série et album restent atomiques : tous leurs épisodes ou pistes sont regroupés.
             val request = if (query.destination in setOf("series", "audio", "photo") && query.search.isBlank()) {
                 LibraryRequest(kind = query.destination)
@@ -808,6 +828,7 @@ class MainActivity : ThemedActivity() {
             facets = snapshot.facets
             serverCatalogueCount = facets.counts.values.sum().takeIf { it > 0 } ?: allItems.size
             catalogueServerUrl = serverUrl
+            catalogueProfile = FamilyProfileSelection.selected(serverUrl)
             catalogueQueryKey = key
             discoveredKinds += facets.counts.filterValues { it > 0 }.keys + allItems.map { it.kind }
             updateAvailableDestinations()
@@ -990,6 +1011,7 @@ class MainActivity : ThemedActivity() {
         if (!collapsedPhotoFolders.add(folder)) collapsedPhotoFolders.remove(folder)
         LibraryPreferences.savePhotoFolders(this, knownPhotoFolders, collapsedPhotoFolders)
         applyAndShow(restoreFocus = true)
+        refreshQuietly()
     }
 
     private fun syncPhotoFolders() {
@@ -1026,12 +1048,12 @@ class MainActivity : ThemedActivity() {
         val image: String?
         when (row) {
             is LibRow.MediaRow -> {
-                title = row.item.title
+                title = LibraryOrganizer.playbackTitle(row.item)
                 meta = compactHeroMeta(row.item)
                 image = row.item.thumbnailUrl
             }
             is LibRow.QuickPlayRow -> {
-                title = row.item.title
+                title = LibraryOrganizer.playbackTitle(row.item)
                 meta = row.subtitle.ifBlank { compactHeroMeta(row.item) }
                 image = row.item.thumbnailUrl
             }

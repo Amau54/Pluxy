@@ -50,6 +50,7 @@ data class MediaEntry(
     val sourceName: String? = null,
     val sourceId: String? = null,
     val embeddedTitle: String? = null,
+    val fingerprint: String = "",
 ) {
     fun publicJson(metadata: JSONObject?, watch: WatchState): JSONObject {
         val videoMetadata = metadata.takeIf { kind == "movie" || kind == "series" }
@@ -132,6 +133,7 @@ data class MediaEntry(
         putNullable("mime_type", mimeType)
         put("size", size)
         put("modified_at_ms", modifiedAtMs)
+        put("fingerprint", fingerprint)
         put("added_at_ms", addedAtMs)
         putNullable("captured_at_ms", capturedAtMs)
         put("duration_seconds", durationSeconds)
@@ -182,6 +184,7 @@ data class MediaEntry(
             mimeType = json.optStringOrNull("mime_type"),
             size = json.optLong("size", 0),
             modifiedAtMs = json.optLong("modified_at_ms", 0),
+            fingerprint = json.optString("fingerprint", ""),
             durationSeconds = json.optDouble("duration_seconds", 0.0),
             width = json.optIntOrNull("width"),
             height = json.optIntOrNull("height"),

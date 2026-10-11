@@ -30,6 +30,7 @@ class SettingsActivity : ThemedActivity() {
     private lateinit var scroll: ScrollView
     private lateinit var rows: LinearLayout
     private lateinit var statusView: TextView
+    private val optionsPage: Boolean get() = intent.getBooleanExtra("secondary_options", false)
     private var restoredFocusTag: String? = null
     private var restoredScrollY: Int? = null
     private val sub by lazy { pluxyColor(R.color.text_secondary) }
@@ -63,7 +64,7 @@ class SettingsActivity : ThemedActivity() {
         scroll.addView(rows)
         setContentView(scroll)
 
-        title("Réglages")
+        title(if (optionsPage) "Options" else "Réglages")
         statusView = TextView(this).apply {
             setTextColor(pluxyColor(R.color.text_tertiary)); textSize = 14f
             setPadding(0, 0, 0, dp(4))
@@ -86,11 +87,9 @@ class SettingsActivity : ThemedActivity() {
         renderContent()
         rows.post {
             scroll.scrollTo(0, previousScrollY.coerceAtLeast(0))
-            if (focusedTag != null) {
-                rows.findViewWithTag<View>(focusedTag)?.requestFocus()
-            } else if (currentFocus == null || currentFocus === scroll) {
-                rows.findViewWithTag<View>("setting:Changer de serveur")?.requestFocus()
-            }
+            val target = focusedTag?.let { rows.findViewWithTag<View>(it) }
+                ?: rows.findViewWithTag<View>(if (optionsPage) "setting:Activer plusieurs profils" else "setting:Changer de serveur")
+            if (television) target?.requestFocusFromTouch() else target?.requestFocus()
         }
     }
 
@@ -100,46 +99,70 @@ class SettingsActivity : ThemedActivity() {
         val configured = PluxyApplication.isConfigured(this)
         statusView.text = if (configured) "Serveur configuré" else "Aucun serveur configuré"
 
-        section("Application")
-        rowButton("Mode de l’application", "Lecteur ›", "Choisir Lecteur ou Serveur pour cet appareil.", showHint = true)
-            .setOnClickListener { startActivity(Intent(this, ModeActivity::class.java)
-                .putExtra(com.pluxy.server.ApplicationMode.EXTRA_CHOOSE_MODE, true)) }
-
-        section("Apparence")
-        val appearance = AppearancePreferences.theme(this)
-        rowButton("Thème", appearance.label, appearance.description, showHint = true)
-            .setOnClickListener { anchor -> pickAppearanceTheme(anchor, appearance) }
-        rowButton("Densité", if (LibraryPreferences.compact(this)) "Compact" else "Confort",
-            "Ajuste la taille des affiches ; les commandes restent faciles à utiliser.", showHint = true)
-            .setOnClickListener { anchor ->
-                CompactChoiceMenu.show(this, anchor, "Densité",
-                    listOf(CompactChoiceMenu.Choice("Compact", "compact"), CompactChoiceMenu.Choice("Confort", "comfort")),
-                    if (LibraryPreferences.compact(this)) "compact" else "comfort",
-                    onSelect = { LibraryPreferences.setCompact(this, it == "compact"); render() })
+        if (optionsPage) {
+            renderOptions(configured)
+        } else {
+            section("Connexion")
+            rowButton(
+                "Changer de serveur",
+                if (configured) PluxyApplication.serverName(this) else "Non configuré",
+                "Recherche les serveurs Pluxy présents sur le réseau domestique.",
+            ).setOnClickListener {
+                serverLauncher.launch(Intent(this, ServerSetupActivity::class.java))
             }
 
-        section("Connexion")
-        rowButton(
-            "Changer de serveur",
-            if (configured) PluxyApplication.serverName(this) else "Non configuré",
-            "Recherche les serveurs Pluxy présents sur le réseau domestique.",
-        ).setOnClickListener {
-            serverLauncher.launch(Intent(this, ServerSetupActivity::class.java))
+            if (configured && FamilyProfileSelection.enabled(this)) {
+                val server = PluxyApplication.serverBaseUrl(this)
+                rowButton("Profil familial", FamilyProfileSelection.name(server), "Historique et préférences de lecture séparés.")
+                    .setOnClickListener { anchor -> pickFamilyProfile(anchor, server) }
+            }
+
+            section("Lecture")
+            val playbackStrategy = PlaybackStrategy.fromKey(
+                PluxyApplication.playbackStrategy(this),
+            )
+            rowButton(
+                "Mode de lecture",
+                playbackStrategy.title,
+                playbackStrategy.description,
+                showHint = false,
+            ).setOnClickListener { anchor -> pickPlaybackStrategy(anchor, playbackStrategy) }
+            val output = AudioOutputMode.fromKey(PluxyApplication.audioOutputMode(this))
+            rowButton("Sortie audio", output.title, output.description, showHint = false)
+                .setOnClickListener { anchor -> pickAudioOutput(anchor) }
+            section("Apparence")
+            val appearance = AppearancePreferences.theme(this)
+            rowButton("Thème", appearance.label, appearance.description, showHint = false)
+                .setOnClickListener { anchor -> pickAppearanceTheme(anchor, appearance) }
+            rowButton("Options", "›", "Profils, bibliothèque, accessibilité et réglages avancés.")
+                .setOnClickListener {
+                    restoredFocusTag = "setting:Options"
+                    startActivity(Intent(this, SettingsActivity::class.java).putExtra("secondary_options", true))
+                }
+        }
+        addClose()
+    }
+
+    private fun renderOptions(configured: Boolean) {
+        section("Profils")
+        val multipleProfiles = FamilyProfileSelection.enabled(this)
+        localSwitchRow("Activer plusieurs profils", multipleProfiles) {
+            FamilyProfileSelection.setEnabled(this, !multipleProfiles)
+            lifecycleScope.launch {
+                if (configured) CatalogueRepository.invalidate(PluxyApplication.serverBaseUrl(this@SettingsActivity))
+                render()
+            }
+        }
+        if (!multipleProfiles) rowButton("Profil utilisé", "Général", "L’historique existant est conservé.")
+            .apply { isFocusable = false; isClickable = false }
+        if (configured && FamilyProfileSelection.enabled(this)) {
+            val server = PluxyApplication.serverBaseUrl(this)
+            rowButton("Profil familial", FamilyProfileSelection.name(server), "Historique et préférences de lecture séparés.")
+                .setOnClickListener { anchor -> pickFamilyProfile(anchor, server) }
         }
 
-        section("Lecture")
-        val playbackStrategy = PlaybackStrategy.fromKey(
-            PluxyApplication.playbackStrategy(this),
-        )
-        rowButton(
-            "Mode de lecture",
-            playbackStrategy.title,
-            playbackStrategy.description,
-            showHint = true,
-        ).setOnClickListener { anchor -> pickPlaybackStrategy(anchor, playbackStrategy) }
-        val output = AudioOutputMode.fromKey(PluxyApplication.audioOutputMode(this))
-        rowButton("Sortie audio", output.title, output.description, showHint = true)
-            .setOnClickListener { anchor -> pickAudioOutput(anchor) }
+
+        section("Préférences de lecture")
         val autoNext = PluxyApplication.autoPlayNextEpisode(this)
         localSwitchRow("Épisode suivant automatique", autoNext) {
             PluxyApplication.setAutoPlayNextEpisode(this, !autoNext)
@@ -156,6 +179,17 @@ class SettingsActivity : ThemedActivity() {
             subtitleModeLabel(PluxyApplication.subsMode(this)),
             "Affiche automatiquement les sous-titres ou les masque.",
         ).setOnClickListener { anchor -> pickSubtitleMode(anchor) }
+
+
+        section("Affichage")
+        rowButton("Densité", if (LibraryPreferences.compact(this)) "Compact" else "Confort",
+            "Ajuste la taille des affiches ; les commandes restent faciles à utiliser.", showHint = true)
+            .setOnClickListener { anchor ->
+                CompactChoiceMenu.show(this, anchor, "Densité",
+                    listOf(CompactChoiceMenu.Choice("Compact", "compact"), CompactChoiceMenu.Choice("Confort", "comfort")),
+                    if (LibraryPreferences.compact(this)) "compact" else "comfort",
+                    onSelect = { LibraryPreferences.setCompact(this, it == "compact"); render() })
+            }
 
         section("Bibliothèque")
         rowButton(
@@ -199,13 +233,34 @@ class SettingsActivity : ThemedActivity() {
             }
         }, lp().also { it.topMargin = dp(2) })
 
-        addClose()
+        section("Accessibilité")
+        val contrast = PluxyApplication.playerFocusContrast(this)
+        localSwitchRow("Focus du lecteur plus contrasté", contrast) {
+            PluxyApplication.setPlayerFocusContrast(this, !contrast)
+            render()
+        }
+        val actionHints = PluxyApplication.playerActionHints(this)
+        localSwitchRow("Libellés sous les commandes du lecteur", actionHints) {
+            PluxyApplication.setPlayerActionHints(this, !actionHints)
+            render()
+        }
+
+        section("Application")
+        rowButton("Mode de l’application", "Lecteur ›", "Choisir Lecteur ou Serveur pour cet appareil.", showHint = true)
+            .setOnClickListener { startActivity(Intent(this, ModeActivity::class.java)
+                .putExtra(com.pluxy.server.ApplicationMode.EXTRA_CHOOSE_MODE, true)) }
+
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (::rows.isInitialized) render()
     }
 
     private fun addClose() {
         val close = Button(this).apply {
             tag = "setting:close"
-            setText(R.string.action_close)
+            text = if (optionsPage) "Retour" else getString(R.string.action_close)
             isAllCaps = false
             setTextColor(pluxyColor(R.color.text_primary))
             textSize = if (television) 17f else 15f
@@ -405,6 +460,50 @@ class SettingsActivity : ThemedActivity() {
                 render()
             },
         )
+    }
+
+    private fun pickFamilyProfile(anchor: View, server: String) {
+        lifecycleScope.launch {
+            val api = PluxyApi(server)
+            try {
+                val profiles = api.familyProfiles()
+                CompactChoiceMenu.show(this@SettingsActivity, anchor, "Profil familial",
+                    profiles.map { CompactChoiceMenu.Choice(if (it.id == "default") "Général" else it.name, it.id) } + CompactChoiceMenu.Choice("Ajouter un profil", "add"),
+                    FamilyProfileSelection.selected(server), onSelect = { id ->
+                        if (id == "add") createFamilyProfile(server)
+                        else lifecycleScope.launch {
+                            CatalogueRepository.invalidate(server)
+                            FamilyProfileSelection.select(this@SettingsActivity, server, profiles.first { it.id == id })
+                            render()
+                        }
+                    })
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) { Toast.makeText(this@SettingsActivity, "Profils indisponibles. Vérifiez que le serveur est à jour.", Toast.LENGTH_LONG).show() }
+            finally { api.close() }
+        }
+    }
+
+    private fun createFamilyProfile(server: String) {
+        val input = android.widget.EditText(this).apply {
+            hint = "Nom du profil"; isSingleLine = true
+            filters = arrayOf(android.text.InputFilter.LengthFilter(40))
+        }
+        val dialog = androidx.appcompat.app.AlertDialog.Builder(this).setTitle("Nouveau profil").setView(input)
+            .setNegativeButton("Annuler", null).setPositiveButton("Ajouter", null).create()
+        dialog.setOnShowListener {
+            dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE).setOnClickListener {
+                if (input.text.toString().trim().isEmpty()) { input.error = "Saisissez un nom"; return@setOnClickListener }
+                lifecycleScope.launch {
+                    val api = PluxyApi(server)
+                    try { val profile = api.createFamilyProfile(input.text.toString().trim()); CatalogueRepository.invalidate(server)
+                        FamilyProfileSelection.select(this@SettingsActivity, server, profile); dialog.dismiss(); render()
+                    } catch (e: CancellationException) { throw e }
+                    catch (e: Exception) { input.error = "Impossible d'ajouter ce profil" }
+                    finally { api.close() }
+                }
+            }
+        }
+        dialog.show()
     }
 
     private fun audioLanguageLabel(value: String): String = when (value) {

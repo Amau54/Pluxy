@@ -1,4 +1,4 @@
-param([switch]$AppOnly, [string]$OutputDirectory, [string]$DependencyDirectory)
+param([switch]$AppOnly, [string]$OutputDirectory, [string]$DependencyDirectory, [string]$CodeSigningThumbprint = $env:PLUXY_WINDOWS_SIGNING_THUMBPRINT)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
@@ -8,6 +8,10 @@ $output = [IO.Path]::GetFullPath($OutputDirectory)
 $deps = [IO.Path]::GetFullPath($DependencyDirectory)
 $payload = Join-Path $output 'app'
 . (Join-Path $PSScriptRoot 'PC-Launcher.ps1')
+$versions = Get-Content -LiteralPath (Join-Path $repo 'versions.json') -Raw | ConvertFrom-Json
+$expectedVersion = $versions.windows.name
+if ((Get-Content -LiteralPath (Join-Path $repo 'desktop/installer.iss') -Raw) -notmatch ('#define AppVersion "' + [regex]::Escape($expectedVersion) + '"')) { throw 'Versions incohérentes. Exécutez tools/sync_versions.py.' }
+if ((Get-Content -LiteralPath (Join-Path $repo 'desktop/Program.cs') -Raw) -notmatch [regex]::Escape('AssemblyVersion("' + $expectedVersion + '.0")')) { throw 'Version du lecteur Windows incohérente avec versions.json.' }
 $locked = Get-Content -LiteralPath (Join-Path $repo 'desktop\dependencies.json') -Raw | ConvertFrom-Json
 New-Item -ItemType Directory -Force -Path $output,$deps,$payload | Out-Null
 
@@ -70,15 +74,27 @@ foreach ($file in @('Copyright','LICENSE.GPL','LICENSE.LGPL')) {
 Copy-Item -LiteralPath (Join-Path $sdk 'LICENSE.txt') -Destination (Join-Path $licenseDir 'WebView2.txt')
 Copy-Item -LiteralPath (Join-Path $sdk 'NOTICE.txt') -Destination (Join-Path $licenseDir 'WebView2-NOTICE.txt')
 Copy-Item -LiteralPath (Join-Path $repo 'desktop\THIRD_PARTY.txt') -Destination $licenseDir
+Copy-Item -LiteralPath (Join-Path $repo 'assets\player-icons\LICENSE.txt') -Destination (Join-Path $licenseDir 'Material-Symbols.txt')
+Copy-Item -LiteralPath (Join-Path $repo 'assets\player-icons\lucide\LICENSE.txt') -Destination (Join-Path $licenseDir 'Lucide.txt')
 
 $compiler = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
 if (-not (Test-Path -LiteralPath $compiler)) { throw 'Le compilateur .NET Framework 4.8 de Windows est requis.' }
 $arguments = @('/nologo','/target:winexe','/platform:x64','/optimize+','/utf8output',"/out:$(Join-Path $payload 'Pluxy.exe')","/win32icon:$(Join-Path $payload 'pluxy.ico')","/win32manifest:$(Join-Path $repo 'desktop\app.manifest')")
-foreach ($reference in @('System.dll','System.Core.dll','System.Drawing.dll','System.Windows.Forms.dll','System.Net.Http.dll','System.Web.dll','System.Web.Extensions.dll',(Join-Path $payload 'Microsoft.Web.WebView2.Core.dll'),(Join-Path $payload 'Microsoft.Web.WebView2.WinForms.dll'))) { $arguments += "/reference:$reference" }
+foreach ($reference in @('System.dll','System.Core.dll','System.Drawing.dll','System.Windows.Forms.dll','System.Net.Http.dll','System.IO.Compression.dll','System.IO.Compression.FileSystem.dll','System.Web.dll','System.Web.Extensions.dll',(Join-Path $payload 'Microsoft.Web.WebView2.Core.dll'),(Join-Path $payload 'Microsoft.Web.WebView2.WinForms.dll'))) { $arguments += "/reference:$reference" }
 $arguments += @(Get-ChildItem -LiteralPath (Join-Path $repo 'desktop') -Filter '*.cs' -File | ForEach-Object { $_.FullName })
 $result = Invoke-PCNative -FilePath $compiler -Arguments $arguments -TimeoutSeconds 120
 if ($result.Code -ne 0) { throw "Compilation PC impossible : $($result.Output) $($result.Error)" }
 $result.Output.Trim() | Write-Output
+function Sign-PCArtifact {
+    param([string]$Path)
+    if (-not $CodeSigningThumbprint) { return }
+    if ($CodeSigningThumbprint -notmatch '^[0-9a-fA-F]{40}$') { throw 'Empreinte de certificat de signature invalide.' }
+    $certificate = Get-Item -LiteralPath "Cert:\CurrentUser\My\$CodeSigningThumbprint"
+    if (-not $certificate.HasPrivateKey -or $certificate.NotAfter -le (Get-Date)) { throw 'Certificat de signature absent, expiré ou sans clé privée.' }
+    $signed = Set-AuthenticodeSignature -LiteralPath $Path -Certificate $certificate -HashAlgorithm SHA256 -TimestampServer 'http://timestamp.digicert.com'
+    if ($signed.Status -ne 'Valid') { throw "Signature Windows non vérifiée : $($signed.Status)" }
+}
+Sign-PCArtifact -Path (Join-Path $payload 'Pluxy.exe')
 if ($AppOnly) { Write-Output "Application : $payload"; return }
 
 $innoSetup = Join-Path $deps 'inno-setup.exe'
@@ -95,9 +111,11 @@ if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notm
 $result = Invoke-PCNative -FilePath (Join-Path $inno 'ISCC.exe') -Arguments @("/DPayload=$payload","/DBuildOutput=$output","/DBootstrapper=$bootstrap",(Join-Path $repo 'desktop\installer.iss')) -TimeoutSeconds 300
 if ($result.Code -ne 0) { throw "Installateur PC impossible : $($result.Output) $($result.Error)" }
 $installer = Join-Path $output 'Pluxy-Setup.exe'
+Sign-PCArtifact -Path $installer
 $commit = (& git -C $repo rev-parse HEAD).Trim()
 $digest = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant()
-$manifest = [ordered]@{ version='1.8.8'; commit=$commit; sha256=$digest; size=(Get-Item -LiteralPath $installer).Length; webview2=$locked.webview2.version; mpv=$locked.mpv.url; bootstrapper_sha256=(Get-FileHash -LiteralPath $bootstrap -Algorithm SHA256).Hash.ToLowerInvariant() }
-$manifest | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $output 'PC_BUILD_INFO.json') -Encoding UTF8
+  $dirty = -not [string]::IsNullOrWhiteSpace((& git -C $repo status --porcelain | Out-String))
+  $manifest = [ordered]@{ schema=1; version=$expectedVersion; created_at=[DateTime]::UtcNow.ToString('o'); dirty=$dirty; authenticode=(Get-AuthenticodeSignature -LiteralPath $installer).Status.ToString(); commit=$commit; sha256=$digest; size=(Get-Item -LiteralPath $installer).Length; webview2=$locked.webview2.version; mpv=$locked.mpv.url; bootstrapper_sha256=(Get-FileHash -LiteralPath $bootstrap -Algorithm SHA256).Hash.ToLowerInvariant() }
+  [IO.File]::WriteAllText((Join-Path $output 'PC_BUILD_INFO.json'), ($manifest | ConvertTo-Json), (New-Object Text.UTF8Encoding($false)))
 "$digest  Pluxy-Setup.exe" | Set-Content -LiteralPath (Join-Path $output 'PC_SHA256SUMS.txt') -Encoding ASCII
 Write-Output "Installateur : $installer ($digest)"

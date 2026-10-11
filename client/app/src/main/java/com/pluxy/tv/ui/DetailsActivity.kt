@@ -32,6 +32,7 @@ import com.pluxy.tv.api.PluxyApi
 import com.pluxy.tv.api.PlaybackDecision
 import com.pluxy.tv.player.DiagnosticLevel
 import com.pluxy.tv.player.PlaybackDiagnostic
+import com.pluxy.tv.player.PlaybackStrategy
 import com.pluxy.tv.player.PlayerActivity
 import com.pluxy.tv.player.ProgressOutbox
 import com.squareup.moshi.Moshi
@@ -67,12 +68,12 @@ class DetailsActivity : ThemedActivity() {
         val json = intent.getStringExtra(EXTRA_ITEM) ?: run { finish(); return }
         item = moshi.adapter(MediaItem::class.java).fromJson(json) ?: run { finish(); return }
 
-        // Affichage immédiat (titre brut) puis enrichissement.
+        val displayTitle = LibraryOrganizer.displayTitle(item)
         findViewById<TextView>(R.id.title).apply {
-            text = item.title
-            contentDescription = item.title
+            text = displayTitle
+            contentDescription = displayTitle
         }
-        findViewById<TextView>(R.id.posterFallback).text = item.title
+        findViewById<TextView>(R.id.posterFallback).text = displayTitle
         findViewById<ImageView>(R.id.poster).contentDescription =
             getString(R.string.description_poster_title, item.title)
         findViewById<RecyclerView>(R.id.cast).layoutManager =
@@ -91,7 +92,13 @@ class DetailsActivity : ThemedActivity() {
         updatePlaybackActions(item.watched)
         playBtn.requestFocus()
         findViewById<Button>(R.id.trailer).visibility = View.GONE
-        findViewById<Button>(R.id.playSettings).setOnClickListener { showPlaybackSettings() }
+        findViewById<Button>(R.id.playSettings).setOnClickListener { anchor ->
+            CompactChoiceMenu.show(this, anchor, "Options", listOf(
+                CompactChoiceMenu.Choice("Langue audio et sous-titres", "playback"),
+                CompactChoiceMenu.Choice("Corriger les informations", "metadata")), "", onSelect = { choice ->
+                if (choice == "metadata") MetadataMatchDialog.show(this, item) { loadMetadata() } else showPlaybackSettings()
+            })
+        }
         findViewById<TextView>(R.id.playDiagnostic).setOnClickListener { showDiagnosticDetails() }
         findViewById<TextView>(R.id.overview).setOnClickListener {
             AlertDialog.Builder(this).setTitle(R.string.label_synopsis)
@@ -124,8 +131,16 @@ class DetailsActivity : ThemedActivity() {
         localBackdropUrl = runCatching {
             LanUrlPolicy.resolveSameServer(PluxyApplication.serverBaseUrl(this), relative)
         }.getOrNull() ?: return
-        // Une capture vidéo est 16:9 : elle convient au fond, pas à l'affiche portrait.
         loadLocalBackdrop()
+    }
+
+    private fun loadLocalPoster() {
+        val url = localBackdropUrl ?: return
+        findViewById<ImageView>(R.id.poster).load(url, LanMediaImages.loader(this)) {
+            listener(onSuccess = { _, _ ->
+                this@DetailsActivity.findViewById<TextView>(R.id.posterFallback).visibility = View.GONE
+            })
+        }
     }
 
     private fun loadLocalBackdrop() {
@@ -145,7 +160,7 @@ class DetailsActivity : ThemedActivity() {
         primaryStartsFromBeginning = progressWatched && !resumable
         primaryAutoResume = resumable
         findViewById<Button>(R.id.play).text = when {
-            playbackDecision?.playable == false ->
+            playbackDecision?.playable == false && PlaybackStrategy.fromKey(PluxyApplication.playbackStrategy(this)) != PlaybackStrategy.DIRECT ->
                 getString(R.string.label_direct_play_try)
             resumable -> getString(
                 R.string.label_resume_at,
@@ -197,14 +212,8 @@ class DetailsActivity : ThemedActivity() {
     private fun buildTechChips() {
         val chips = findViewById<LinearLayout>(R.id.chips)
         chips.removeAllViews()
-        item.height?.let { h ->
-            val label = when {
-                h >= 2000 -> "4K"
-                h >= 1060 -> "1080p"
-                h >= 700 -> "720p"
-                else -> "${h}p"
-            }
-            chips.addView(chip(label, accent = h >= 2000))
+        ArtworkPolicy.resolutionLabel(item.width, item.height)?.let { label ->
+            chips.addView(chip(label, accent = label == "4K"))
         }
         if (item.isHdr) chips.addView(chip("HDR", accent = true))
     }
@@ -280,6 +289,7 @@ class DetailsActivity : ThemedActivity() {
             if (meta != null) {
                 bind(meta)
             } else {
+                loadLocalPoster()
                 findViewById<View>(R.id.overviewLabel).visibility = View.GONE
                 findViewById<View>(R.id.overview).visibility = View.GONE
             }
@@ -305,6 +315,11 @@ class DetailsActivity : ThemedActivity() {
             playbackDecision = decision
             renderPlaybackActions()
             val ui = PlaybackDiagnostic.from(decision)
+            if (PlaybackStrategy.fromKey(PluxyApplication.playbackStrategy(this@DetailsActivity)) == PlaybackStrategy.DIRECT) {
+                view.text = "Vidéo originale · aucune conversion vidéo"
+                view.setTextColor(pluxyColor(R.color.text_secondary))
+                return@launch
+            }
             view.text = when (ui.level) {
                 DiagnosticLevel.DIRECT -> "Détails de lecture · ${ui.title}"
                 DiagnosticLevel.ADAPTATION -> getString(R.string.label_adaptation_status, ui.title)
@@ -338,22 +353,25 @@ class DetailsActivity : ThemedActivity() {
     }
 
     private fun bind(m: MovieMetadata) {
+        findViewById<TextView>(R.id.posterFallback).text = m.title
         findViewById<TextView>(R.id.title).apply {
             text = m.title
             contentDescription = m.title
         }
         findViewById<ImageView>(R.id.poster).apply {
             contentDescription = getString(R.string.description_poster_title, m.title)
-            LanUrlPolicy.safeTmdbImage(m.posterUrl)?.let { posterUrl ->
+            val posterUrl = LanUrlPolicy.safeTmdbImage(m.posterUrl)
+            if (posterUrl != null) {
                 load(posterUrl) {
                     crossfade(true)
                     listener(
                         onSuccess = { _, _ ->
-                            findViewById<TextView>(R.id.posterFallback).visibility = View.GONE
+                            this@DetailsActivity.findViewById<TextView>(R.id.posterFallback).visibility = View.GONE
                         },
+                        onError = { _, _ -> loadLocalPoster() },
                     )
                 }
-            }
+            } else loadLocalPoster()
         }
         LanUrlPolicy.safeTmdbImage(m.backdropUrl)?.let {
             findViewById<ImageView>(R.id.backdrop).load(it) {
@@ -404,7 +422,8 @@ class DetailsActivity : ThemedActivity() {
 
     private fun play() {
         val decision = playbackDecision
-        if (decision != null && !decision.playable) {
+        if (decision != null && !decision.playable &&
+            PlaybackStrategy.fromKey(PluxyApplication.playbackStrategy(this)) != PlaybackStrategy.DIRECT) {
             val ui = PlaybackDiagnostic.from(decision)
             AlertDialog.Builder(this)
                 .setTitle("Lecture non garantie")

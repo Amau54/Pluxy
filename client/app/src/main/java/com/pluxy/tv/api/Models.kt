@@ -18,6 +18,8 @@ data class MediaItem(
     @Json(name = "audio_codec") val audioCodec: String? = null,
     @Json(name = "audio_channels") val audioChannels: Int? = null,
     @Json(name = "is_hdr") val isHdr: Boolean = false,
+    @Json(name = "group_count") val groupCount: Int = 1,
+    @Json(name = "season_count") val seasonCount: Int = 0,
     val kind: String = "movie",                       // movie | series | photo | audio
     @Json(name = "added_at") val addedAt: Double = 0.0,
     @Json(name = "modified_at") val modifiedAt: Double = 0.0,

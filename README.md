@@ -6,7 +6,7 @@
 
 Vos films, séries, photos et musique sur la TV.
 
-**Android 1.7.14 · Windows 1.8.8**
+**Android 1.7.20 · Windows 1.8.14**
 
 [Application Android](https://github.com/Amau54/Pluxy/releases/download/dev-latest/Pluxy-debug.apk)
 · [Application PC](https://github.com/Amau54/Pluxy/releases/download/pc-latest/Pluxy-Setup.exe)
@@ -48,6 +48,14 @@ le format choisi ; le mode forcé ne change pas les limites physiques des ports.
 3. Choisissez **Lecteur** pour vous connecter à un serveur, ou **Serveur** pour partager vos dossiers.
 
 Le choix est mémorisé. **Options → Changer de mode** permet de le modifier.
+Le profil Général est utilisé par défaut. Dans Réglages → Options, vous pouvez activer plusieurs profils pour séparer l’historique et les réglages de lecture, sans compte.
+
+Les options du lecteur permettent d’enregistrer des repères d’intro et de générique sur l’appareil, sans clé API. Une intro peut être réutilisée pour une saison ; le générique reste propre à chaque vidéo. Les chapitres clairement nommés sont aussi utilisés lorsqu’ils sont disponibles. Le bouton de passage respecte la fin du chapitre ou le repère enregistré.
+Une mauvaise correspondance peut être corrigée depuis la fiche du film ou de la série ;
+le choix reste conservé après un nouveau scan. Sur Windows, la musique continue
+dans un mini lecteur pendant que vous parcourez la bibliothèque.
+Les options Windows permettent aussi de sauvegarder les réglages et l’historique,
+sans copier les médias ni les clés API.
 L'installation propose `C:\Program Files\Pluxy` par défaut, selon le disque de Windows.
 Windows demande les droits administrateur pour créer ce dossier. Vous pouvez choisir
 un autre emplacement ; l'application fonctionne ensuite sans élévation.

@@ -1,4 +1,25 @@
-# APK de test — Pluxy 1.7.5 (59)
+# APK de test — Pluxy 1.7.20 (74)
+
+Cette mise à jour ajoute **Passer l’intro** et **Passer le générique**, sans clé API.
+Les chapitres clairement nommés servent de repères. Sans chapitres, définissez
+le début et la fin du passage dans **Options → Intro et générique** du lecteur.
+Une intro peut être réutilisée pour une saison. Les repères restent sur l’appareil ;
+le générique reste propre à chaque vidéo. Définir sa fin permet de conserver
+une éventuelle scène après le générique.
+
+Le profil Général est utilisé par défaut. Les profils supplémentaires se
+réactivent dans **Réglages → Options**. Ce sous-menu regroupe aussi les réglages
+secondaires. Les commandes du lecteur utilisent de nouvelles icônes, avec une
+sélection plus discrète et des libellés facultatifs dans les options d’accessibilité.
+
+Les reprises de lecture sont conservées localement pendant une coupure réseau,
+les grandes bibliothèques utilisent un index persistant et les correspondances
+de films et de séries peuvent être corrigées depuis leur fiche.
+
+Le lecteur Windows 1.8.14 propose aussi les repères d’intro et de générique,
+les profils facultatifs, un mini lecteur musical et la sauvegarde des réglages.
+L’installateur Windows est disponible sur le canal PC ; il n’est pas signé
+avec un certificat Authenticode de confiance.
 
 Une seule APK Android TV/mobile avec les modes Lecteur et Serveur, hors Google Play.
 Les images des cartes suivent leurs coins arrondis, même avec le contour de sélection.

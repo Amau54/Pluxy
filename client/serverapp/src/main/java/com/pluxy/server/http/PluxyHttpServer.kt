@@ -202,6 +202,9 @@ class PluxyHttpServer(
     }
 
     private fun route(request: HttpRequest, output: OutputStream) {
+        val profile = request.headers["x-pluxy-profile"] ?: "default"
+        try { preferences.validateProfile(profile) } catch (e: IllegalArgumentException) { throw HttpFailure(404, "Profil indisponible") }
+
         val headOnly = request.method == "HEAD"
         when {
             request.path == "/" && request.method in setOf("GET", "HEAD") -> {
@@ -217,6 +220,13 @@ class PluxyHttpServer(
                 """.trimIndent().toByteArray(StandardCharsets.UTF_8)
                 sendBytes(output, 200, "text/html; charset=utf-8", html, headOnly)
             }
+            request.path == "/api/profiles" && request.method in setOf("GET", "HEAD") ->
+                sendJson(output, 200, JSONArray().apply { preferences.familyProfiles().forEach { (id, name) -> put(JSONObject().put("id", id).put("name", name)) } }, headOnly)
+            request.path == "/api/profiles" && request.method == "POST" -> {
+                val value = try { preferences.addFamilyProfile(JSONObject(String(request.body, StandardCharsets.UTF_8)).optString("name")) }
+                catch(e: IllegalArgumentException) { throw HttpFailure(422, e.message ?: "Nom invalide") }
+                sendJson(output, 201, JSONObject().put("id", value.first).put("name", value.second), headOnly)
+            }
             request.path == "/health" && request.method in setOf("GET", "HEAD") ->
                 sendJson(output, 200, JSONObject().apply {
                     put("status", "ok"); put("app", "pluxy"); put("platform", "android")
@@ -228,7 +238,7 @@ class PluxyHttpServer(
             request.path == "/api/library/items" && request.method in setOf("GET", "HEAD") -> {
                 val array = JSONArray().apply {
                     library.all().forEach { item ->
-                        put(item.publicJson(metadata.cached(item.id), watchState(item.id)))
+                        put(item.publicJson(metadata.cached(item.id), watchState(item.id, profile)))
                     }
                 }
                 sendJson(output, 200, array, headOnly)
@@ -236,7 +246,7 @@ class PluxyHttpServer(
             request.path == "/api/library/items/page" && request.method in setOf("GET", "HEAD") -> {
                 val limit = request.query["limit"]?.toIntOrNull() ?: if ("limit" in request.query) throw HttpFailure(400, "limit invalide") else 500
                 val offset = request.query["offset"]?.toIntOrNull() ?: if ("offset" in request.query) throw HttpFailure(400, "offset invalide") else 0
-                val page = try { browseCatalog().page(limit, offset, request.query["revision"],
+                val page = try { browseCatalog(profile).page(limit, offset, request.query["revision"],
                     LibraryQuery.fromParameters(request.query, request.queryValues)) }
                 catch (error: CatalogRevisionChanged) { throw HttpFailure(409, error.message ?: "Bibliothèque modifiée") }
                 catch (error: IllegalArgumentException) { throw HttpFailure(400, error.message ?: "Pagination invalide") }
@@ -249,7 +259,7 @@ class PluxyHttpServer(
             request.path == "/api/library/facets" && request.method in setOf("GET", "HEAD") -> {
                 val query = try { LibraryQuery.fromParameters(request.query, request.queryValues) }
                 catch (error: IllegalArgumentException) { throw HttpFailure(400, error.message ?: "Filtre invalide") }
-                val catalog = browseCatalog()
+                val catalog = browseCatalog(profile)
                 val facets = catalog.facets(query.kind)
                 sendJson(output, 200, JSONObject().apply {
                     put("genres", JSONArray(facets.genres)); put("years", JSONArray(facets.years))
@@ -259,7 +269,7 @@ class PluxyHttpServer(
                 }, headOnly)
             }
             request.path == "/api/library/home" && request.method in setOf("GET", "HEAD") -> {
-                val catalog = browseCatalog()
+                val catalog = browseCatalog(profile)
                 sendJson(output, 200, JSONObject().apply {
                     put("items", JSONArray().apply { catalog.home().forEach { put(browseJson(it)) } })
                     put("counts", JSONObject(catalog.counts)); put("revision", catalog.revision)
@@ -286,9 +296,28 @@ class PluxyHttpServer(
                 val item = requireItem(request.path.substringAfterLast('/'))
                 sendJson(
                     output, 200,
-                    item.publicJson(metadata.cached(item.id), watchState(item.id)),
+                    item.publicJson(metadata.cached(item.id), watchState(item.id, profile)),
                     headOnly,
                 )
+            }
+            request.path.matches(Regex("^/api/library/items/[0-9a-f]+/matches$")) && request.method in setOf("GET", "HEAD") -> {
+                val item = requireItem(request.path.removeSuffix("/matches").substringAfterLast('/'))
+                val query = request.query["q"].orEmpty().trim()
+                if (query.length !in 1..160 || item.kind !in setOf("movie", "series")) throw HttpFailure(422, "Recherche invalide")
+                val matches = try { runBlocking { metadata.searchMatches(item, query) } }
+                catch(e: IllegalArgumentException) { throw HttpFailure(422, e.message ?: "TMDB non configuré") }
+                catch(e: IOException) { throw HttpFailure(503, "TMDB est indisponible. Réessayez.") }
+                sendJson(output, 200, matches, headOnly)
+            }
+            request.path.matches(Regex("^/api/library/items/[0-9a-f]+/match$")) && request.method == "POST" -> {
+                val item = requireItem(request.path.removeSuffix("/match").substringAfterLast('/'))
+                if (item.kind !in setOf("movie", "series")) throw HttpFailure(422, "Média non concerné")
+                val id = JSONObject(String(request.body, StandardCharsets.UTF_8)).optInt("tmdb_id", 0)
+                val related = if (item.kind == "series" && item.seriesKey != null) library.all().filter { it.kind == "series" && it.seriesKey == item.seriesKey } else listOf(item)
+                val value = try { runBlocking { metadata.chooseMatch(item, id, related) } }
+                catch(e: IllegalArgumentException) { throw HttpFailure(422, e.message ?: "Correspondance invalide") }
+                catch(e: IOException) { throw HttpFailure(503, "Correspondance TMDB indisponible. Réessayez.") }
+                sendJson(output, 200, value, headOnly)
             }
             request.path.matches(Regex("^/api/library/items/[0-9a-f]+/metadata$")) &&
                 request.method in setOf("GET", "HEAD") -> {
@@ -318,14 +347,14 @@ class PluxyHttpServer(
                         raw.toLong()
                     } else null
                     try {
-                        preferences.setWatchState(id, body.optLong("position_ms", 0), body.optLong("duration_ms", 0), session, sequence)
+                        preferences.setWatchState(id, body.optLong("position_ms", 0), body.optLong("duration_ms", 0), session, sequence, profile)
                     } catch (error: IllegalArgumentException) {
                         throw HttpFailure(400, error.message ?: "Progression invalide")
                     } catch (_: IOException) {
                         throw HttpFailure(503, "Impossible d'enregistrer la progression. Réessayez.")
                     }
                 } else if (request.method in setOf("GET", "HEAD")) {
-                    watchState(id)
+                    watchState(id, profile)
                 } else throw HttpFailure(405, "Méthode non autorisée")
                 sendJson(output, 200, JSONObject().apply {
                     put("position_ms", state.positionMs)
@@ -499,17 +528,17 @@ class PluxyHttpServer(
     }
 
     @Synchronized
-    private fun browseCatalog(): LibraryBrowseCatalog {
+    private fun browseCatalog(profile: String = "default"): LibraryBrowseCatalog {
         repeat(3) {
             val scan = library.snapshot()
             val metadataRevision = metadata.revision
             val watchRevision = preferences.watchRevision
-            val revision = "${scan.revision}:$metadataRevision:$watchRevision"
+            val revision = "${scan.revision}:$metadataRevision:$watchRevision:$profile"
             browseSnapshot?.takeIf { it.revision == revision }?.let { return it }
             val next = LibraryBrowseCatalog(revision, scan.items.map { item ->
                 BrowseEntry(item,
                     if (item.kind in setOf("movie", "series")) metadata.facts(item.id) else com.pluxy.server.library.BrowseMetadata(),
-                    watchState(item.id))
+                    watchState(item.id, profile))
             })
             if (scan.revision == library.snapshot().revision && metadataRevision == metadata.revision &&
                 watchRevision == preferences.watchRevision) {
@@ -673,7 +702,7 @@ class PluxyHttpServer(
         // réalisables de façon fiable en arrière-plan sur Android.
     }
 
-    private fun watchState(id: String): WatchState = try { preferences.watchState(id) }
+    private fun watchState(id: String, profile: String = "default"): WatchState = try { preferences.watchState(id, profile) }
     catch (_: IOException) { throw HttpFailure(503, "Historique de lecture indisponible. Réessayez.") }
 
     private fun requireItem(id: String): MediaEntry = library.get(id)

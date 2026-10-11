@@ -94,7 +94,8 @@ object FilenameParser {
     }
 
     private fun cleanSeries(value: String): String {
-        val marker = seasonPackPattern.find(value)
+        val marker = listOfNotNull(seasonPackPattern.find(value), episodePattern.find(value))
+            .minByOrNull { it.range.first }
         var cleaned = (if (marker != null && marker.range.first > 0) value.substring(0, marker.range.first) else value)
             .replace(Regex("[._]+"), " ")
         cleaned = cleanupTags.replace(cleaned, "")

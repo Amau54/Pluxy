@@ -300,7 +300,7 @@ object TvLibraryContent {
     }
 
     private fun episodeNumber(item: MediaItem): String? = if (item.season != null && item.episode != null)
-        "S%02dE%02d".format(item.season, item.episode) else item.episode?.let { "Épisode $it" }
+        episodeCode(item) else item.episode?.let { "Épisode $it" }
 
     private fun resumeSubtitle(item: MediaItem): String {
         val seconds = (item.duration * item.progress).toLong().coerceAtLeast(0)

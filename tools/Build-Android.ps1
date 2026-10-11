@@ -3,6 +3,7 @@ param([ValidateSet('Both', 'Player', 'Server')][string]$Application = 'Player', 
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot/Android-Deployment.ps1"
 $repository = Split-Path $PSScriptRoot
+$versions = Get-Content -LiteralPath (Join-Path $repository "versions.json") -Raw | ConvertFrom-Json
 $timer = [Diagnostics.Stopwatch]::StartNew()
 $localSigningVariables = @()
 try {
@@ -47,6 +48,7 @@ try {
         $info = Get-AndroidApkInfo $source $environment
         $expected = if ($module -eq 'app') { 'com.pluxy.tv' } else { 'com.pluxy.server' }
         if ($info.Package -ne $expected -or $info.VersionName -notmatch '^[a-zA-Z0-9][a-zA-Z0-9._-]{0,50}$') { throw 'Package ou version APK inattendus.' }
+        if ($module -eq "app" -and ($info.VersionName -ne $versions.android.name -or $info.VersionCode -ne $versions.android.code)) { throw "Versions Android incohérentes avec versions.json." }
         $prefix = if ($module -eq 'app') { 'Pluxy' } else { 'Pluxy-Server-Android' }
         $applicationName = if ($module -eq 'app') { 'player' } else { 'server' }
         $suffix = if ($Configuration -eq 'Debug') { '-debug' } else { '' }

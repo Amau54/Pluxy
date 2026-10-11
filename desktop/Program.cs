@@ -15,7 +15,7 @@ using Microsoft.Web.WebView2.WinForms;
 [assembly: System.Reflection.AssemblyDescription("Lecteur et serveur multimédia Pluxy")]
 [assembly: System.Reflection.AssemblyCompany("Pluxy")]
 [assembly: System.Reflection.AssemblyProduct("Pluxy")]
-[assembly: System.Reflection.AssemblyVersion("1.8.8.0")]
+[assembly: System.Reflection.AssemblyVersion("1.8.14.0")]
 
 namespace Pluxy {
     internal static class Program {
@@ -42,6 +42,7 @@ namespace Pluxy {
         private readonly LibraryClient api=new LibraryClient();
         private readonly ServerController server=new ServerController();
         private readonly List<PlayerWindow> players=new List<PlayerWindow>();
+        private readonly MusicSession music;
         private readonly EventWaitHandle signal=new EventWaitHandle(false,EventResetMode.AutoReset,Native.InstanceName+"Show");
         private NotifyIcon tray;
         private bool quitting,choosing,busy,started,balloon,background,shutdownComplete,shuttingDown;
@@ -52,6 +53,7 @@ namespace Pluxy {
         private FormWindowState restoreState;
         private readonly Label modeLabel=new Label { Dock=DockStyle.Left,Width=230,TextAlign=ContentAlignment.MiddleLeft,Padding=new Padding(16,0,0,0),ForeColor=Color.FromArgb(180,193,213),Text="Pluxy",Font=new Font("Segoe UI",10) };
         public MainWindow(string[] args) {
+            music=new MusicSession(api,state=>Event("music",state));
             Text="Pluxy"; Size=new Size(1280,860); MinimumSize=new Size(860,620); BackColor=Color.FromArgb(11,15,22); StartPosition=FormStartPosition.CenterScreen;
             var icon=Path.Combine(Native.Root,"pluxy.ico"); if(File.Exists(icon)) Icon=new Icon(icon);
             background=args.Contains("--background");
@@ -73,6 +75,7 @@ namespace Pluxy {
                 e.Cancel=true; if(shuttingDown) return; shuttingDown=true;
                 quitting=true; signal.Set();
                 await Task.WhenAll(players.ToArray().Select(player=>player.Shutdown()));
+                await music.Stop(); music.Dispose();
                 if(tray!=null) { tray.Visible=false; tray.Dispose(); } server.Dispose(); api.Dispose();
                 shutdownComplete=true; Close();
             };
@@ -163,6 +166,7 @@ namespace Pluxy {
                 }
             } finally { busy=false; }
         }
+        private object ReaderState() { return new {mode=choosing?"":prefs.mode,server=prefs.server,serverName=prefs.serverName,theme=prefs.theme,audio=prefs.audio,playerActionHints=prefs.playerActionHints,playerFocusContrast=prefs.playerFocusContrast,profile=api.ProfileId,multipleProfiles=prefs.multipleProfiles,busy=busy,fullscreen=fullscreen}; }
         private async Task Message(CoreWebView2WebMessageReceivedEventArgs message) {
             Uri source; if(!Uri.TryCreate(message.Source,UriKind.Absolute,out source) || source.GetLeftPart(UriPartial.Authority)!=Origin.TrimEnd('/')) return;
             string id="";
@@ -170,20 +174,66 @@ namespace Pluxy {
                 if(message.WebMessageAsJson.Length>1024*1024) return;
                 var payload=Native.Object(Native.Json.DeserializeObject(message.WebMessageAsJson)); id=Native.Text(payload,"id");
                 var method=Native.Text(payload,"method"); var args=Native.Object(payload.ContainsKey("args")?payload["args"]:null); object result;
-                if(method=="state") result=new{mode=choosing?"":prefs.mode,server=prefs.server,serverName=prefs.serverName,theme=prefs.theme,audio=prefs.audio,busy=busy,fullscreen=fullscreen};
+                if(method=="state") result=ReaderState();
                 else if(method=="fullscreen") { if(!args.ContainsKey("enabled") || Convert.ToBoolean(args["enabled"])!=fullscreen) ToggleFullscreen(); result=fullscreen; }
                 else if(method=="chooseMode") { ChooseMode(); result=true; }
                 else if(method=="mode") { await ChangeMode(Native.Text(args,"mode")); result=new{mode=prefs.mode}; }
                 else if(method=="connect") {
                     if(prefs.mode!="reader") throw new IOException("Choisissez le mode Lecteur.");
-                    result=await api.Connect(Native.Text(args,"url")); var connection=Native.Object(Native.Json.DeserializeObject(Native.Json.Serialize(result)));
-                    prefs.server=Native.Text(connection,"url"); prefs.serverName=Native.Text(connection,"name"); prefs.Save();
+                    if(players.Count>0 && LibraryClient.NormalizeServer(Native.Text(args,"url"))!=api.Server) throw new IOException("Fermez le lecteur avant de changer de serveur.");
+                    if(!string.IsNullOrEmpty(api.Server)) prefs.StoreReader(api.Server,api.ProfileId);
+                    else if(!string.IsNullOrEmpty(prefs.server) && (prefs.readers==null || !prefs.readers.ContainsKey(prefs.server+"\n"+prefs.ProfileFor(prefs.server)))) prefs.StoreReader(prefs.server,prefs.ProfileFor(prefs.server));
+                    await music.Stop(); result=await api.Connect(Native.Text(args,"url")); var connection=Native.Object(Native.Json.DeserializeObject(Native.Json.Serialize(result)));
+                    prefs.server=Native.Text(connection,"url"); prefs.serverName=Native.Text(connection,"name");
+                    api.ProfileId=prefs.ProfileFor(prefs.server); prefs.ApplyReader(prefs.server,api.ProfileId);
+                    prefs.Save();
                 }
                 else if(method=="discover") result=await api.Discover();
                 else if(method=="preferences") {
+                    if(args.ContainsKey("multipleProfiles") && args["multipleProfiles"] is bool && (bool)args["multipleProfiles"]!=prefs.multipleProfiles) {
+                        if(players.Count>0) throw new IOException("Fermez le lecteur avant de modifier les profils.");
+                        await music.Stop(); prefs.StoreReader(api.Server,api.ProfileId);
+                        prefs.multipleProfiles=(bool)args["multipleProfiles"];
+                        if(!prefs.multipleProfiles) { api.ProfileId="default"; prefs.ApplyReader(api.Server,"default"); }
+                    }
                     string theme=Native.Text(args,"theme",prefs.theme),audio=Native.Text(args,"audio",prefs.audio);
                     if(!new[]{"coral","ocean","midnight"}.Contains(theme) || !new[]{"auto","passthrough","compatible"}.Contains(audio)) throw new ArgumentException("Réglage inconnu.");
-                    prefs.theme=theme; prefs.audio=audio; prefs.Save(); result=true;
+                    prefs.theme=theme; prefs.audio=audio;
+                    if(args.ContainsKey("playerActionHints") && args["playerActionHints"] is bool) prefs.playerActionHints=(bool)args["playerActionHints"];
+                    if(args.ContainsKey("playerFocusContrast") && args["playerFocusContrast"] is bool) prefs.playerFocusContrast=(bool)args["playerFocusContrast"];
+                    prefs.StoreReader(api.Server,api.ProfileId); prefs.Save(); result=true;
+                }
+                else if(method=="selectProfile") {
+                    if(players.Count>0) throw new IOException("Fermez le lecteur avant de changer de profil.");
+                    var key=Native.Text(args,"profile");
+                    if(!prefs.multipleProfiles && key!="default") throw new IOException("Activez plusieurs profils dans Options.");
+                    await music.Stop();
+                    var available=await api.Api("profiles",args) as object[] ?? new object[0];
+                    if(!available.Any(p=>Native.Text(Native.Object(p),"id")==key)) throw new ArgumentException("Profil indisponible.");
+                    prefs.StoreReader(api.Server,api.ProfileId); api.ProfileId=key;
+                    if(prefs.profiles==null) prefs.profiles=new Dictionary<string,string>(); prefs.profiles[api.Server]=key;
+                    prefs.ApplyReader(api.Server,key); prefs.Save(); result=ReaderState();
+                }
+                else if(method=="checkUpdate") result=await UpdateChecker.Check();
+                else if(method=="openUpdate") { Process.Start(new ProcessStartInfo("https://github.com/Amau54/Pluxy/releases/tag/pc-latest") { UseShellExecute=true }); result=true; }
+                else if(method=="backup") {
+                    using(var dialog=new SaveFileDialog { Title="Sauvegarder les réglages et l'historique",Filter="Sauvegarde Pluxy (*.zip)|*.zip",FileName="Pluxy-"+DateTime.Now.ToString("yyyy-MM-dd")+".zip" }) {
+                        result=false; if(dialog.ShowDialog(this)==DialogResult.OK) { SettingsBackup.Export(dialog.FileName); result=true; }
+                    }
+                }
+                else if(method=="restoreBackup") {
+                    result=false;
+                    using(var dialog=new OpenFileDialog { Title="Restaurer une sauvegarde Pluxy",Filter="Sauvegarde Pluxy (*.zip)|*.zip" }) {
+                        if(dialog.ShowDialog(this)==DialogResult.OK) {
+                            var values=SettingsBackup.Read(dialog.FileName);
+                            if(MessageBox.Show(this,"Cette sauvegarde remplacera les réglages et l'historique. Une copie de l'état actuel sera conservée. Pluxy se fermera ensuite : rouvrez-le pour appliquer les réglages.","Restaurer Pluxy",MessageBoxButtons.OKCancel,MessageBoxIcon.Information)==DialogResult.OK) {
+                                await Task.WhenAll(players.ToArray().Select(player=>player.Shutdown())); await music.Stop(); await Task.Run(()=>server.Stop());
+                                await api.SuspendProgress();
+                                try { SettingsBackup.Restore(values); result=true; Quit(); }
+                                catch { api.ResumeProgress(); throw; }
+                            }
+                        }
+                    }
                 }
                 else if(method=="trailer") {
                     Uri trailer; string value=Native.Text(args,"url");
@@ -193,14 +243,18 @@ namespace Pluxy {
                     if(!System.Text.RegularExpressions.Regex.IsMatch(video ?? "","^[A-Za-z0-9_-]{11}$")) throw new ArgumentException("Bande-annonce invalide.");
                     Process.Start(new ProcessStartInfo("https://www.youtube.com/watch?v="+video) { UseShellExecute=true }); result=true;
                 }
+                else if(method=="musicControl") { await music.Control(Native.Text(args,"action"),Native.Number(args,"value")); result=true; }
                 else if(method=="play") {
                     var item=Native.Object(await api.Api("item",args)); string itemId=Native.Text(item,"id");
+                    if(Native.Text(item,"kind")=="audio") { await music.Play(item,await api.Group(itemId,"audio"),prefs.audio); result=true; }
+                    else {
+                    await music.Stop();
                     double start=Math.Max(0,Native.Number(args,"start_ms")/1000);
                     var subtitles=item.ContainsKey("subtitles")?item["subtitles"] as object[]:null;
                     object[] queue=null;
                     if(Native.Text(item,"kind")=="series") queue=await api.Group(itemId,"series");
-                    var player=new PlayerWindow(api,itemId,Native.Text(item,"metadata_title",Native.Text(item,"title")),api.Server+"/stream/direct/"+LibraryClient.ItemPath(itemId),prefs.audio,start,subtitles,queue);
-                    players.Add(player); player.FormClosed+=(s,e)=> { players.Remove(player); Event("progressUpdated",true); }; player.Show(this); result=true;
+                    var player=new PlayerWindow(api,itemId,MediaPresentation.PlaybackTitle(item),api.Server+"/stream/direct/"+LibraryClient.ItemPath(itemId),prefs.audio,start,subtitles,queue,item);
+                    players.Add(player); player.FormClosed+=(s,e)=> { players.Remove(player); player.ProgressIds.Add(player.MediaId); foreach(var savedId in player.ProgressIds) Event("progressUpdated",new { id=savedId }); }; player.Show(this); result=true; }
                 }
                 else result=await api.Api(method,args);
                 if(!quitting) browser.CoreWebView2.PostWebMessageAsJson(Native.Json.Serialize(new{id=id,result=result}));

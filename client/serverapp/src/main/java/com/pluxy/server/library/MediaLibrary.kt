@@ -35,6 +35,7 @@ class MediaLibrary(
     private val context: Context,
     private val onStateChanged: (scanning: Boolean, count: Int, error: String?) -> Unit,
 ) {
+    private val index = LibraryIndex(context)
     private val indexFile = AtomicFile(File(context.filesDir, "library_index.json"))
     private val scanning = AtomicBoolean(false)
 
@@ -90,6 +91,7 @@ class MediaLibrary(
             .distinctBy { it.kind to it.treeUri }
         if (selected.isEmpty()) return@withContext ScanResult(emptyList())
         val previous = catalog.items.associateBy { it.uri }
+        val moveCandidates = catalog.items.filter { it.fingerprint.isNotEmpty() }.groupBy { it.fingerprint }
         val discoveredAt = System.currentTimeMillis()
         val found = ArrayList<MediaEntry>()
         val visited = HashSet<String>()
@@ -203,7 +205,13 @@ class MediaLibrary(
                     val fileName = child.name ?: "Média.$ext"
                     val size = child.length().takeIf { it > 0 } ?: querySize(child.uri)
                     val modified = child.lastModified().coerceAtLeast(0)
-                    val old = previous[uriValue]
+                    var old = previous[uriValue]
+                    val fingerprint = if (old != null && old.size == size && old.modifiedAtMs == modified && old.fingerprint.isNotBlank()) old.fingerprint else fingerprint(child.uri, size)
+                    if (old == null && fingerprint.isNotBlank()) {
+                        val candidate = moveCandidates[fingerprint]?.singleOrNull()
+                        if (candidate != null && candidate.uri !in seenFiles && found.none { it.id == candidate.id } &&
+                            runCatching { context.contentResolver.openAssetFileDescriptor(Uri.parse(candidate.uri), "r")?.use { true } ?: false }.getOrDefault(false).not()) old = candidate
+                    }
                     var parsed = if (source.kind == LibrarySourceKind.VIDEO) {
                         VideoClassifier.parse(fileName, listOf(root.name.orEmpty(), source.title) + node.ancestors, source.category, old?.durationSeconds ?: 0.0, old?.embeddedTitle)
                     } else null
@@ -220,6 +228,7 @@ class MediaLibrary(
                     ) {
                         found += old.copy(
                             sourceKey = source.identity(), available = true,
+                            uri = uriValue, fingerprint = fingerprint,
                             fileName = fileName,
                             title = parsed?.title ?: old.title,
                             parsedYear = parsed?.year,
@@ -243,7 +252,8 @@ class MediaLibrary(
                     if (source.kind == LibrarySourceKind.VIDEO) parsed = VideoClassifier.parse(fileName,
                         listOf(root.name.orEmpty(), source.title) + node.ancestors, source.category, probe.durationSeconds, probe.title)
                     found += MediaEntry(
-                        id = stableId(uriValue),
+                        id = old?.id ?: stableId(uriValue),
+                        fingerprint = fingerprint,
                         uri = uriValue,
                         fileName = fileName,
                         title = parsed?.title ?: probe.title ?: displayTitle(fileName),
@@ -571,6 +581,7 @@ class MediaLibrary(
     }.getOrDefault(0L)
 
     private fun loadIndex(): List<MediaEntry> {
+        index.load()?.let { return it }
         return runCatching {
             val array = JSONArray(indexFile.openRead().bufferedReader(Charsets.UTF_8).use { it.readText() })
             buildList {
@@ -582,17 +593,26 @@ class MediaLibrary(
         }.getOrDefault(emptyList())
     }
 
-    private fun saveIndex(items: List<MediaEntry>) {
-        val payload = JSONArray().apply { items.forEach { put(it.persistedJson()) } }.toString()
-        val output = indexFile.startWrite()
-        try {
-            output.write(payload.toByteArray(Charsets.UTF_8))
-            indexFile.finishWrite(output)
-        } catch (error: Exception) {
-            indexFile.failWrite(output)
-            throw error
-        }
-    }
+    private fun saveIndex(items: List<MediaEntry>) { index.save(items) }
+
+    private fun fingerprint(uri: Uri, size: Long): String = runCatching {
+        if (size <= 0) return@runCatching ""
+        val digest = MessageDigest.getInstance("SHA-256")
+        digest.update(size.toString().toByteArray())
+        context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { descriptor ->
+            android.os.ParcelFileDescriptor.AutoCloseInputStream(android.os.ParcelFileDescriptor.dup(descriptor.fileDescriptor)).use { stream ->
+                val buffer = java.nio.ByteBuffer.allocate(65_536)
+                for (offset in sortedSetOf(0L, (size / 2 - 32_768).coerceAtLeast(0), (size - 65_536).coerceAtLeast(0))) {
+                    buffer.clear(); stream.channel.position(descriptor.startOffset + offset)
+                    buffer.limit(minOf(65_536L, size - offset).toInt())
+                    while (buffer.hasRemaining() && stream.channel.read(buffer) > 0) { /* Lecture bornée, même avec un fournisseur qui retourne des fragments. */ }
+                    val count = buffer.position()
+                    if (count > 0) digest.update(buffer.array(), 0, count)
+                }
+            }
+        } ?: return@runCatching ""
+        digest.digest().joinToString("") { "%02x".format(it.toInt() and 0xff) }
+    }.getOrDefault("")
 
     private fun stableId(value: String): String {
         val digest = MessageDigest.getInstance("SHA-1").digest(value.toByteArray(Charsets.UTF_8))
@@ -656,8 +676,8 @@ class MediaLibrary(
 
     companion object {
         private const val MAX_SCAN_DEPTH = 64
-        private const val MAX_DIRECTORY_COUNT = 25_000
-        private const val MAX_MEDIA_ITEMS = 10_000
+        private const val MAX_DIRECTORY_COUNT = 100_000
+        private const val MAX_MEDIA_ITEMS = 100_000
         private fun requiredProbeRevision(kind: LibrarySourceKind): Int = if (kind == LibrarySourceKind.PHOTO) 4 else 3
         private val SUBTITLE_EXTENSIONS = setOf("srt", "vtt", "ass", "ssa")
         private val LANGUAGE_CODES = setOf(

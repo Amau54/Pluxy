@@ -15,11 +15,15 @@ data class LibraryRequest(
     val sort: String = "title",
     val descending: Boolean? = null,
     val titlePrefix: String = "",
+    val grouped: Boolean = false,
+    val groupId: String = "",
 ) {
     internal fun path(limit: Int, offset: Int, revision: String?): String {
         require(limit in 1..500 && offset >= 0)
         val url = "http://pluxy/api/library/items/page".toHttpUrl().newBuilder()
             .addQueryParameter("limit", limit.toString()).addQueryParameter("offset", offset.toString())
+        if (grouped) url.addQueryParameter("grouped", "true")
+        if (groupId.isNotBlank()) url.addQueryParameter("group_id", groupId)
         if (kind != "all") url.addQueryParameter("kind", kind)
         if (search.isNotBlank()) url.addQueryParameter("q", search)
         if (watched != "all") url.addQueryParameter("watched", watched)

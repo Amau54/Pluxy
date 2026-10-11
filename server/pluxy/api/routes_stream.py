@@ -33,6 +33,7 @@ from pydantic import BaseModel, Field, ValidationError, model_validator
 from ..decision import decide
 from ..models import ClientCapabilities, MediaInfo, PlaybackDecision, PlaybackMode
 from ..probe import probe
+from ..profiles import reader_watch
 from ..state import AppState, get_state
 from ..tools import NO_WINDOW
 from ..security import playback_key, session_token
@@ -230,7 +231,7 @@ def get_progress(item_id: str, request: Request) -> dict:
     st = get_state(request)
     if not st.library.get(item_id):
         raise HTTPException(404, "Média introuvable")
-    return st.watch.get(item_id)
+    return reader_watch(st, request).get(item_id)
 
 
 class ProgressBody(BaseModel):
@@ -253,10 +254,10 @@ def set_progress(item_id: str, body: ProgressBody, request: Request) -> dict:
     if not st.library.get(item_id):
         raise HTTPException(404, "Média introuvable")
     try:
-        st.watch.set(item_id, body.position_ms, body.duration_ms, body.session_id, body.sequence)
+        reader_watch(st, request).set(item_id, body.position_ms, body.duration_ms, body.session_id, body.sequence)
     except OSError as error:
         raise HTTPException(503, "Impossible de sauvegarder la progression") from error
-    return st.watch.get(item_id)
+    return reader_watch(st, request).get(item_id)
 
 
 # --------------------------------------------------------------------------- #
