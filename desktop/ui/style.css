@@ -46,3 +46,5 @@
 .has-music #toast{bottom:94px}
 
 .metadata-edit{margin-top:12px;opacity:.75}.metadata-edit:hover,.metadata-edit:focus-visible{opacity:1}#metadata-results{max-height:45vh;overflow:auto}#metadata-results .episode-row{width:100%;min-height:48px}.music-actions svg{width:22px;height:22px;flex:none;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
+
+.toast,.has-music #toast { top:24px; right:24px; bottom:auto; left:auto; transform:none; border-radius:14px; max-width:min(440px,calc(100vw - 48px)); background:linear-gradient(145deg,color-mix(in srgb,var(--surface) 94%,transparent),color-mix(in srgb,var(--bg) 94%,transparent)); border-color:color-mix(in srgb,var(--accent) 25%,transparent); }

@@ -11,7 +11,7 @@
     android:focusableInTouchMode="false"
     android:orientation="vertical">
 
-    <FrameLayout
+    <com.pluxy.tv.ui.RoundedArtworkFrame
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="@drawable/poster_rounded"
@@ -81,7 +81,7 @@
             android:max="100"
             android:progressDrawable="@drawable/resume_progress"
             android:visibility="gone" />
-    </FrameLayout>
+    </com.pluxy.tv.ui.RoundedArtworkFrame>
 
     <TextView
         android:id="@+id/title"

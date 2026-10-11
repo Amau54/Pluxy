@@ -1,11 +1,19 @@
-# APK de test — Pluxy 1.7.20 (74)
+# APK de test — Pluxy 1.7.21 (75)
 
-Cette mise à jour ajoute **Passer l’intro** et **Passer le générique**, sans clé API.
-Les chapitres clairement nommés servent de repères. Sans chapitres, définissez
-le début et la fin du passage dans **Options → Intro et générique** du lecteur.
-Une intro peut être réutilisée pour une saison. Les repères restent sur l’appareil ;
-le générique reste propre à chaque vidéo. Définir sa fin permet de conserver
-une éventuelle scène après le générique.
+Cette mise à jour détecte les intros et génériques automatiquement, sans clé API
+ni repère à saisir. Les chapitres nommés restent prioritaires. Sinon, le serveur
+compare le son des épisodes de la même saison et analyse les génériques sur fond
+sombre, en arrière-plan. Les résultats sont conservés en cache. Un passage
+incertain ne déclenche pas de bouton ; une scène après le générique reste lisible.
+Le serveur PC utilise FFmpeg ; le serveur Android utilise les décodeurs de
+l’appareil, avec l’analyse visuelle disponible à partir d’Android 8.1.
+
+La musique s’affiche par dossiers, comme les photos, avec les commandes pour
+tout déplier ou replier. Les sous-titres sont désactivés par défaut et l’audio
+français est préféré. Les choix déjà enregistrés restent conservés. Le format
+d’image se choisit dans une liste qui reste ouverte, avec un mode Original.
+Les coins des affiches sont découpés avec leur contour et les notifications
+reprennent le thème de l’application.
 
 Le profil Général est utilisé par défaut. Les profils supplémentaires se
 réactivent dans **Réglages → Options**. Ce sous-menu regroupe aussi les réglages
@@ -16,8 +24,9 @@ Les reprises de lecture sont conservées localement pendant une coupure réseau,
 les grandes bibliothèques utilisent un index persistant et les correspondances
 de films et de séries peuvent être corrigées depuis leur fiche.
 
-Le lecteur Windows 1.8.14 propose aussi les repères d’intro et de générique,
-les profils facultatifs, un mini lecteur musical et la sauvegarde des réglages.
+Le lecteur Windows 1.8.15 utilise aussi la détection automatique, les dossiers
+musicaux et le mini lecteur. Les options de l’application sont intégrées dans
+l’interface du serveur, sans bandeau supplémentaire.
 L’installateur Windows est disponible sur le canal PC ; il n’est pas signé
 avec un certificat Authenticode de confiance.
 

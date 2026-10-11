@@ -27,6 +27,7 @@ internal data class LibraryQuery(
     val titlePrefix: String = "",
     val grouped: Boolean = false,
     val groupId: String = "",
+    val audioFolders: Boolean = false,
 ) {
     val words: List<String> = query.split(whitespace).filter(String::isNotBlank)
     companion object {
@@ -63,7 +64,7 @@ internal data class LibraryQuery(
                 hdrOnly = flag("hdr_only"), sort = option("sort", "title", setOf("title", "added", "year", "duration")),
                 descending = flag("descending"),
                 titlePrefix = prefix,
-                grouped = flag("grouped"),
+                grouped = flag("grouped"), audioFolders = flag("audio_folders"),
                 groupId = parameters["group_id"].orEmpty().also { require(it.length <= 128) { "group_id invalide" } },
             )
         }
@@ -85,9 +86,9 @@ internal class LibraryBrowseCatalog(val revision: String, entries: List<BrowseEn
         if (requestedRevision != null && requestedRevision != revision) throw CatalogRevisionChanged()
         val seed = query.groupId.takeIf(String::isNotBlank)?.let { id -> entries.find { it.media.id == id } }
         val matches = queryCache[query] ?: entries.asSequence().filter { entry -> matches(entry, query) &&
-            (query.groupId.isBlank() || seed != null && groupKey(entry.media) == groupKey(seed.media)) }
+            (query.groupId.isBlank() || seed != null && groupKey(entry.media, query.audioFolders) == groupKey(seed.media, query.audioFolders)) }
             .sortedWith(comparator(query)).toList().let { values ->
-                if (!query.grouped) values else values.groupBy { groupKey(it.media) }.values.map { group ->
+                if (!query.grouped) values else values.groupBy { groupKey(it.media, query.audioFolders) }.values.map { group ->
                     group.first().copy(groupCount = group.size, seasonCount = if (group.first().media.kind == "series") group.map { it.media.season ?: 0 }.distinct().size else 0)
                 }
             }.also { result ->
@@ -100,10 +101,10 @@ internal class LibraryBrowseCatalog(val revision: String, entries: List<BrowseEn
         return BrowsePage(matches.subList(start, end), matches.size, revision, end.takeIf { it < matches.size })
     }
 
-    private fun groupKey(item: MediaEntry): List<String> = when (item.kind) {
+    private fun groupKey(item: MediaEntry, audioFolders: Boolean = false): List<String> = when (item.kind) {
         "series" -> listOf(item.kind, item.seriesKey ?: normalizeLibraryText(item.seriesName ?: item.title))
+        "audio" -> if (!audioFolders) listOf(item.kind, normalizeLibraryText(item.artist.orEmpty()), normalizeLibraryText(item.album ?: item.sourceName.orEmpty())) else listOf(item.kind, item.sourceId ?: item.sourceName.orEmpty(), item.relativePath.orEmpty().replace('\\', '/').substringBeforeLast('/', ""))
         "photo" -> listOf(item.kind, item.sourceId ?: item.sourceName.orEmpty(), item.relativePath.orEmpty().replace('\\', '/').substringBeforeLast('/', ""))
-        "audio" -> listOf(item.kind, normalizeLibraryText(item.artist.orEmpty()), normalizeLibraryText(item.album ?: item.sourceName.orEmpty()))
         else -> listOf(item.kind, item.id)
     }
 

@@ -122,6 +122,7 @@ class AudioPlayerActivity : ThemedActivity() {
             .putExtra(AudioPlaybackService.EXTRA_PLAY, playWhenReady)
             .putExtra(AudioPlaybackService.EXTRA_SERVER_URL, ownerServerUrl)
             .putExtra(EXTRA_COLLECTION_ID, collectionId)
+            .putExtra("folder_queue", intent.getBooleanExtra("folder_queue", false))
         ContextCompat.startForegroundService(this, intent)
         requestedSession = true
     }

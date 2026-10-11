@@ -10,9 +10,8 @@ namespace Pluxy {
     internal sealed class PlayerWindow : Form {
         private MpvSession mpv=new MpvSession();
         private IDictionary<string,object> media;
-        private readonly SkipMarkerStore skipStore=new SkipMarkerStore();
-        private SkipMarkers skipMarkers=new SkipMarkers();
-        private SkipMarkers ownSkipMarkers=new SkipMarkers();
+        private System.Threading.CancellationTokenSource skipLifetime=new System.Threading.CancellationTokenSource();
+        private Task skipAnalysis;
         private object[] skipChapters=new object[0];
         private SkipSegment activeSkip;
         private Button skipButton,optionsButton;
@@ -158,11 +157,11 @@ namespace Pluxy {
             };
         }
         public async Task Shutdown() {
-            if(closing) return; closing=true; timer.Stop(); seekTimer.Stop(); mpv.Dispose();
+            if(closing) return; closing=true; skipLifetime.Cancel(); timer.Stop(); seekTimer.Stop(); mpv.Dispose();
             previewTimer.Stop(); previewLifetime.Cancel(); previewImage.Image=null;
             foreach(var bitmap in previewCache.Values) bitmap.Dispose(); previewCache.Clear();
             try { var save=api.SaveProgress(server,id,position,duration,progressSession,++progressSequence,profile); await Task.WhenAny(save,Task.Delay(2000)); if(save.IsCompleted) await save; else saveObserver=save.ContinueWith(t=>Native.Log(t.Exception),TaskContinuationOptions.OnlyOnFaulted); } catch(Exception error) { Native.Log(error); }
-            timer.Dispose(); seekTimer.Dispose(); previewTimer.Dispose(); previewLifetime.Dispose(); Close();
+            timer.Dispose(); seekTimer.Dispose(); previewTimer.Dispose(); previewLifetime.Dispose(); skipLifetime.Dispose(); Close();
         }
         protected override bool ProcessCmdKey(ref Message message,Keys keyData) {
             if(keyData==Keys.F11 || keyData==Keys.F) { ToggleFull(); return true; }
@@ -204,7 +203,8 @@ namespace Pluxy {
                 double length=Convert.ToDouble(await mpv.Command("get_property","duration"),CultureInfo.InvariantCulture);
                 skipChapters=SkipSegments.Chapters(chapters,length);
             } catch(Exception error) { Native.Log(error); }
-            ReloadSkipMarkers();
+            skipLifetime.Cancel(); skipLifetime.Dispose(); skipLifetime=new System.Threading.CancellationTokenSource();
+            skipAnalysis=LoadAutomaticSegments(id,server,skipChapters,skipLifetime.Token);
             position=resume; ready=true; retryButton.Visible=false; stalledSince=DateTime.MinValue; healthySince=DateTime.UtcNow; timer.Start();
         }
         private async Task Recover(double resume) {
@@ -335,13 +335,22 @@ namespace Pluxy {
             skipButton.Location=new Point(Math.Max(Scale(12),ClientSize.Width-skipButton.Width-Scale(24)),Math.Max(Scale(12),controls.Top-skipButton.Height-Scale(12)));
             nextPrompt.Location=new Point(Math.Max(Scale(12),ClientSize.Width-nextPrompt.Width-Scale(24)),Math.Max(Scale(12),controls.Top-nextPrompt.Height-Scale(12)));
         }
-        private void ReloadSkipMarkers() {
-            try { ownSkipMarkers=skipStore.Own(server,media); skipMarkers=skipStore.Effective(server,media); }
-            catch(Exception error) { Native.Log(error); skipMarkers=new SkipMarkers(); ownSkipMarkers=new SkipMarkers(); }
+        private async Task LoadAutomaticSegments(string ownerId,string ownerServer,object[] nativeChapters,System.Threading.CancellationToken token) {
+            try {
+                for(int attempt=0;attempt<24;attempt++) {
+                    token.ThrowIfCancellationRequested();
+                    var chapters=await api.Chapters(ownerServer,ownerId);
+                    if(token.IsCancellationRequested || closing || id!=ownerId || server!=ownerServer) return;
+                    skipChapters=nativeChapters.Concat(chapters).ToArray();
+                    UpdateSkip();
+                    if(SkipSegments.Detect(skipChapters,(long)(duration*1000)).Select(segment=>segment.kind).Distinct().Count()==2) return;
+                    await Task.Delay(6000,token);
+                }
+            } catch(OperationCanceledException) {} catch(Exception error) { Native.Log(error); }
         }
         private void UpdateSkip() {
             activeSkip=ready && !closing && !recovering && !dragging && seekDirection==0 && !nextPrompt.Visible?
-                SkipSegments.Active(SkipSegments.Resolve(SkipSegments.Detect(skipChapters,(long)(duration*1000)),ownSkipMarkers.Segments((long)(duration*1000)),skipMarkers.Segments((long)(duration*1000))),(long)(position*1000)):null;
+                SkipSegments.Active(SkipSegments.Detect(skipChapters,(long)(duration*1000)),(long)(position*1000)):null;
             if(activeSkip==null && skipButton.Focused) pause.Focus();
             skipButton.Visible=activeSkip!=null;
             skipButton.Text=activeSkip!=null && activeSkip.kind=="intro"?"Passer l’intro":"Passer le générique";
@@ -349,30 +358,17 @@ namespace Pluxy {
             if(skipButton.Visible) skipButton.BringToFront();
         }
         private void ShowSkipMenu() {
-            if(!ready || closing || duration<=0) return;
+            if(!ready || closing) return;
             ShowControls();
             var menu=new PlayerMenu(accent);
             menu.Closed+=(s,e)=>{ menu.Dispose(); if(!closing) ShowControls(); };
-            long at=(long)(position*1000),length=(long)(duration*1000);
-            SkipMarkers own;
-            try { own=skipStore.Own(server,media); } catch(Exception error) { Native.Log(error); return; }
-            var caption=new ToolStripMenuItem("Repères à "+Clock(position)) {Enabled=false}; menu.Items.Add(caption);
-            Action<string,Action> add=(label,action)=>{
-                var entry=new ToolStripMenuItem(label); entry.Click+=(s,e)=>{
-                    try { action(); ReloadSkipMarkers(); UpdateSkip(); }
-                    catch(Exception error) { Native.Log(error); MessageBox.Show(this,error is ArgumentException?error.Message:"Impossible d’enregistrer ce repère.","Intro et générique",MessageBoxButtons.OK,MessageBoxIcon.Information); }
-                }; menu.Items.Add(entry);
-            };
-            add("Début de l’intro ici",()=>{ own.introStartMs=at; own.introEndMs=null; skipStore.Save(server,media,own); });
-            add("Fin de l’intro ici",()=>{ if(at<=own.introStartMs || at>=length) throw new ArgumentException("La fin doit suivre le début de l’intro."); own.introEndMs=at; skipStore.Save(server,media,own); });
-            add("Début du générique ici",()=>{ if(at>=length) throw new ArgumentException("Choisissez une position avant la fin du média."); own.creditsStartMs=at; own.creditsEndMs=null; skipStore.Save(server,media,own); });
-            add("Fin du générique ici",()=>{ if(!own.creditsStartMs.HasValue || at<=own.creditsStartMs || at>length) throw new ArgumentException("Marquez d’abord le début du générique."); own.creditsEndMs=at; skipStore.Save(server,media,own); });
-            if(skipStore.CanShare(media) && skipMarkers.Segments(length).Any(segment=>segment.kind=="intro"))
-                add("Réutiliser l’intro pour cette saison",()=>skipStore.Share(server,media,skipMarkers));
+            menu.Items.Add(new ToolStripMenuItem("Format de l’image") { Enabled=false });
+            var original=new ToolStripMenuItem("Original · proportions conservées");
+            original.Click+=async(s,e)=>{ await Run("set_property","keepaspect",true); await Run("set_property","panscan",0); }; menu.Items.Add(original);
+            var zoom=new ToolStripMenuItem("Zoom · remplir l’écran");
+            zoom.Click+=async(s,e)=>{ await Run("set_property","keepaspect",true); await Run("set_property","panscan",1); }; menu.Items.Add(zoom);
             menu.Items.Add(new ToolStripSeparator());
-            add("Effacer les repères de ce média",()=>skipStore.Clear(server,media));
-            if(skipStore.HasSeason(server,media)) add("Effacer l’intro de cette saison",()=>skipStore.ClearSeason(server,media));
-            menu.MaximumSize=new Size(Scale(420),0);
+            menu.Items.Add(new ToolStripMenuItem("Intros et génériques : détection automatique") { Enabled=false });
             menu.Show(optionsButton,new Point(0,0),ToolStripDropDownDirection.AboveRight);
         }
         private void ShowNextPrompt(int index) {

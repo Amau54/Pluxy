@@ -5,6 +5,18 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class PhotoFolderTreeTest {
+    @Test fun `music uses real folders without merging roots or albums`() {
+        val first = photo("a", "one", "Concert/Disc 1/a.mp3").copy(kind = "audio", album = "Live")
+        val second = first.copy(id = "b", sourceId = "two", relativePath = "Concert/Disc 1/b.mp3")
+        val other = first.copy(id = "c", album = "Other", relativePath = "Concert/Disc 1/c.mp3")
+        val rows = TvLibraryContent.rows(listOf(first, second, other), TvLibraryContent.Query("audio"))
+        assertEquals(6, rows.filterIsInstance<LibRow.Header>().count { it.collapsible })
+        assertEquals(3, rows.filterIsInstance<LibRow.MediaRow>().size)
+        assertTrue(LibraryOrganizer.sameAudioFolder(first, other))
+        assertFalse(LibraryOrganizer.sameAudioFolder(first, second))
+        val collapsed = PhotoFolderTree.rows(listOf(first, second, other), setOf("audio-tree:one"), TvLibraryContent.Query("audio"))
+        assertEquals(listOf("b"), collapsed.filterIsInstance<LibRow.MediaRow>().map { it.item.id })
+    }
     private fun photo(id: String, source: String, path: String) = MediaItem(id, id, "", "jpg", 1, 0.0,
         kind = "photo", sourceId = source, sourceName = "Photos", relativePath = path)
 

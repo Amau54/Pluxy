@@ -55,6 +55,7 @@ class PluxyHttpServer(
 ) {
     private val version = serverApplicationVersion(context)
     private val thumbnails = MediaThumbnailer(context)
+    private var segments: com.pluxy.server.library.AutomaticSegments? = null
     private var serverSocket: ServerSocket? = null
     private var acceptThread: Thread? = null
     private var workers: HttpWorkScheduler? = null
@@ -94,6 +95,7 @@ class PluxyHttpServer(
 
     @Synchronized
     fun stop() {
+        segments?.close(); segments = null
         running = false
         thumbnails.cancelPreviews()
         runCatching { serverSocket?.close() }
@@ -290,6 +292,13 @@ class PluxyHttpServer(
             request.path == "/api/library/refresh-metadata" && request.method == "POST" -> {
                 scope.launch { metadata.enrichAll(library.all(), force = true) }
                 sendJson(output, 200, JSONObject().put("status", "started"), false)
+            }
+            request.path.matches(Regex("^/api/library/items/[0-9a-f]+/chapters$")) && request.method in setOf("GET", "HEAD") -> {
+                val item = requireItem(request.path.removeSuffix("/chapters").substringAfterLast('/'))
+                val analyzer = synchronized(this) {
+                    segments ?: com.pluxy.server.library.AutomaticSegments(context, library).also { segments = it }
+                }
+                sendJson(output, 200, analyzer.request(item), headOnly)
             }
             request.path.matches(Regex("^/api/library/items/[0-9a-f]+$")) &&
                 request.method in setOf("GET", "HEAD") -> {

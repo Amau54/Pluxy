@@ -162,7 +162,7 @@ namespace Pluxy {
                 return await Get(server,"/api/playback/progress/"+ItemPath(id));
             }
             if(method=="page") {
-                string[] fields={"kind","q","sort","descending","year","genre","watched","resolution","hdr_only","offset","revision","grouped","group_id"};
+                string[] fields={"kind","q","sort","descending","year","genre","watched","resolution","hdr_only","offset","revision","grouped","group_id","audio_folders"};
                 var query=new List<string>{"limit=500"};
                 foreach(var field in fields) { var text=Native.Text(args,field); if(text.Length>512) throw new ArgumentException("Filtre trop long."); if(text!="") query.Add(field+"="+Uri.EscapeDataString(text)); }
                 return await Get(server,"/api/library/items/page?"+string.Join("&",query.ToArray()));
@@ -184,13 +184,14 @@ namespace Pluxy {
                 using(var response=await http.SendAsync(request)) response.EnsureSuccessStatusCode();
             }
         }
+        public async Task<object[]> Chapters(string server,string id) { return await Get(server,"/api/library/items/"+ItemPath(id)+"/chapters") as object[] ?? new object[0]; }
         public async Task<object[]> Group(string id,string kind) {
             var values=new List<object>(); int offset=0; string revision="";
             for(int retry=0;retry<2;retry++) {
                 values.Clear(); offset=0; revision="";
                 try {
                     while(true) {
-                        var page=Native.Object(await Api("page",new Dictionary<string,object>{{"kind",kind},{"group_id",ItemPath(id)},{"offset",offset},{"revision",revision}}));
+                        var page=Native.Object(await Api("page",new Dictionary<string,object>{{"kind",kind},{"audio_folders",kind=="audio"},{"group_id",ItemPath(id)},{"offset",offset},{"revision",revision}}));
                         values.AddRange(page["items"] as object[] ?? new object[0]); revision=Native.Text(page,"revision");
                         object next; if(!page.TryGetValue("next_offset",out next) || next==null) return values.ToArray();
                         int following=Convert.ToInt32(next); if(following<=offset) throw new IOException("Pagination incorrecte du serveur."); offset=following;

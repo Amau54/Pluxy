@@ -68,7 +68,7 @@ def items(request: Request) -> list[MediaItem]:
 @router.get("/items/page")
 def items_page(request: Request, limit: int = Query(default=500, ge=1, le=500),
                offset: int = Query(default=0, ge=0, le=2_147_483_647),
-               grouped: bool = False, group_id: str = Query(default="", max_length=128),
+               grouped: bool = False, audio_folders: bool = False, group_id: str = Query(default="", max_length=128),
                revision: str | None = Query(default=None, max_length=64),
                kind: Kind = "all", q: str = Query(default="", max_length=256),
                watched: Literal["all", "unwatched", "watched", "in_progress"] = "all",
@@ -86,7 +86,7 @@ def items_page(request: Request, limit: int = Query(default=500, ge=1, le=500),
     try:
         values, total, current = reader_catalogue(st, request).page(
             CatalogueQuery(kind, q, watched, tuple(genre), year, duration_max_minutes,
-                           resolution, hdr_only, sort, descending, title_prefix, grouped, group_id), offset, limit, revision)
+                           resolution, hdr_only, sort, descending, title_prefix, grouped, group_id, audio_folders), offset, limit, revision)
     except ValueError as error:
         raise HTTPException(409, "Le catalogue a change ; recommencer depuis la premiere page") from error
     return {"items": values, "total": total,
@@ -168,9 +168,11 @@ def item_chapters(item_id: str, request: Request):
     item = st.library.get(item_id)
     if not item:
         raise HTTPException(404, "Média introuvable")
-    if item.kind not in ("movie", "series", "video"):
+    if item.kind not in ("movie", "series", "clip", "video"):
         return []
-    return read_chapters(st.cfgm.cfg.ffmpeg.ffprobe_path, item.path)
+    chapters = read_chapters(st.cfgm.cfg.ffmpeg.ffprobe_path, item.path)
+    analyzer = getattr(st, "segments", None)
+    return chapters + (analyzer.request(item) if analyzer else [])
 
 
 @router.get("/items/{item_id}/metadata", response_model=MovieMetadata)

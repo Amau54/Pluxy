@@ -63,6 +63,7 @@ class Query:
     title_prefix: str = ""
     grouped: bool = False
     group_id: str = ""
+    audio_folders: bool = False
 
 
 @dataclass(frozen=True)
@@ -111,14 +112,14 @@ class Catalogue:
             return self._revision, self._rows
 
     @staticmethod
-    def group_key(item: MediaItem) -> tuple:
+    def group_key(item: MediaItem, audio_folders: bool = False) -> tuple:
         if item.kind == "series":
             return (item.kind, item.series_key or folded(item.series_name or item.title))
-        if item.kind == "photo":
+        if item.kind == "audio" and not audio_folders:
+            return (item.kind, folded(item.artist), folded(item.album or item.source_name))
+        if item.kind in {"photo", "audio"}:
             path = (item.relative_path or "").replace("\\", "/")
             return (item.kind, item.source_id or item.source_name, path.rpartition("/")[0])
-        if item.kind == "audio":
-            return (item.kind, folded(item.artist), folded(item.album or item.source_name))
         return (item.kind, item.id)
 
     @staticmethod
@@ -162,7 +163,7 @@ class Catalogue:
                 candidates = [row for row in rows if self._matches(row, query)]
                 if query.group_id:
                     seed = next((row.item for row in rows if row.item.id == query.group_id), None)
-                    candidates = [row for row in candidates if seed is not None and self.group_key(row.item) == self.group_key(seed)]
+                    candidates = [row for row in candidates if seed is not None and self.group_key(row.item, query.audio_folders) == self.group_key(seed, query.audio_folders)]
                 def key(row):
                     item = row.item
                     return {"title": row.title, "added": item.added_at,
@@ -176,7 +177,7 @@ class Catalogue:
                 if query.grouped:
                     groups = {}
                     for item in values:
-                        groups.setdefault(self.group_key(item), []).append(item)
+                        groups.setdefault(self.group_key(item, query.audio_folders), []).append(item)
                     values = tuple(group[0].model_copy(update={"group_count": len(group),
                         "season_count": len({item.season or 0 for item in group}) if group[0].kind == "series" else 0})
                         for group in groups.values())

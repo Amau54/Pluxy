@@ -38,6 +38,7 @@ client/captures/
 
 # ---------- Divers ----------
 .DS_Store
+.codex-remote-attachments/
 Thumbs.db
 desktop.ini
 *.log

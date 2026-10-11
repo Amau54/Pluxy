@@ -205,3 +205,12 @@ details[open] summary::after { transform: rotate(45deg); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; scroll-behavior: auto !important; }
 }
+
+.desktop-options { display:flex; align-items:center; gap:8px; padding:9px 12px; border-radius:12px; }
+.desktop-menu { color:var(--txt); background:linear-gradient(145deg,#242832f5,#12161ef8); border:1px solid var(--line); border-radius:18px; padding:20px; width:320px; max-width:90vw; box-shadow:var(--shadow); backdrop-filter:blur(24px); }
+.desktop-menu::backdrop { background:#05070b90; backdrop-filter:blur(6px); }
+.desktop-menu-heading { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+.desktop-menu > button { display:block; width:100%; text-align:left; margin:6px 0; }
+.toast { left:auto; right:24px; top:24px; bottom:auto; transform:translateY(-12px); border:1px solid var(--line); background:linear-gradient(145deg,#282c37ed,#171b24f5); color:var(--txt); border-radius:14px; backdrop-filter:blur(24px); max-width:min(440px,calc(100vw - 48px)); text-align:left; }
+.toast.show { transform:translateY(0); }
+.toast.error { background:linear-gradient(145deg,#382831ed,#211b24f5); border-color:#f6ad8440; color:var(--txt); }

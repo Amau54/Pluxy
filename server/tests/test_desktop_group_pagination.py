@@ -67,3 +67,16 @@ def test_album_groups_preserve_artist_and_revision_conflicts():
     assert total == 2 and sorted(card.group_count for card in cards) == [1, 2]
     with pytest.raises(ValueError):
         index.page(Query(kind="audio", grouped=True), 1, 500, "old")
+
+
+def test_audio_folder_groups_keep_sources_and_subfolders_separate():
+    values = [media("a", kind="audio", artist="Alice", album="Live"),
+              media("b", kind="audio", artist="Bob", album="Other"),
+              media("c", kind="audio", artist="Alice", album="Live")]
+    values = [item.model_copy(update={"source_id": "disk1" if i < 2 else "disk2",
+              "relative_path": "Concert/" + item.id + ".mp3"}) for i, item in enumerate(values)]
+    index = catalogue(values)
+    cards, total, _ = index.page(Query(kind="audio", grouped=True, audio_folders=True), 0, 500)
+    assert total == 2 and sorted(card.group_count for card in cards) == [1, 2]
+    tracks, _, _ = index.page(Query(kind="audio", group_id="a", audio_folders=True), 0, 500)
+    assert {track.id for track in tracks} == {"a", "b"}

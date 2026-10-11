@@ -203,7 +203,7 @@ class PhotoActivity : ThemedActivity() {
                 photos = scoped
                 index = restoredPhotoIndex(photos, currentId)
                 if (photos[index].id != currentId) {
-                    android.widget.Toast.makeText(this@PhotoActivity, R.string.photo_missing_fallback, android.widget.Toast.LENGTH_SHORT).show()
+                    com.pluxy.tv.ui.InAppNotice.makeText(this@PhotoActivity, R.string.photo_missing_fallback, com.pluxy.tv.ui.InAppNotice.LENGTH_SHORT).show()
                     showAt(index)
                 } else {
                     updatePhotoLabel()

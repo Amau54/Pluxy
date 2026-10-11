@@ -19,6 +19,7 @@ from .seek_previews import SeekPreviews
 from .vodhls import VodHls
 from .watchstate import WatchStore
 from .catalogue import Catalogue
+from .segments import SegmentAnalyzer
 
 
 class AppState:
@@ -39,6 +40,7 @@ class AppState:
         self.catalogue = Catalogue(self.library, self.metadata, self.watch)
         self.thumbnails = VideoThumbnailer(self.cfgm.cfg, data)
         self.seek_previews = SeekPreviews(self.cfgm.cfg, data)
+        self.segments = SegmentAnalyzer(self.cfgm.cfg, self.library, data)
         # Dernière décision de lecture par média (capacités client réelles) — réutilisée
         # par les endpoints de flux (remux) pour cibler le bon codec audio.
         self._decision_lock = threading.RLock()
@@ -157,6 +159,7 @@ class AppState:
         """Libère les ressources externes même lors d'un arrêt avec lecteurs actifs."""
         with self._job_lock:
             self._closing.set()
+        self.segments.close()
         self.seek_previews.close()
         try:
             self.discovery.stop()

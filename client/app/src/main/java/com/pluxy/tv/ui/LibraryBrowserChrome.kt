@@ -107,14 +107,14 @@ class LibraryBrowserChrome(
         val video = if (searchText.isNotBlank()) query.searchScope in setOf("all", "movie", "series", "clip")
             else kind in setOf("movie", "series", "clip")
         rows.visibility = if (kind == "home" && searchText.isBlank()) View.GONE else View.VISIBLE
-        photoCommands.visibility = if (kind == "photo" && query.photoView == "folders" && searchText.isBlank()) View.VISIBLE else View.GONE
+        photoCommands.visibility = if (kind in setOf("photo", "audio") && query.photoView == "folders" && searchText.isBlank()) View.VISIBLE else View.GONE
         destination.visibility = if (kind == "home" || searchText.isNotBlank()) View.GONE else View.VISIBLE
         destination.text = when (kind) { "movie" -> "Films"; "series" -> "Séries"; "clip" -> "Vidéos"; "photo" -> "Photos"; "audio" -> "Musique"; else -> "Médias" }
         destination.setCompoundDrawablesRelativeWithIntrinsicBounds(0, 0, R.drawable.ic_library_dropdown, 0)
         mode.text = when {
             collectionName != null -> "Collections"
             kind == "photo" -> when (query.photoView) { "timeline" -> "Chronologie"; "albums" -> "Albums"; else -> "Dossiers" }
-            kind == "audio" && view != "collections" -> "Albums"
+            kind == "audio" && view != "collections" -> if (query.photoView == "albums") "Albums" else "Dossiers"
             view == "discover" -> "Découvrir"
             view == "collections" -> "Collections"
             else -> if (television) "Bibliothèque" else "Catalogue"

@@ -36,7 +36,7 @@ import android.widget.LinearLayout
 import android.widget.PopupWindow
 import android.widget.ScrollView
 import android.widget.TextView
-import android.widget.Toast
+import com.pluxy.tv.ui.InAppNotice as Toast
 import kotlin.math.abs
 import androidx.activity.OnBackPressedCallback
 import androidx.annotation.OptIn
@@ -318,7 +318,7 @@ class PlayerActivity : ThemedActivity() {
     }
 
     private val aspectModes = listOf(
-        AspectRatioFrameLayout.RESIZE_MODE_FIT to "Ajusté",
+        AspectRatioFrameLayout.RESIZE_MODE_FIT to "Original · proportions conservées",
         AspectRatioFrameLayout.RESIZE_MODE_ZOOM to "Zoom",
         AspectRatioFrameLayout.RESIZE_MODE_FILL to "Étiré",
     )
@@ -560,7 +560,7 @@ class PlayerActivity : ThemedActivity() {
         decision.commands.forEach(::executeRemoteCommand)
         if (key == TvPlaybackKeyRouter.Key.UP && phase == TvPlaybackKeyRouter.Phase.DOWN &&
             TvPlaybackKeyRouter.Command.ShowControls in decision.commands) {
-            findViewById<View>(R.id.skipSegment).takeIf { it.visibility == View.VISIBLE }?.requestFocus()
+            findViewById<View>(R.id.skipSegment).takeIf { it.visibility == View.VISIBLE }?.requestFocusFromTouch()
         }
         return true
     }
@@ -585,6 +585,7 @@ class PlayerActivity : ThemedActivity() {
     }
 
     private fun playbackFocus(): TvPlaybackKeyRouter.Focus {
+        if (findViewById<View>(R.id.skipSegment).hasFocus()) return TvPlaybackKeyRouter.Focus.OTHER_CONTROL
         if (controlsOverlay.visibility != View.VISIBLE) {
             return TvPlaybackKeyRouter.Focus.PLAYBACK
         }
@@ -1025,7 +1026,8 @@ class PlayerActivity : ThemedActivity() {
     }
 
     private fun shouldAutoHideControls(): Boolean = !terminalPlaybackError &&
-        !playerChoiceMenuShowing && player?.isPlaying == true && hasWindowFocus()
+        !playerChoiceMenuShowing && !findViewById<View>(R.id.skipSegment).hasFocus() &&
+        player?.isPlaying == true && hasWindowFocus()
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
@@ -1308,6 +1310,7 @@ class PlayerActivity : ThemedActivity() {
         title: String,
         choices: List<CompactChoiceMenu.Choice>,
         selectedValue: String = "",
+        dismissOnSelect: Boolean = true,
         onSelect: (String) -> Unit,
     ) {
         if (!activityStarted || isFinishing || isDestroyed || !anchor.isAttachedToWindow) return
@@ -1325,6 +1328,7 @@ class PlayerActivity : ThemedActivity() {
             choices = choices,
             selectedValue = selectedValue,
             compact = true,
+            dismissOnSelect = dismissOnSelect,
             onSelect = { value ->
                 if (generation == playerChoiceMenuGeneration && activityStarted && !isFinishing && !isDestroyed) {
                     onSelect(value)
@@ -1346,7 +1350,6 @@ class PlayerActivity : ThemedActivity() {
 
     private val skipDurationMs get() = durationMs.takeIf { it > 0 }
         ?: ((player?.duration?.takeIf { it > 0 } ?: 0) + streamPositionOffsetMs)
-    private val skipStore by lazy { SkipMarkerStore(this) }
     private var skipChapters: List<MediaChapter> = emptyList()
     private var skipChaptersJob: Job? = null
     private var activeSkipSegment: SkipSegment? = null
@@ -1360,11 +1363,17 @@ class PlayerActivity : ThemedActivity() {
         skipChaptersJob = lifecycleScope.launch {
             val chapterApi = PluxyApi(server)
             try {
-                val chapters = kotlinx.coroutines.withTimeout(10_000) { chapterApi.chapters(ownerId) }
-                if (item.id == ownerId && api.baseUrl == server) { skipChapters = chapters; updateSkipSegment() }
+                repeat(24) {
+                    val chapters = kotlinx.coroutines.withTimeout(10_000) { chapterApi.chapters(ownerId) }
+                    if (item.id != ownerId || api.baseUrl != server) return@launch
+                    skipChapters = chapters
+                    updateSkipSegment()
+                    if (SkipSegments.detected(chapters, skipDurationMs).map { it.kind }.toSet().size == 2) return@launch
+                    kotlinx.coroutines.delay(6_000)
+                }
             } catch (e: kotlinx.coroutines.TimeoutCancellationException) { /* Chapitres facultatifs. */ }
             catch (e: CancellationException) { throw e }
-            catch (_: Exception) { /* Les anciens serveurs restent compatibles avec les repères locaux. */ }
+            catch (_: Exception) { /* Un serveur ancien ne fournit pas d’analyse automatique. */ }
             finally { chapterApi.close() }
         }
     }
@@ -1372,9 +1381,7 @@ class PlayerActivity : ThemedActivity() {
     private fun updateSkipSegment() {
         if (!::item.isInitialized || !::api.isInitialized) return
         val button = findViewById<Button>(R.id.skipSegment)
-        val segments = SkipSegments.resolve(SkipSegments.detected(skipChapters, skipDurationMs),
-            skipStore.own(api.baseUrl, item).segments(skipDurationMs),
-            skipStore.effective(api.baseUrl, item).segments(skipDurationMs))
+        val segments = SkipSegments.detected(skipChapters, skipDurationMs)
         activeSkipSegment = if (player?.playbackState == Player.STATE_READY && !terminalPlaybackError &&
             !isSeeking && !timelineScrubbing && !playerChoiceMenuShowing && nextEpisodeDialog?.isShowing != true)
             SkipSegments.active(segments, reliablePositionMs()) else null
@@ -1387,51 +1394,10 @@ class PlayerActivity : ThemedActivity() {
         timeline.nextFocusUpId = if (visible) R.id.skipSegment else R.id.btnExitPlayback
     }
 
-    private fun editSkipMarkers() {
-        val ownerId = item.id
-        val ownerServer = api.baseUrl
-        val at = reliablePositionMs().coerceAtLeast(0)
-        val own = skipStore.own(api.baseUrl, item)
-        val effective = skipStore.effective(api.baseUrl, item)
-        fun save(markers: SkipMarkers) {
-            try { skipStore.save(api.baseUrl, item, markers); updateSkipSegment()
-                Toast.makeText(this, "Repère enregistré", Toast.LENGTH_SHORT).show()
-            } catch (_: Exception) { Toast.makeText(this, "Impossible d’enregistrer ce repère", Toast.LENGTH_LONG).show() }
-        }
-        val actions = mutableListOf<Pair<String, () -> Unit>>(
-            "Début de l’intro ici" to { save(own.copy(introStartMs = at, introEndMs = null)) },
-            "Fin de l’intro ici" to {
-                if (at > own.introStartMs && at < skipDurationMs) save(own.copy(introEndMs = at))
-                else Toast.makeText(this, "La fin doit suivre le début de l’intro", Toast.LENGTH_LONG).show()
-            },
-            "Début du générique ici" to { if (at < skipDurationMs) save(own.copy(creditsStartMs = at, creditsEndMs = null)) },
-            "Fin du générique ici" to {
-                if (own.creditsStartMs != null && at > own.creditsStartMs && at <= skipDurationMs) save(own.copy(creditsEndMs = at))
-                else Toast.makeText(this, "Marquez d’abord le début du générique", Toast.LENGTH_LONG).show()
-            },
-        )
-        if (skipStore.canShare(item) && effective.segments(skipDurationMs).any { it.kind == "intro" })
-            actions += "Réutiliser l’intro pour cette saison" to {
-                runCatching { skipStore.share(api.baseUrl, item, effective) }
-                    .onSuccess { Toast.makeText(this, "Intro mémorisée pour cette saison", Toast.LENGTH_SHORT).show() }
-                    .onFailure { Toast.makeText(this, "Impossible d’enregistrer l’intro", Toast.LENGTH_LONG).show() }
-            }
-        actions += "Effacer les repères de ce média" to { runCatching { skipStore.clear(api.baseUrl, item) }; updateSkipSegment() }
-        if (skipStore.hasSeason(api.baseUrl, item)) actions += "Effacer l’intro de cette saison" to {
-            runCatching { skipStore.clearSeason(api.baseUrl, item) }; updateSkipSegment()
-        }
-        showPlayerChoices(findViewById(R.id.btnGear), "Repères à ${fmtPlayerTime(at)}",
-            actions.mapIndexed { index, action -> CompactChoiceMenu.Choice(action.first, index.toString()) }) { value ->
-            if (item.id != ownerId || api.baseUrl != ownerServer) return@showPlayerChoices
-            value.toIntOrNull()?.let { actions.getOrNull(it)?.second?.invoke() }
-        }
-    }
-
     private fun openMenu() {
         val entries = listOf(
-            "Intro et générique" to { editSkipMarkers() },
             "Vitesse" to { pickSpeed() },
-            "Format de l’image" to { cycleAspect() },
+            "Format de l’image" to { pickAspect() },
             "Compatibilité de lecture" to { pickPlaybackStrategy() },
             "Sortie audio" to { pickAudioOutput(findViewById(R.id.btnGear)) },
             getString(R.string.player_information_action) to { showDiagnostics() },
@@ -2070,10 +2036,15 @@ class PlayerActivity : ThemedActivity() {
         }
     }
 
-    private fun cycleAspect() {
-        aspectIdx = (aspectIdx + 1) % aspectModes.size
-        playerView.resizeMode = aspectModes[aspectIdx].first
-        Toast.makeText(this, "Format : ${aspectModes[aspectIdx].second}", Toast.LENGTH_SHORT).show()
+    private fun pickAspect() {
+        showPlayerChoices(findViewById(R.id.btnGear), "Format de l’image",
+            aspectModes.mapIndexed { index, mode -> CompactChoiceMenu.Choice(mode.second, index.toString()) },
+            aspectIdx.toString(), dismissOnSelect = false) { value ->
+            value.toIntOrNull()?.takeIf { it in aspectModes.indices }?.let {
+                aspectIdx = it
+                playerView.resizeMode = aspectModes[it].first
+            }
+        }
     }
 
     /** Aller à un instant : seek natif (Direct Play) ou RELANCE du transcodage. */

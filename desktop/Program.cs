@@ -15,7 +15,7 @@ using Microsoft.Web.WebView2.WinForms;
 [assembly: System.Reflection.AssemblyDescription("Lecteur et serveur multimédia Pluxy")]
 [assembly: System.Reflection.AssemblyCompany("Pluxy")]
 [assembly: System.Reflection.AssemblyProduct("Pluxy")]
-[assembly: System.Reflection.AssemblyVersion("1.8.14.0")]
+[assembly: System.Reflection.AssemblyVersion("1.8.15.0")]
 
 namespace Pluxy {
     internal static class Program {
@@ -37,7 +37,6 @@ namespace Pluxy {
     internal sealed class MainWindow : Form {
         private const string Origin="https://pluxy.app/";
         private readonly WebView2 browser=new WebView2 { Dock=DockStyle.Fill,DefaultBackgroundColor=Color.FromArgb(11,15,22) };
-        private readonly Panel header=new Panel { Dock=DockStyle.Top,Height=36,BackColor=Color.FromArgb(23,24,29) };
         private readonly Preferences prefs=Preferences.Load();
         private readonly LibraryClient api=new LibraryClient();
         private readonly ServerController server=new ServerController();
@@ -51,7 +50,6 @@ namespace Pluxy {
         private bool fullscreen;
         private Rectangle restoreBounds;
         private FormWindowState restoreState;
-        private readonly Label modeLabel=new Label { Dock=DockStyle.Left,Width=230,TextAlign=ContentAlignment.MiddleLeft,Padding=new Padding(16,0,0,0),ForeColor=Color.FromArgb(180,193,213),Text="Pluxy",Font=new Font("Segoe UI",10) };
         public MainWindow(string[] args) {
             music=new MusicSession(api,state=>Event("music",state));
             Text="Pluxy"; Size=new Size(1280,860); MinimumSize=new Size(860,620); BackColor=Color.FromArgb(11,15,22); StartPosition=FormStartPosition.CenterScreen;
@@ -59,9 +57,7 @@ namespace Pluxy {
             background=args.Contains("--background");
             int shot=Array.IndexOf(args,"--screenshot"); if(shot>=0 && shot+1<args.Length) screenshot=args[shot+1];
             if(args.Contains("--server")) { prefs.mode="server"; prefs.Save(); }
-            header.Visible=prefs.mode=="server";
-            var menu=Native.Button("Options",(s,e)=>Options()); menu.Dock=DockStyle.Right; menu.Width=110;
-            header.Controls.Add(modeLabel); header.Controls.Add(menu); Controls.Add(browser); Controls.Add(header);
+            Controls.Add(browser);
             if(screenshot!=null) { StartPosition=FormStartPosition.Manual; Location=new Point(-30000,-30000); }
             Shown+=async(s,e)=>await Initialize();
             FormClosing+=async(s,e)=> {
@@ -157,18 +153,29 @@ namespace Pluxy {
             if(busy) throw new IOException("La préparation est déjà en cours."); busy=true;
             try {
                 if(mode=="server") {
-                    await server.Start(message=> { modeLabel.Text="Pluxy · Préparation"; Event("status",message); });
-                    prefs.mode="server"; prefs.Save(); choosing=false; header.Visible=true; modeLabel.Text="Pluxy · Serveur"; browser.Source=new Uri(server.Address);
+                    await server.Start(message=> { Event("status",message); });
+                    prefs.mode="server"; prefs.Save(); choosing=false; browser.Source=new Uri(server.Address);
                 } else {
                     foreach(var player in players.ToArray()) player.Close();
-                    await Task.Run(()=>server.Stop()); prefs.mode="reader"; prefs.Save(); choosing=false; header.Visible=false; modeLabel.Text="Pluxy · Lecteur";
+                    await Task.Run(()=>server.Stop()); prefs.mode="reader"; prefs.Save(); choosing=false;
                     if(browser.Source==null || browser.Source.Host!="pluxy.app") browser.Source=new Uri(Origin+"index.html");
                 }
             } finally { busy=false; }
         }
         private object ReaderState() { return new {mode=choosing?"":prefs.mode,server=prefs.server,serverName=prefs.serverName,theme=prefs.theme,audio=prefs.audio,playerActionHints=prefs.playerActionHints,playerFocusContrast=prefs.playerFocusContrast,profile=api.ProfileId,multipleProfiles=prefs.multipleProfiles,busy=busy,fullscreen=fullscreen}; }
         private async Task Message(CoreWebView2WebMessageReceivedEventArgs message) {
-            Uri source; if(!Uri.TryCreate(message.Source,UriKind.Absolute,out source) || source.GetLeftPart(UriPartial.Authority)!=Origin.TrimEnd('/')) return;
+            Uri source; if(!Uri.TryCreate(message.Source,UriKind.Absolute,out source)) return;
+            bool own=source.GetLeftPart(UriPartial.Authority)==Origin.TrimEnd('/');
+            bool configuration=prefs.mode=="server" && server.Address!=null && source.GetLeftPart(UriPartial.Authority)==server.Address;
+            if(!own && !configuration) return;
+            if(configuration) {
+                if(message.WebMessageAsJson.Length>4096) return;
+                var command=Native.Text(Native.Object(Native.Json.DeserializeObject(message.WebMessageAsJson)),"method");
+                if(command=="chooseMode") ChooseMode();
+                else if(command=="fullscreen") ToggleFullscreen();
+                else if(command=="quit") Quit();
+                return;
+            }
             string id="";
             try {
                 if(message.WebMessageAsJson.Length>1024*1024) return;

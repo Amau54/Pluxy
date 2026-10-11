@@ -100,6 +100,9 @@ object LibraryOrganizer {
         }
     }
 
+    fun sameAudioFolder(reference: MediaItem, candidate: MediaItem): Boolean =
+        candidate.kind == "audio" && PhotoFolderTree.folderKey(reference) == PhotoFolderTree.folderKey(candidate)
+
     fun sameAudioAlbum(reference: MediaItem, candidate: MediaItem): Boolean =
         candidate.kind == "audio" && audioAlbumKey(reference) == audioAlbumKey(candidate)
 

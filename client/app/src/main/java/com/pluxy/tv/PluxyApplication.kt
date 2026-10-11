@@ -63,7 +63,7 @@ class PluxyApplication : Application() {
             readerPrefs(ctx).getString(KEY_AUDIO_LANG, "fr") ?: "fr"
 
         fun subsMode(ctx: Context): String =
-            readerPrefs(ctx).getString(KEY_SUBS_MODE, "auto") ?: "auto"
+            readerPrefs(ctx).getString(KEY_SUBS_MODE, "off") ?: "off"
 
         fun setPlaybackPrefs(ctx: Context, audioLang: String, subsMode: String) {
             readerPrefs(ctx).edit()

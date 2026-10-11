@@ -140,11 +140,11 @@ async function load(append = false, retry = true) {
       const home = await call('home'); if (version !== generation) return;
       items = home.items || []; renderHome(home.counts || {}); return;
     }
-    let page = await call('page', {...query, grouped: ['series','photo','audio'].includes(selectedKind), offset: append ? next : 0, revision: append ? revision : ''});
+    let page = await call('page', {...query, grouped: ['series','photo','audio'].includes(selectedKind), audio_folders: selectedKind === 'audio', offset: append ? next : 0, revision: append ? revision : ''});
     if (version !== generation) return;
     items = append ? [...items, ...page.items] : page.items; revision = page.revision; next = page.next_offset;
     if (version !== generation) return;
-    const countLabel = {movie:'film',series:'série',clip:'vidéo',photo:'dossier',audio:'album'}[selectedKind];
+    const countLabel = {movie:'film',series:'série',clip:'vidéo',photo:'dossier',audio:'dossier'}[selectedKind];
     $('count').textContent = page.total + (countLabel ? ' ' + countLabel + (page.total === 1 ? '' : 's') : ' éléments');
     render(); hidden('more', next == null);
     if (!append && selectedKind !== 'home') {
@@ -196,11 +196,11 @@ async function refreshProgress(id) {
   });
 }
 function render() {
-  hidden('photo-commands', kind !== 'photo'); $('genre').hidden = kind === 'photo' || kind === 'audio';
+  hidden('photo-commands', !['photo','audio'].includes(kind)); $('genre').hidden = kind === 'photo' || kind === 'audio';
   if (!items.length) { const empty=node('div','empty'); empty.append(icon(iconNames[kind] || 'search'),node('h2','',$('search').value ? 'Aucun résultat' : 'Aucun média à afficher'),node('p','', $('search').value || $('genre').value || $('watched').value !== 'all' || $('resolution').value !== 'all' ? 'Essayez un autre filtre ou une recherche plus courte.' : 'Ajoutez un dossier dans les options de votre serveur.')); if (!$('clear-filters').classList.contains('hidden')) empty.append(button('Effacer les filtres',resetFilters,'primary')); $('content').replaceChildren(empty); return; }
   if (kind === 'photo') { renderPhotos(); return; }
   if (kind === 'series') { renderSeries(); return; }
-  if (kind === 'audio') { renderMusic(); return; }
+  if (kind === 'audio') { renderPhotos(); return; }
   const grid = node('div', 'media-grid ' + (kind === 'clip' ? 'clips' : ''));
   grid.append(...items.map(item => card(item, () => openItem(item)))); $('content').replaceChildren(grid);
 }
@@ -348,12 +348,12 @@ function showSeries(episodes) {
   body.replaceChildren(row,seasons,list); showSeason(resume.season || 0); showDialog('details');
   decorateDetails(first,body,row,text,actions,overview);
 }
-function photoState() { try { return JSON.parse(localStorage.getItem('folders:' + connection.url + ':' + (prefs.profile || 'default')) || '{}'); } catch (_) { return {}; } }
+function photoState() { try { return JSON.parse(localStorage.getItem('folders:' + kind + ':' + connection.url + ':' + (prefs.profile || 'default')) || '{}'); } catch (_) { return {}; } }
 function renderPhotos() {
   const roots = new Map(), state = photoState();
   for (const item of items) {
-    const source = item.source_id || item.source_name || 'photos';
-    if (!roots.has(source)) roots.set(source,{name:item.source_name || 'Photos',key:source,children:new Map(),images:[]});
+    const source = item.source_id || item.source_name || kind;
+    if (!roots.has(source)) roots.set(source,{name:item.source_name || (kind === 'audio' ? 'Musique' : 'Photos'),key:source,children:new Map(),images:[]});
     let folder = roots.get(source);
     const path = (item.relative_path || '').replace(/\\/g,'/').split('/').filter(Boolean); path.pop();
     for (const part of path) { if (!folder.children.has(part)) folder.children.set(part,{name:part,key:folder.key + '/' + part,children:new Map(),images:[]}); folder = folder.children.get(part); }
@@ -363,19 +363,22 @@ function renderPhotos() {
   function branch(folder, root = false) {
     if (folder.images.length) groups.push(folder.images);
     const e = node('details','folder-tree'); e.open = Object.prototype.hasOwnProperty.call(state,folder.key) ? Boolean(state[folder.key]) : root;
-    const summary = node('summary','folder-row'); summary.append(icon('chevron'),icon('folder'),node('strong','',folder.name),node('span','muted',folder.images.length ? folder.images.reduce((n,i)=>n+(i.group_count || 1),0) + ' photos' : ''));
+    const summary = node('summary','folder-row'); summary.append(icon('chevron'),icon('folder'),node('strong','',folder.name),node('span','muted',folder.images.length ? folder.images.reduce((n,i)=>n+(i.group_count || 1),0) + (kind === 'audio' ? ' titres' : ' photos') : ''));
     if(folder.images.length) summary.insertBefore(image(folder.images[0],'folder-cover'),summary.querySelector('strong'));
     e.append(summary); e.dataset.folder = folder.key;
-    e.addEventListener('toggle',() => { const saved = photoState(); saved[folder.key] = e.open; try { localStorage.setItem('folders:' + connection.url + ':' + (prefs.profile || 'default'),JSON.stringify(saved)); } catch (_) { /* Stockage plein. */ } });
+    e.addEventListener('toggle',() => { const saved = photoState(); saved[folder.key] = e.open; try { localStorage.setItem('folders:' + kind + ':' + connection.url + ':' + (prefs.profile || 'default'),JSON.stringify(saved)); } catch (_) { /* Stockage plein. */ } });
     if (folder.images.length) {
-      const seed=folder.images[0], grid=node('div','media-grid photos'); e.append(grid); let fetching=false;
+      const seed=folder.images[0], grid=node('div',kind === 'audio' ? 'episode-list' : 'media-grid photos'); e.append(grid); let fetching=false;
       const populate=async()=> {
         if(!e.open || fetching) return; fetching=true;
         try {
           let values=folderData.get(seed.id);
-          if(!values) { values=await fetchGroup(seed,{q:$('search').value.trim()}); if(!e.isConnected) return; folderData.set(seed.id,values); }
+          if(!values) { values=await fetchGroup(seed,{q:$('search').value.trim(),audio_folders:kind === 'audio'}); if(!e.isConnected) return; folderData.set(seed.id,values); }
           const groupIndex=groups.indexOf(folder.images); if(groupIndex>=0) groups[groupIndex]=values;
-          grid.replaceChildren(...values.map(item=>card(item,()=>openPhoto(item),'')));
+          if (kind === 'audio') {
+            values.sort((a,b)=>(a.disc_number || 1)-(b.disc_number || 1) || (a.track_number || 0)-(b.track_number || 0) || title(a).localeCompare(title(b),'fr',{numeric:true}));
+            grid.replaceChildren(...values.map(item=>{ const row=button('',()=>play(item,false),'episode-row'); row.append(icon('music'),node('strong','',title(item)),node('span','muted',minutes(item)),icon('play')); return row; }));
+          } else grid.replaceChildren(...values.map(item=>card(item,()=>openPhoto(item),'')));
         } catch(error) { grid.replaceChildren(button('Réessayer · '+error.message,()=>{fetching=false; populate();},'text-button')); }
         finally { fetching=false; }
       };

@@ -135,7 +135,7 @@ class TvLibraryContentTest {
 
     @Test fun `musique presente albums puis pistes par disque et numero`() {
         val items = listOf(track("d2", 2, 1), track("d1t3", 1, 3), track("d1t1", 1, 1))
-        val album = TvLibraryContent.rows(items, TvLibraryContent.Query("audio")).single() as LibRow.AlbumRow
+        val album = TvLibraryContent.rows(items, TvLibraryContent.Query("audio", photoView = "albums")).single() as LibRow.AlbumRow
         assertEquals("Album", album.name)
         assertEquals(listOf("d1t1", "d1t3", "d2"), album.items.map { it.id })
         assertEquals("audio", album.kind)
@@ -144,7 +144,7 @@ class TvLibraryContentTest {
     @Test fun `albums recents classes par derniere date ajout sans perdre pistes`() {
         val items = listOf(track("old", 1, 1).copy(album = "Old", addedAt = 1.0),
             track("new", 1, 1).copy(album = "New", addedAt = 2.0))
-        val rows = TvLibraryContent.rows(items, TvLibraryContent.Query("audio", sort = "added"))
+        val rows = TvLibraryContent.rows(items, TvLibraryContent.Query("audio", sort = "added", photoView = "albums"))
             .filterIsInstance<LibRow.AlbumRow>()
         assertEquals(listOf("New", "Old"), rows.map { it.name })
     }

@@ -573,6 +573,8 @@ class MainActivity : ThemedActivity() {
             loadItems()
             return
         }
+        knownPhotoFolders.clear()
+        collapsedPhotoFolders.clear()
         selectedKind = kind
         selectedCollection = null
         LibraryPreferences.rememberLibrary(this, kind)
@@ -762,9 +764,9 @@ class MainActivity : ThemedActivity() {
                 }
                 return BrowserSnapshot(items, total, next, revision, available, paged = true)
             }
-            if (query.destination == "photo" && query.search.isBlank()) {
-                val heads = api.listItems(LibraryRequest(kind = "photo", grouped = true))
-                val saved = LibraryPreferences.photoFolders(this@MainActivity)
+            if (query.destination in setOf("photo", "audio") && query.photoView == "folders" && query.search.isBlank()) {
+                val heads = api.listItems(LibraryRequest(kind = query.destination, grouped = true, audioFolders = query.destination == "audio"))
+                val saved = LibraryPreferences.photoFolders(this@MainActivity, query.destination)
                 val known = knownPhotoFolders.ifEmpty { saved.first }
                 val collapsed = if (knownPhotoFolders.isEmpty()) saved.second else collapsedPhotoFolders
                 val visible = heads.filter { head ->
@@ -777,7 +779,7 @@ class MainActivity : ThemedActivity() {
                 val values = heads.associateBy { it.id }.toMutableMap()
                 for (head in visible) {
                     values.remove(head.id)
-                    api.listItems(LibraryRequest(kind = "photo", groupId = head.id)).forEach { values[it.id] = it.copy(groupCount = 1) }
+                    api.listItems(LibraryRequest(kind = query.destination, groupId = head.id, audioFolders = query.destination == "audio")).forEach { values[it.id] = it.copy(groupCount = 1) }
                 }
                 return BrowserSnapshot(values.values.toList(), heads.sumOf { it.groupCount.coerceAtLeast(1) }, facets = available)
             }
@@ -820,7 +822,7 @@ class MainActivity : ThemedActivity() {
             val snapshot = requireNotNull(fresh)
             if (!isCurrentServer(serverUrl) || requestRevision != fetchRevision || key != queryKey()) return false
             allItems = snapshot.items
-            if (query.destination == "photo" && query.search.isBlank()) syncPhotoFolders()
+            if (query.destination in setOf("photo", "audio") && query.photoView == "folders" && query.search.isBlank()) syncPhotoFolders()
             pageTotal = snapshot.total
             nextPageOffset = snapshot.next
             pageRevision = snapshot.revision
@@ -871,7 +873,7 @@ class MainActivity : ThemedActivity() {
             catch (error: Exception) {
                 if (key == queryKey()) {
                     if (error is ApiException && error.code == 409) loadItems()
-                    else android.widget.Toast.makeText(this@MainActivity, "Chargement interrompu · faites défiler pour réessayer", android.widget.Toast.LENGTH_SHORT).show()
+                    else com.pluxy.tv.ui.InAppNotice.makeText(this@MainActivity, "Chargement interrompu · faites défiler pour réessayer", com.pluxy.tv.ui.InAppNotice.LENGTH_SHORT).show()
                 }
                 if (isCurrentServer(server) && ServerReconnectPolicy.isConnectionFailure(error)) requestReconnect(server)
             } finally { api.close() }
@@ -1009,29 +1011,30 @@ class MainActivity : ThemedActivity() {
         focusByDestination[focusStateKey()] = LibraryFocusTarget(null, header.stableKey)
         val folder = header.id.removePrefix("photo:")
         if (!collapsedPhotoFolders.add(folder)) collapsedPhotoFolders.remove(folder)
-        LibraryPreferences.savePhotoFolders(this, knownPhotoFolders, collapsedPhotoFolders)
+        LibraryPreferences.savePhotoFolders(this, knownPhotoFolders, collapsedPhotoFolders, selectedKind)
         applyAndShow(restoreFocus = true)
         refreshQuietly()
     }
 
     private fun syncPhotoFolders() {
         if (knownPhotoFolders.isEmpty()) {
-            val saved = LibraryPreferences.photoFolders(this)
+            val saved = LibraryPreferences.photoFolders(this, selectedKind)
             knownPhotoFolders += saved.first
             collapsedPhotoFolders += saved.second
         }
-        PhotoFolderTree.rows(allItems.filter { it.kind == "photo" }).filterIsInstance<LibRow.Header>().filter { it.collapsible }.forEach {
+        PhotoFolderTree.rows(allItems.filter { it.kind == selectedKind }, query = currentQuery()).filterIsInstance<LibRow.Header>().filter { it.collapsible }.forEach {
             if (knownPhotoFolders.add(it.id) && it.depth > 0) collapsedPhotoFolders += it.id
         }
-        LibraryPreferences.savePhotoFolders(this, knownPhotoFolders, collapsedPhotoFolders)
+        LibraryPreferences.savePhotoFolders(this, knownPhotoFolders, collapsedPhotoFolders, selectedKind)
     }
 
     private fun setPhotoFoldersExpanded(expanded: Boolean) {
         collapsedPhotoFolders.clear()
-        if (!expanded) collapsedPhotoFolders += PhotoFolderTree.rows(allItems.filter { it.kind == "photo" })
+        if (!expanded) collapsedPhotoFolders += PhotoFolderTree.rows(allItems.filter { it.kind == selectedKind }, query = currentQuery())
             .filterIsInstance<LibRow.Header>().filter { it.collapsible }.map { it.id }
-        LibraryPreferences.savePhotoFolders(this, knownPhotoFolders, collapsedPhotoFolders)
+        LibraryPreferences.savePhotoFolders(this, knownPhotoFolders, collapsedPhotoFolders, selectedKind)
         applyAndShow(restoreFocus = false)
+        refreshQuietly()
     }
 
     /** Un aperçu ne s'affiche que sur les grands écrans : sur téléphone, il volerait
@@ -1341,7 +1344,7 @@ class MainActivity : ThemedActivity() {
                         if (available != null) connectDiscoveredServer(available, originalUrl)
                         else {
                             dismissedServerChoices = null
-                            android.widget.Toast.makeText(this@MainActivity, getString(R.string.server_connection_failed, server.baseUrl), android.widget.Toast.LENGTH_SHORT).show()
+                            com.pluxy.tv.ui.InAppNotice.makeText(this@MainActivity, getString(R.string.server_connection_failed, server.baseUrl), com.pluxy.tv.ui.InAppNotice.LENGTH_SHORT).show()
                         }
                     } finally { if (revision == reconnectRevision) reconnectJob = null }
                 }
@@ -1393,7 +1396,7 @@ class MainActivity : ThemedActivity() {
             updateAvailableDestinations()
             selectedTabView().requestFocus()
         }
-        android.widget.Toast.makeText(this, getString(R.string.server_connected, server.name), android.widget.Toast.LENGTH_SHORT).show()
+        com.pluxy.tv.ui.InAppNotice.makeText(this, getString(R.string.server_connected, server.name), com.pluxy.tv.ui.InAppNotice.LENGTH_SHORT).show()
         loadItems()
     }
 
@@ -1530,15 +1533,15 @@ class MainActivity : ThemedActivity() {
         val query = currentQuery()
         val choices = when (selectedKind) {
             "photo" -> listOf(CompactChoiceMenu.Choice("Dossiers", "folders"), CompactChoiceMenu.Choice("Albums", "albums"), CompactChoiceMenu.Choice("Chronologie", "timeline"))
-            "audio" -> listOf(CompactChoiceMenu.Choice("Albums", "library"), CompactChoiceMenu.Choice("Collections", "collections"))
+            "audio" -> listOf(CompactChoiceMenu.Choice("Dossiers", "folders"), CompactChoiceMenu.Choice("Albums", "albums"))
             else -> listOf(CompactChoiceMenu.Choice("Découvrir", "discover"), CompactChoiceMenu.Choice("Bibliothèque", "library"), CompactChoiceMenu.Choice("Collections", "collections"))
         }
         CompactChoiceMenu.show(this, anchor, "Affichage", choices,
-            if (selectedKind == "photo") query.photoView else viewMode(),
+            if (selectedKind in setOf("photo", "audio")) query.photoView else viewMode(),
             onSelect = { value ->
                 focusByDestination.remove(focusStateKey())
                 selectedCollection = null
-                if (selectedKind == "photo") LibraryPreferences.saveQuery(this, query.copy(photoView = value))
+                if (selectedKind in setOf("photo", "audio")) LibraryPreferences.saveQuery(this, query.copy(photoView = value))
                 else LibraryPreferences.saveView(this, selectedKind, value)
                 focusByDestination.remove(focusStateKey())
                 restoreSavedFocusOnNextContent = false
@@ -1649,7 +1652,7 @@ class MainActivity : ThemedActivity() {
                     }.setPositiveButton("Enregistrer") { _, _ -> saveCollection(collection.copy(mediaIds = selections.toSet())) }
                     .setNegativeButton("Annuler", null).show()
             } catch (cancelled: CancellationException) { throw cancelled }
-            catch (_: Exception) { android.widget.Toast.makeText(this@MainActivity, "Impossible de charger les médias", android.widget.Toast.LENGTH_SHORT).show() }
+            catch (_: Exception) { com.pluxy.tv.ui.InAppNotice.makeText(this@MainActivity, "Impossible de charger les médias", com.pluxy.tv.ui.InAppNotice.LENGTH_SHORT).show() }
             finally { api.close(); showLoading(false) }
         }
     }
@@ -1721,6 +1724,7 @@ class MainActivity : ThemedActivity() {
             "audio" -> Intent(this, AudioPlayerActivity::class.java)
                 .putExtra(AudioPlayerActivity.EXTRA_ITEM, json)
                 .putExtra(AudioPlayerActivity.EXTRA_COLLECTION_ID, selectedCollection?.id.orEmpty())
+                .putExtra("folder_queue", selectedKind == "audio" && currentQuery().photoView == "folders")
             else -> Intent(this, DetailsActivity::class.java)
                 .putExtra(DetailsActivity.EXTRA_ITEM, json)
         }

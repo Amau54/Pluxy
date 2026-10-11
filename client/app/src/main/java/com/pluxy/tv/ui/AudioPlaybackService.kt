@@ -72,6 +72,7 @@ class AudioPlaybackService : Service() {
     private var requestedPositionMs = 0L
     private var requestedPlayWhenReady = true
     private var collectionId = ""
+    private var folderQueue = false
 
     @Suppress("DEPRECATION")
     override fun onCreate() {
@@ -132,6 +133,7 @@ class AudioPlaybackService : Service() {
                 val url = runCatching { catalogueServerKey(owner) }.getOrNull()
                 if (url == null) { stopPlayback(); return START_NOT_STICKY }
                 collectionId = intent.getStringExtra(AudioPlayerActivity.EXTRA_COLLECTION_ID).orEmpty()
+                folderQueue = intent.getBooleanExtra("folder_queue", false)
                 load(item, intent.getLongExtra(EXTRA_POSITION, 0L), intent.getBooleanExtra(EXTRA_PLAY, true), url)
             }
             ACTION_PLAY -> retryOrPlay()
@@ -175,7 +177,7 @@ class AudioPlaybackService : Service() {
                         LibraryPreferences.collections(this@AudioPlaybackService, ownerUrl).firstOrNull { it.id == collectionId }
                             ?.let { TvLibraryContent.collectionItems(catalogue, it) }.orEmpty()
                     }
-                    orderedAlbumTracks(allowed, item)
+                    if (folderQueue) LibraryOrganizer.albumTracks(allowed.filter { LibraryOrganizer.sameAudioFolder(item, it) }) else orderedAlbumTracks(allowed, item)
                 }
                 tracks = ordered.takeIf { values -> values.any { it.id == item.id } } ?: listOf(item)
                 val exo = PluxyPlayerFactory.build(this@AudioPlaybackService, buffer, serverUrl)
@@ -330,6 +332,7 @@ class AudioPlaybackService : Service() {
             .putExtra(AudioPlayerActivity.EXTRA_RESUME_SESSION, true)
             .putExtra(EXTRA_SERVER_URL, serverUrl)
             .putExtra(AudioPlayerActivity.EXTRA_COLLECTION_ID, collectionId)
+            .putExtra("folder_queue", folderQueue)
         current?.let { returnIntent.putExtra(AudioPlayerActivity.EXTRA_ITEM, moshi.adapter(MediaItem::class.java).toJson(it)) }
         val content = PendingIntent.getActivity(this, 0, returnIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val exo = player

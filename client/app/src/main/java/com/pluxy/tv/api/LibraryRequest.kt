@@ -17,11 +17,13 @@ data class LibraryRequest(
     val titlePrefix: String = "",
     val grouped: Boolean = false,
     val groupId: String = "",
+    val audioFolders: Boolean = false,
 ) {
     internal fun path(limit: Int, offset: Int, revision: String?): String {
         require(limit in 1..500 && offset >= 0)
         val url = "http://pluxy/api/library/items/page".toHttpUrl().newBuilder()
             .addQueryParameter("limit", limit.toString()).addQueryParameter("offset", offset.toString())
+        if (audioFolders) url.addQueryParameter("audio_folders", "true")
         if (grouped) url.addQueryParameter("grouped", "true")
         if (groupId.isNotBlank()) url.addQueryParameter("group_id", groupId)
         if (kind != "all") url.addQueryParameter("kind", kind)

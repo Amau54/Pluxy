@@ -335,3 +335,12 @@ async function checkDiagnostics() {
   } catch (error) { result.textContent = error.message; }
   finally { $('diagnosticsButton').disabled = false; }
 }
+
+if (window.chrome?.webview) {
+  $('desktopOptions').hidden = false;
+  $('desktopOptions').addEventListener('click', () => $('desktopMenu').showModal());
+  document.querySelectorAll('[data-desktop]').forEach(button => button.addEventListener('click', () => {
+    $('desktopMenu').close();
+    window.chrome.webview.postMessage({method: button.dataset.desktop});
+  }));
+}

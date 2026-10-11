@@ -14,19 +14,20 @@ object PhotoFolderTree {
         val legacy = item.folder.orEmpty().replace(" / ", "/").replace('\\', '/')
         val source = item.sourceId ?: "legacy:${item.folderId ?: legacy.ifBlank { "photos" }}"
         val folder = if (item.sourceId == null) "" else item.relativePath?.replace('\\', '/')?.substringBeforeLast('/', "").orEmpty()
-        return "photo-tree:$source" + folder.split('/').filter { it.isNotBlank() && it != "." && it != ".." }.joinToString("", prefix = "") { "/$it" }
+        return "${item.kind}-tree:$source" + folder.split('/').filter { it.isNotBlank() && it != "." && it != ".." }.joinToString("", prefix = "") { "/$it" }
     }
 
     fun rows(items: List<MediaItem>, collapsed: Set<String> = emptySet(),
              query: TvLibraryContent.Query = TvLibraryContent.Query("photo", sort = "title")): List<LibRow> {
         val roots = linkedMapOf<String, Node>()
+        val music = query.destination == "audio"
         items.forEach { item ->
             val relative = item.relativePath?.replace('\\', '/')
             val legacy = item.folder.orEmpty().replace(" / ", "/").replace('\\', '/')
             val source = item.sourceId ?: "legacy:${item.folderId ?: legacy.ifBlank { "photos" }}"
             val name = item.sourceName?.takeIf(String::isNotBlank)
-                ?: legacy.ifBlank { "Photos" }
-            var node = roots.getOrPut(source) { Node("photo-tree:$source", name, 0) }
+                ?: legacy.ifBlank { if (music) "Musique" else "Photos" }
+            var node = roots.getOrPut(source) { Node("${item.kind}-tree:$source", name, 0) }
             node.count += item.groupCount.coerceAtLeast(1)
             // Un ancien serveur n'expose pas l'identité de la racine : garder ses
             // dossiers séparés évite de fusionner deux albums homonymes.
@@ -41,12 +42,12 @@ object PhotoFolderTree {
         return buildList {
             fun visit(node: Node) {
                 val expanded = node.id !in collapsed
-                add(LibRow.Header(node.id, "${node.name}  ·  ${node.count} ${if (node.count == 1) "photo" else "photos"}",
+                add(LibRow.Header(node.id, "${node.name}  ·  ${node.count} ${if (music) if (node.count == 1) "titre" else "titres" else if (node.count == 1) "photo" else "photos"}",
                     collapsible = true, expanded = expanded, depth = node.depth))
                 if (!expanded) return
                 node.children.values.sortedBy { LibraryOrganizer.searchKey(it.name) }.forEach(::visit)
                 if (node.children.isNotEmpty() && node.photos.isNotEmpty()) {
-                    add(LibRow.Header("${node.id}:files", "Images de ${node.name}", depth = node.depth))
+                    add(LibRow.Header("${node.id}:files", "${if (music) "Titres" else "Images"} de ${node.name}", depth = node.depth))
                 }
                 addAll(TvLibraryContent.sortMedia(node.photos, query).map { LibRow.MediaRow(it) })
             }

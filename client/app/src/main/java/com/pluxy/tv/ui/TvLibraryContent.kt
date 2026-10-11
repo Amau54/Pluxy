@@ -99,7 +99,7 @@ object TvLibraryContent {
             "clip" -> sortMedia(filterItems(items.filter { it.kind == "clip" }, query), query).map { LibRow.MediaRow(it) }
             "series" -> matchingSeries(items, query).let { sortSeries(it, query) }
             "photo" -> photoRows(filterItems(items.filter { it.kind == "photo" }, query), query)
-            "audio" -> albumRows(filterItems(items.filter { it.kind == "audio" }, query), "audio", query)
+            "audio" -> if (query.photoView == "albums") albumRows(filterItems(items.filter { it.kind == "audio" }, query), "audio", query) else PhotoFolderTree.rows(filterItems(items.filter { it.kind == "audio" }, query), query.collapsedPhotoFolders, query)
             else -> emptyList()
         }
     }

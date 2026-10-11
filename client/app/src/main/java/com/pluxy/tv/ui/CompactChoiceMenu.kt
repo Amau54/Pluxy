@@ -41,6 +41,7 @@ object CompactChoiceMenu {
         selectedValue: String,
         actions: List<Action> = emptyList(),
         compact: Boolean = false,
+        dismissOnSelect: Boolean = true,
         onSelect: (String) -> Unit,
         onDismiss: (() -> Unit)? = null,
     ): PopupWindow? {
@@ -152,11 +153,18 @@ object CompactChoiceMenu {
                         super.onInitializeAccessibilityNodeInfo(host, info)
                         info.className = "android.widget.RadioButton"
                         info.isCheckable = true
-                        info.isChecked = selected
+                        info.isChecked = host.isSelected
                     }
                 }
                 setOnClickListener {
-                    popup.dismiss()
+                    if (dismissOnSelect) popup.dismiss()
+                    else {
+                        for (i in 0 until list.childCount) {
+                            val candidate = list.getChildAt(i) as LinearLayout
+                            candidate.isSelected = candidate === this
+                            candidate.getChildAt(candidate.childCount - 1).visibility = if (candidate === this) View.VISIBLE else View.INVISIBLE
+                        }
+                    }
                     onSelect(choice.value)
                 }
             }
