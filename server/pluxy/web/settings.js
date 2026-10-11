@@ -8,9 +8,14 @@ let statusPending = false;
 let statusTimer;
 let toastTimer;
 let desktopServerState = null;
+let folderError = '';
 const $ = id => document.getElementById(id);
 
 function toast(message, error = false) {
+  if (error && $('folderManager').open) {
+    folderError = message;
+    $('folderSaveState').textContent = message;
+  }
   const element = $('toast');
   element.textContent = message;
   element.className = 'toast show' + (error ? ' error' : '');
@@ -69,7 +74,7 @@ function updateControls() {
   $('saveButton').disabled = !CFG || saving || picking || !isDirty();
   $('saveButton').textContent = saving ? 'Enregistrement…' : 'Enregistrer les réglages';
   $('saveState').textContent = saving ? 'Enregistrement en cours…' : !CFG ? 'Chargement des réglages…' : isDirty() ? 'Modifications à enregistrer' : 'Tous les réglages sont enregistrés';
-  $('folderSaveState').textContent = $('saveState').textContent;
+  $('folderSaveState').textContent = folderError || $('saveState').textContent;
   $('saveFolders').disabled = $('saveButton').disabled;
   $('saveFolders').textContent = saving ? 'Enregistrement…' : 'Enregistrer';
   if (desktopServerState && (desktopServerState.busy || !desktopServerState.running)) {
@@ -176,7 +181,7 @@ function renderFolders() {
   });
 }
 
-$('manageFolders').addEventListener('click', () => { $('folderSearch').value = ''; renderFolders(); $('folderManager').showModal(); });
+$('manageFolders').addEventListener('click', () => { folderError = ''; $('folderSearch').value = ''; renderFolders(); updateControls(); $('folderManager').showModal(); });
 $('folderSearch').addEventListener('input', renderFolders);
 $('manualFolderForm').addEventListener('submit', event => { event.preventDefault(); addManualFolder(); });
 
@@ -303,6 +308,7 @@ function addManualFolder() {
 
 async function save() {
   if (!CFG || saving || picking) return false;
+  folderError = '';
   if (!isDirty()) return true;
   if (!$('port').reportValidity()) return false;
   const patch = readPatch();
