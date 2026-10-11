@@ -213,6 +213,9 @@ jobs:
     name: Android 9 - demarrage et palettes
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      ANDROID_AVD_HOME: ${{ runner.temp }}/pluxy-startup-avd
+      ANDROID_USER_HOME: ${{ runner.temp }}/pluxy-startup-android
     steps:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -239,6 +242,7 @@ jobs:
         run: |
           set -euo pipefail
           sudo chmod 666 /dev/kvm
+          mkdir -p "$ANDROID_AVD_HOME" "$ANDROID_USER_HOME"
           echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd \
             -n pluxy-startup-api28 -k 'system-images;android-28;google_apis;x86_64' --force
           "$ANDROID_HOME/emulator/emulator" -avd pluxy-startup-api28 -port 5554 \
@@ -246,7 +250,10 @@ jobs:
             -memory 1536 > emulator-startup.log 2>&1 &
           emulator_pid=$!
           trap 'adb -s emulator-5554 emu kill || kill "$emulator_pid" || true' EXIT
-          timeout 180 adb -s emulator-5554 wait-for-device
+          if ! timeout 180 adb -s emulator-5554 wait-for-device; then
+            cat emulator-startup.log
+            exit 1
+          fi
           booted=false
           for attempt in $(seq 1 120); do
             if [[ "$(adb -s emulator-5554 shell getprop sys.boot_completed | tr -d '\r')" == 1 ]]; then
