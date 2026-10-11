@@ -3,6 +3,7 @@ package com.pluxy.tv.ui
 import android.content.Intent
 import android.content.res.ColorStateList
 import android.content.res.Configuration
+import android.graphics.Paint
 import android.os.Bundle
 import android.view.FocusFinder
 import android.view.GestureDetector
@@ -61,6 +62,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.abs
+import kotlin.math.ceil
 
 /**
  * Accueil Android TV orienté contenus : rails horizontaux pour les actions fréquentes,
@@ -192,7 +194,7 @@ class MainActivity : ThemedActivity() {
         configureTvNavigationRail()
         browserChrome = LibraryBrowserChrome(this, usesRail(),
             onDestination = ::openLibraryDestinations,
-            onView = ::openLibraryViews,
+            onView = { anchor -> if (usesRail()) openLibraryScreenOptions(anchor) else openLibraryViews(anchor) },
             onFilters = ::openLibraryFilters,
             onSort = ::openSortFilter,
             onCollections = ::createCollection,
@@ -203,18 +205,6 @@ class MainActivity : ThemedActivity() {
             onExpandPhotos = { setPhotoFoldersExpanded(true) },
             onCollapsePhotos = { setPhotoFoldersExpanded(false) },
         )
-        if (usesRail()) grid.viewTreeObserver.addOnGlobalFocusChangeListener { _, focused ->
-            val compact = focused?.let(::isInGrid) == true
-            val navigation = findViewById<View>(R.id.categoryNavigation)
-            val density = resources.displayMetrics.density
-            val width = ((if (compact) 104 else 124) * density).toInt()
-            if (navigation.layoutParams.width != width) {
-                navigation.layoutParams = navigation.layoutParams.apply { this.width = width }
-                val start = ((if (compact) 172 else 192) * density).toInt()
-                browserChrome.contentStart(start)
-                swipe.layoutParams = (swipe.layoutParams as ViewGroup.MarginLayoutParams).apply { marginStart = start }
-            }
-        }
         selectedTabView().requestFocus()
         updateSearchButton()
         swipe.setOnRefreshListener { refresh() }
@@ -226,6 +216,9 @@ class MainActivity : ThemedActivity() {
                         ?.findLastVisibleItemPosition()?.let { it >= libraryAdapter.itemCount - gridSpan * 4 } == true) loadNextPage()
             }
         })
+        if (usesRail()) grid.viewTreeObserver.addOnGlobalLayoutListener {
+            updateTvGridGeometry()
+        }
 
         if (!PluxyApplication.isConfigured(this)) openSetup()
         updateInterfaceMode()
@@ -471,7 +464,16 @@ class MainActivity : ThemedActivity() {
     private fun configureTvNavigationRail() {
         if (!(isTelevision() || resources.getBoolean(R.bool.show_library_hero))) return
         val density = resources.displayMetrics.density
+        (swipe.parent as View).apply {
+            fitsSystemWindows = false
+            setPadding(paddingLeft, resources.getDimensionPixelSize(R.dimen.library_top_pad),
+                paddingRight, resources.getDimensionPixelSize(R.dimen.library_bottom_pad))
+        }
+        grid.clipToPadding = true
+        swipe.clipChildren = true
+        grid.setPadding(grid.paddingLeft, grid.paddingTop, grid.paddingRight, (8 * density).toInt())
         findViewById<View>(R.id.topBar).background = null
+        (findViewById<View>(R.id.topBar).layoutParams as ViewGroup.MarginLayoutParams).topMargin = 0
         findViewById<View>(R.id.swipeHint).visibility = View.GONE
 
         // Le défilement horizontal est réservé au téléphone. Le rail TV garde des
@@ -489,7 +491,7 @@ class MainActivity : ThemedActivity() {
                 FrameLayout.LayoutParams.WRAP_CONTENT,
                 Gravity.START or Gravity.TOP,
             ).apply {
-                topMargin = (104 * density).toInt()
+                topMargin = (64 * density).toInt()
                 leftMargin = (48 * density).toInt()
             }
             elevation = 0f
@@ -628,11 +630,54 @@ class MainActivity : ThemedActivity() {
         val density = resources.displayMetrics.density
         val width = resources.displayMetrics.widthPixels / density
         val safe = resources.getDimension(R.dimen.screen_pad) / density
-        val available = width - if (usesRail()) 192f + safe else safe * 2
+        val start = resources.getDimension(R.dimen.library_rail_content_start) / density
+        val available = width - if (usesRail()) start + safe else safe * 2
         val card = resources.getDimension(R.dimen.library_grid_card_width) / density *
             if (LibraryPreferences.compact(this)) 1f else 1.25f
         gridSpan = (available / (card + 12f)).toInt().coerceIn(2, 8)
         updateLibraryHeroVisibility()
+    }
+
+    private fun updateTvGridGeometry() {
+        val density = resources.displayMetrics.density
+        val baseBottom = (8 * density).toInt()
+        val layout = grid.layoutManager as? GridLayoutManager
+        val posters = selectedKind in setOf("movie", "series") && viewMode() == "library" &&
+            selectedCollection == null && searchQuery.isBlank() && grid.adapter === libraryAdapter
+        if (!posters || layout == null || grid.width == 0 || grid.height == 0) {
+            if (grid.paddingBottom != baseBottom) grid.setPadding(grid.paddingLeft, grid.paddingTop, grid.paddingRight, baseBottom)
+            return
+        }
+        val width = grid.width - grid.paddingLeft - grid.paddingRight
+        val height = grid.height - grid.paddingTop - baseBottom
+        val compact = LibraryPreferences.compact(this)
+        val textScale = resources.configuration.fontScale.coerceAtLeast(1f)
+        val normalWidth = resources.getDimension(R.dimen.library_grid_card_width)
+        val preferred = normalWidth * textScale * if (compact) 1f else 1.25f
+        val paint = Paint()
+        paint.textSize = resources.getDimension(R.dimen.card_title_size)
+        val titleHeight = paint.fontMetrics.run { bottom - top } * 2
+        paint.textSize = resources.getDimension(R.dimen.card_meta_size)
+        val textHeight = titleHeight + paint.fontMetrics.run { bottom - top } + 18 * density
+        val twoRowWidth = (height / 2f - textHeight) / 1.5f
+        val rowLimit = if (compact && twoRowWidth >= normalWidth * 0.8f * textScale) 2 else 1
+        val fittingWidth = (height / rowLimit - textHeight) / 1.5f
+        val cardWidth = minOf(preferred, fittingWidth.coerceAtLeast(72 * density))
+        val spans = ceil(width / (cardWidth + 8 * density)).toInt().coerceIn(2, 10)
+        gridSpan = spans
+        if (layout.spanCount != spans) {
+            layout.spanCount = spans
+            return
+        }
+        // Les affiches et leurs deux lignes de titre occupent des rangées entières.
+        // Le reliquat devient une marge, plutôt qu'un fragment de la rangée suivante.
+        val first = grid.getChildAt(0) ?: return
+        val margins = first.layoutParams as ViewGroup.MarginLayoutParams
+        val rowHeight = layout.getDecoratedMeasuredHeight(first) + margins.topMargin + margins.bottomMargin
+        if (rowHeight <= 0) return
+        val rows = (height / rowHeight).coerceIn(1, rowLimit)
+        val bottom = (grid.height - grid.paddingTop - rows * rowHeight).coerceAtLeast(baseBottom)
+        if (grid.paddingBottom != bottom) grid.setPadding(grid.paddingLeft, grid.paddingTop, grid.paddingRight, bottom)
     }
 
     private fun startAutoRefresh() {
@@ -1548,6 +1593,31 @@ class MainActivity : ThemedActivity() {
                 grid.scrollToPosition(0)
                 loadItems()
             })
+    }
+
+    private fun openLibraryScreenOptions(anchor: View) {
+        val compact = LibraryPreferences.compact(this)
+        val choices = buildList {
+            if (searchQuery.isBlank()) add(CompactChoiceMenu.Choice("Affichage", "view", when {
+                selectedKind in setOf("photo", "audio") -> when (currentQuery().photoView) {
+                    "albums" -> "Albums"; "timeline" -> "Chronologie"; else -> "Dossiers"
+                }
+                viewMode() == "discover" -> "Découvrir"
+                viewMode() == "collections" -> "Collections"
+                else -> "Bibliothèque"
+            }, inlineDetail = true))
+            add(CompactChoiceMenu.Choice("Densité", "density", if (compact) "Compact" else "Confort", inlineDetail = true))
+        }
+        CompactChoiceMenu.show(this, anchor, "Options de cet écran", choices, "", onSelect = { option ->
+            if (option == "view") openLibraryViews(anchor)
+            else CompactChoiceMenu.show(this, anchor, "Densité", listOf(
+                CompactChoiceMenu.Choice("Compact", "compact"), CompactChoiceMenu.Choice("Confort", "comfort")),
+                if (compact) "compact" else "comfort", onSelect = { value ->
+                    LibraryPreferences.setCompact(this, value == "compact")
+                    updateInterfaceMode()
+                    applyAndShow(restoreFocus = false)
+                })
+        })
     }
 
     private fun openLibraryFilters() = LibraryFilterDialog.show(this,

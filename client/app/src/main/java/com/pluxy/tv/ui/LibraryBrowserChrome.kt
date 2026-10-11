@@ -8,6 +8,8 @@ import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.content.res.ColorStateList
+import android.text.TextUtils
 import com.pluxy.tv.R
 
 /** Commandes compactes de la bibliothèque, distinctes de la navigation principale. */
@@ -47,6 +49,13 @@ class LibraryBrowserChrome(
         text = label
         isAllCaps = false
         minHeight = dp(48)
+        if (television) {
+            textSize = 13f
+            stateListAnimator = null
+            setBackgroundResource(R.drawable.bg_library_tv_command)
+            setTextColor(ColorStateList(arrayOf(intArrayOf(android.R.attr.state_focused), intArrayOf()),
+                intArrayOf(activity.pluxyColor(R.color.text_primary), activity.pluxyColor(R.color.text_secondary))))
+        }
         setOnClickListener(action)
     }
     private val mode = button("Bibliothèque", onView)
@@ -64,10 +73,18 @@ class LibraryBrowserChrome(
     private val search = button("Recherche") { onSearch() }
 
     init {
-        listOf(mode, filters, sort, collection).forEach {
+        (if (television) listOf(filters, sort, collection) else listOf(mode, filters, sort, collection)).forEach {
             val params = if (television) LinearLayout.LayoutParams(-2, -2)
                 else LinearLayout.LayoutParams(0, -2, 1f)
             commands.addView(it, params.apply { marginEnd = dp(if (television) 6 else 3) })
+        }
+        if (television) {
+            count.textSize = 12f
+            count.setPadding(dp(12), 0, dp(8), 0)
+            count.setSingleLine()
+            count.ellipsize = TextUtils.TruncateAt.END
+            commands.addView(count, LinearLayout.LayoutParams(0, -2, 1f))
+            commands.addView(mode, LinearLayout.LayoutParams(-2, -2))
         }
         rows.addView(commands)
         listOf(button("Tout déplier") { onExpandPhotos() }, button("Tout replier") { onCollapsePhotos() }).forEach {
@@ -77,13 +94,13 @@ class LibraryBrowserChrome(
         }
         rows.addView(photoCommands)
         rows.addView(chips)
-        rows.addView(count)
+        if (!television) rows.addView(count)
         val safe = activity.resources.getDimensionPixelSize(R.dimen.screen_pad)
         parent.addView(rows, FrameLayout.LayoutParams(-1, -2).apply {
             marginStart = if (television) activity.resources.getDimensionPixelSize(R.dimen.library_rail_content_start)
                 else safe + if (landscape) dp(150) else 0
-            marginEnd = safe + if (landscape) dp(56) else 0
-            topMargin = dp(if (television) 72 else if (landscape) 12 else 64)
+            marginEnd = safe + if (television) dp(112) else if (landscape) dp(56) else 0
+            topMargin = dp(if (television) 0 else if (landscape) 12 else 64)
         })
         if (!television) {
             activity.findViewById<View>(R.id.categoryNavigation).visibility = View.GONE
@@ -111,7 +128,7 @@ class LibraryBrowserChrome(
         destination.visibility = if (kind == "home" || searchText.isNotBlank()) View.GONE else View.VISIBLE
         destination.text = when (kind) { "movie" -> "Films"; "series" -> "Séries"; "clip" -> "Vidéos"; "photo" -> "Photos"; "audio" -> "Musique"; else -> "Médias" }
         destination.setCompoundDrawablesRelativeWithIntrinsicBounds(0, 0, R.drawable.ic_library_dropdown, 0)
-        mode.text = when {
+        val displayName = when {
             collectionName != null -> "Collections"
             kind == "photo" -> when (query.photoView) { "timeline" -> "Chronologie"; "albums" -> "Albums"; else -> "Dossiers" }
             kind == "audio" && view != "collections" -> if (query.photoView == "albums") "Albums" else "Dossiers"
@@ -119,7 +136,9 @@ class LibraryBrowserChrome(
             view == "collections" -> "Collections"
             else -> if (television) "Bibliothèque" else "Catalogue"
         }
-        mode.visibility = if (searchText.isBlank()) View.VISIBLE else View.GONE
+        mode.text = if (television) "Options" else displayName
+        mode.contentDescription = if (television) "Options de cet écran, affichage $displayName" else displayName
+        mode.visibility = if (television || searchText.isBlank()) View.VISIBLE else View.GONE
         filters.visibility = if (video && view != "collections" && collectionName == null) View.VISIBLE else View.GONE
         collection.visibility = if (view == "collections" || collectionName != null) View.VISIBLE else View.GONE
         collection.text = if (collectionName != null) "Gérer" else "Créer"
@@ -148,7 +167,7 @@ class LibraryBrowserChrome(
             kind == "series" -> "$total ${if (total == 1) "série" else "séries"}"
             kind == "clip" -> "$total ${if (total == 1) "vidéo" else "vidéos"}"
             else -> "$total ${if (total == 1) "film" else "films"}"
-        } + if (more) " · chargement au défilement" else ""
+        } + if (more && !television) " · chargement au défilement" else ""
         count.visibility = if (landscape) View.GONE else View.VISIBLE
         if (landscape) commands.contentDescription = count.text
         home.isSelected = kind == "home" && searchText.isBlank()
@@ -161,18 +180,18 @@ class LibraryBrowserChrome(
         val swipe = activity.findViewById<View>(R.id.swipe)
         val params = swipe.layoutParams as ViewGroup.MarginLayoutParams
         val top = (rows.layoutParams as ViewGroup.MarginLayoutParams).topMargin
-        params.topMargin = if (rows.visibility == View.VISIBLE) top + rows.measuredHeight + dp(8) else dp(if (television) 92 else 64)
-        params.bottomMargin = if (television) 0 else dp(72)
-        swipe.layoutParams = params
-    }
-
-    fun contentStart(pixels: Int) {
-        val params = rows.layoutParams as ViewGroup.MarginLayoutParams
-        if (params.marginStart != pixels) { params.marginStart = pixels; rows.layoutParams = params }
+        val topMargin = if (rows.visibility == View.VISIBLE) top + rows.measuredHeight + dp(8) else dp(if (television) 56 else 64)
+        val bottomMargin = if (television) 0 else dp(72)
+        if (params.topMargin != topMargin || params.bottomMargin != bottomMargin) {
+            params.topMargin = topMargin
+            params.bottomMargin = bottomMargin
+            swipe.layoutParams = params
+        }
     }
 
     fun focusCommands(): Boolean = rows.visibility == View.VISIBLE &&
-        listOf(mode, filters, sort, collection).firstOrNull { it.visibility == View.VISIBLE }?.requestFocus() == true
+        (if (television) listOf(filters, sort, collection, mode) else listOf(mode, filters, sort, collection))
+            .firstOrNull { it.visibility == View.VISIBLE }?.requestFocus() == true
 
     companion object {
         fun activeFilters(query: TvLibraryContent.Query): List<Pair<String, String>> = buildList {

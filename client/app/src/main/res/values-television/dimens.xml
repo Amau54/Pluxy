@@ -6,8 +6,8 @@
     <dimen name="library_grid_card_width">108dp</dimen>
     <dimen name="library_shelf_height">268dp</dimen>
     <dimen name="library_section_size">18sp</dimen>
-    <dimen name="card_title_size">16sp</dimen>
-    <dimen name="card_meta_size">14sp</dimen>
+    <dimen name="card_title_size">14sp</dimen>
+    <dimen name="card_meta_size">12sp</dimen>
     <dimen name="library_bottom_pad">27dp</dimen>
     <dimen name="details_meta_size">17sp</dimen>
     <dimen name="details_caption_size">16sp</dimen>

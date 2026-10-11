@@ -504,6 +504,11 @@ private fun bindCard(
     onLongPress: (LibRow) -> Unit = {},
 ) {
     holder.itemView.tag = row.stableKey
+    if (holder.itemView.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_TYPE_MASK ==
+        android.content.res.Configuration.UI_MODE_TYPE_TELEVISION) {
+        holder.title.minLines = if (row is LibRow.SeriesRow ||
+            row is LibRow.MediaRow && row.item.kind in setOf("movie", "series")) 2 else 1
+    }
     holder.itemView.setOnFocusChangeListener { _, focused ->
         if (focused) onFocused(row)
     }
