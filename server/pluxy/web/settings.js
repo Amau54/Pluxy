@@ -62,18 +62,22 @@ function isDirty() {
 
 function updateControls() {
   document.querySelectorAll('button, input, select').forEach(element => {
-    if (element.closest('#desktopMenu') || element.id === 'desktopOptions') return;
+    if (element.closest('#desktopMenu') || element.closest('.pluxy-update') || element.closest('form[method="dialog"]') || element.id === 'desktopOptions') return;
     if (element.id !== 'retryButton') element.disabled = !CFG || saving || picking;
   });
   $('scanButton').disabled = !CFG || saving || picking || scanning;
   $('saveButton').disabled = !CFG || saving || picking || !isDirty();
   $('saveButton').textContent = saving ? 'Enregistrement…' : 'Enregistrer les réglages';
   $('saveState').textContent = saving ? 'Enregistrement en cours…' : !CFG ? 'Chargement des réglages…' : isDirty() ? 'Modifications à enregistrer' : 'Tous les réglages sont enregistrés';
+  $('folderSaveState').textContent = $('saveState').textContent;
+  $('saveFolders').disabled = $('saveButton').disabled;
+  $('saveFolders').textContent = saving ? 'Enregistrement…' : 'Enregistrer';
   if (desktopServerState && (desktopServerState.busy || !desktopServerState.running)) {
-    document.querySelectorAll('main button, main input, main select, .actions button').forEach(element => element.disabled = true);
+    document.querySelectorAll('main button, main input, main select, .actions button, #folderManager button, #folderManager input, #folderManager select').forEach(element => { if (!element.closest('form[method="dialog"]')) element.disabled = true; });
     $('saveState').textContent = desktopServerState.busy ? desktopServerState.status : 'Serveur arrêté';
     $('statusText').textContent = desktopServerState.busy ? desktopServerState.status : 'Arrêté';
     $('statusDot').className = 'dot';
+    $('folderSaveState').textContent = $('saveState').textContent;
   }
   updateDesktopControls();
 }
@@ -93,6 +97,19 @@ function updateDesktopControls() {
 function renderFolders() {
   const list = $('folderList');
   const items = folders();
+  const categories = [['movie','Films'],['series','Séries'],['clip','Vidéos'],['photo','Photos'],['audio','Musique'],['auto','Automatique']];
+  const categoryFor = path => CFG.server.media_dir_types?.[path] || 'auto';
+  $('folderCount').textContent = items.length ? `· ${items.length} dossier${items.length > 1 ? 's' : ''}` : '';
+  const summary = $('folderSummary');
+  summary.replaceChildren();
+  categories.forEach(([value, title]) => {
+    const count = items.filter(path => categoryFor(path) === value).length;
+    if (!count) return;
+    const badge = document.createElement('span');
+    badge.textContent = `${title} · ${count}`;
+    summary.append(badge);
+  });
+  if (!items.length) summary.textContent = 'Ajoutez un dossier pour commencer.';
   $('setupGuide').hidden = items.length > 0;
   list.replaceChildren();
   if (!items.length) {
@@ -101,11 +118,25 @@ function renderFolders() {
     empty.textContent = 'Aucun dossier : ajoutez au moins un emplacement contenant vos médias.';
     list.append(empty);
   }
-  items.forEach(path => {
+  const searchable = value => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('fr');
+  const query = searchable($('folderSearch').value.trim());
+  const filtered = items.filter(path => searchable(path).includes(query));
+  const collator = new Intl.Collator('fr', {numeric:true, sensitivity:'base'});
+  if (items.length && !filtered.length) {
+    const empty = document.createElement('p'); empty.className = 'empty'; empty.textContent = 'Aucun dossier ne correspond à cette recherche.'; list.append(empty);
+  }
+  categories.forEach(([value, title]) => {
+    const matching = filtered.filter(path => categoryFor(path) === value).sort(collator.compare);
+    if (!matching.length) return;
+    const heading = document.createElement('h3'); heading.textContent = `${title} · ${matching.length}`; list.append(heading);
+    matching.forEach(path => {
     const chip = document.createElement('div');
     chip.className = 'folder';
     const label = document.createElement('span');
-    label.textContent = path;
+    const name = document.createElement('strong');
+    name.textContent = path.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || path;
+    const location = document.createElement('small'); location.textContent = path;
+    label.append(name, location);
     label.title = path;
     const remove = document.createElement('button');
     const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -131,15 +162,23 @@ function renderFolders() {
       category.append(option);
     });
     category.value = CFG.server.media_dir_types?.[path] || 'auto';
+    category.dataset.path = path;
     category.onchange = () => {
       CFG.server.media_dir_types ||= {};
       CFG.server.media_dir_types[path] = category.value;
+      renderFolders();
       updateControls();
+      [...list.querySelectorAll('select')].find(element => element.dataset.path === path)?.focus();
     };
     chip.append(label, category, remove);
     list.append(chip);
+    });
   });
 }
+
+$('manageFolders').addEventListener('click', () => { $('folderSearch').value = ''; renderFolders(); $('folderManager').showModal(); });
+$('folderSearch').addEventListener('input', renderFolders);
+$('manualFolderForm').addEventListener('submit', event => { event.preventDefault(); addManualFolder(); });
 
 function setRange(id, value, label, unit) {
   $(id).value = value;
@@ -238,9 +277,12 @@ async function pickFolder() {
     const result = await request('/api/settings/pick-folder', {method: 'POST'}, 0);
     if (!result.path) return;
     CFG.server.media_dirs = [...new Set([...folders(), result.path])];
+    $('folderSearch').value = '';
     renderFolders();
     updateControls();
+    if (!$('folderManager').open) $('folderManager').showModal();
   } catch (error) {
+    if (error.status === 503 && !$('folderManager').open) $('folderManager').showModal();
     toast(error.message + (error.status === 503 ? ' Saisissez le chemin manuellement.' : ''), true);
   } finally {
     picking = false;
@@ -287,6 +329,7 @@ async function rescan() {
   if (isDirty() && !await save()) return;
   if (!folders().length) {
     toast('Ajoutez un dossier avant de lancer l’analyse.', true);
+    if (!$('folderManager').open) $('folderManager').showModal();
     $('manualFolder').focus();
     return;
   }

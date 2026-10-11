@@ -133,7 +133,7 @@ async def trusted_lan_only(request: Request, call_next):
     response.headers["Referrer-Policy"] = "no-referrer"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
-    if request.url.path.startswith("/api/settings") or request.url.path in {"/", "/settings.js", "/settings.css"}:
+    if request.url.path.startswith("/api/settings") or request.url.path in {"/", "/settings.js", "/settings.css", "/desktop-updates.js", "/desktop-updates.css"}:
         response.headers["Cache-Control"] = "no-store"
     content_type = response.headers.get("content-type", "")
     if content_type.startswith("text/html"):
@@ -176,6 +176,16 @@ def settings_script():
 @app.get("/settings.css")
 def settings_style():
     return FileResponse(WEB_DIR / "settings.css", media_type="text/css")
+
+
+@app.get("/desktop-updates.js")
+def desktop_updates_script():
+    return FileResponse(WEB_DIR / "desktop-updates.js", media_type="text/javascript")
+
+
+@app.get("/desktop-updates.css")
+def desktop_updates_style():
+    return FileResponse(WEB_DIR / "desktop-updates.css", media_type="text/css")
 
 
 @app.get("/favicon.png")

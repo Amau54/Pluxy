@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 from pluxy.main import app
 
 
-@pytest.mark.parametrize("path", ["/", "/settings.js", "/settings.css"])
+@pytest.mark.parametrize("path", ["/", "/settings.js", "/settings.css", "/desktop-updates.js", "/desktop-updates.css"])
 def test_configuration_interface_is_refreshed_after_updates(path):
     client = TestClient(app, base_url="http://localhost", client=("127.0.0.1", 1234))
     try:

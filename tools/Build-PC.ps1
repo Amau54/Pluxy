@@ -50,6 +50,7 @@ Copy-Item -LiteralPath (Join-Path $sdk 'lib\net462\Microsoft.Web.WebView2.Core.d
 Copy-Item -LiteralPath (Join-Path $repo 'assets\pluxy.ico') -Destination $payload
 Copy-Item -LiteralPath (Join-Path $repo 'assets\pluxy-logo.png') -Destination (Join-Path $payload 'ui\logo.png')
 Copy-Item -Path (Join-Path $repo 'desktop\ui\*') -Destination (Join-Path $payload 'ui')
+foreach ($name in @('desktop-updates.js','desktop-updates.css')) { Copy-Item -LiteralPath (Join-Path $repo "server\pluxy\web\$name") -Destination (Join-Path $payload 'ui') }
 Copy-Item -LiteralPath (Join-Path $engine 'mpv.exe'),(Join-Path $engine 'd3dcompiler_43.dll') -Destination (Join-Path $payload 'media')
 foreach ($name in @('Start-PC.ps1','PC-Launcher.ps1','Media-Runtime.ps1')) { Copy-Item -LiteralPath (Join-Path $repo "tools\$name") -Destination (Join-Path $payload 'tools') }
 foreach ($name in @('run.py','requirements.txt','config.default.json')) { Copy-Item -LiteralPath (Join-Path $repo "server\$name") -Destination (Join-Path $payload 'server') }

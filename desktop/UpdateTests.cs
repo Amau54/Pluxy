@@ -14,6 +14,7 @@ namespace Pluxy {
             protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,CancellationToken cancel) { cancel.ThrowIfCancellationRequested(); return Task.FromResult(make()); }
         }
         internal static async Task Run(Action<bool,string> check) {
+            await VerifyIntegratedSession(check);
             var bytes=File.ReadAllBytes(typeof(UpdateTests).Assembly.Location);
             string hash; using(var sha=SHA256.Create()) hash=BitConverter.ToString(sha.ComputeHash(bytes)).Replace("-","").ToLowerInvariant();
             string json=Native.Json.Serialize(new {schema=1,version="99.0.0",dirty=false,sha256=hash,size=bytes.Length});
@@ -45,6 +46,32 @@ namespace Pluxy {
                 cancelled.Cancel(); invalid=false;
                 try { await UpdateChecker.Download(release,p=>{},cancelled.Token,handler); } catch(OperationCanceledException) { invalid=true; }
                 check(invalid && Directory.GetFiles(Path.Combine(Native.Data,"Updates")).Length==before,"Une annulation ne laisse aucun installateur partiel");
+            }
+        }
+        private static async Task VerifyIntegratedSession(Action<bool,string> check) {
+            object view=null; int checks=0,installs=0;
+            var pending=new TaskCompletionSource<UpdateRelease>();
+            var release=new UpdateRelease {version="99.0.0",available=true};
+            using(var session=new UpdateSession(path=> { installs++; return Task.FromResult(true); },state=>view=state,
+                ()=> { checks++; return pending.Task; },async(value,progress,token)=> { progress(25); await Task.Delay(Timeout.Infinite,token); return "unused.exe"; })) {
+                var opening=session.Open();
+                await session.Handle("check");
+                check(checks==1 && session.Visible,"Le panneau intégré évite les vérifications simultanées");
+                pending.SetResult(release); await opening;
+                var download=session.Handle("install");
+                var state=Native.Object(Native.Json.DeserializeObject(Native.Json.Serialize(view)));
+                check(Native.Text(state,"phase")=="downloading" && Native.Number(state,"percent")==25,"La progression de mise à jour est transmise à l'interface interne");
+                await session.Handle("dismiss"); await download;
+                check(!session.Visible && installs==0,"Fermer le panneau annule le téléchargement sans lancer d'installation");
+                await session.Open();
+                state=Native.Object(Native.Json.DeserializeObject(Native.Json.Serialize(view)));
+                check(session.Visible && Native.Text(state,"phase")=="available","Le panneau peut être rouvert et réessayé après une annulation");
+            }
+            using(var session=new UpdateSession(path=> { installs++; return Task.FromResult(true); },state=>view=state,
+                ()=>Task.FromResult(release),(value,progress,token)=>Task.FromException<string>(new IOException("Téléchargement refusé")))) {
+                await session.Open(release); await session.Handle("install");
+                var state=Native.Object(Native.Json.DeserializeObject(Native.Json.Serialize(view)));
+                check(installs==0 && Native.Text(state,"phase")=="error" && !(bool)state["available"],"Une erreur reste dans le panneau intégré et impose une nouvelle vérification");
             }
         }
     }

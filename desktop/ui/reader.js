@@ -484,7 +484,7 @@ $('player-focus-contrast').addEventListener('change',async () => {
   catch(error) { $('player-focus-contrast').checked=Boolean(prefs.playerFocusContrast); fail(error); }
 });
 ['theme','audio'].forEach(id => $(id).addEventListener('change',async () => { try { await call('preferences',{theme:$('theme').value,audio:$('audio').value}); prefs.theme = $('theme').value; prefs.audio = $('audio').value; applyPreferences(); } catch (error) { fail(error); } }));
-$('change-mode').addEventListener('click',async () => { prefs.mode=''; $('secondary-options').close(); try { await call('chooseMode'); } catch(error) { prefs.mode='reader'; fail(error); showDialog('settings'); } });
+$('change-mode').addEventListener('click',async () => { prefs.mode=''; document.querySelectorAll('dialog[open]').forEach(dialog => dialog.close()); try { await call('chooseMode'); } catch(error) { prefs.mode='reader'; fail(error); showDialog('settings'); } });
 $('expand-all').addEventListener('click',() => document.querySelectorAll('.folder-tree').forEach(e => e.open = true));
 $('collapse-all').addEventListener('click',() => document.querySelectorAll('.folder-tree').forEach(e => e.open = false));
 $('gallery-close').addEventListener('click',() => $('gallery').close()); $('gallery').addEventListener('close',stopSlideshow);

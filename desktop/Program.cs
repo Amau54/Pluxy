@@ -15,7 +15,7 @@ using Microsoft.Web.WebView2.WinForms;
 [assembly: System.Reflection.AssemblyDescription("Lecteur et serveur multimédia Pluxy")]
 [assembly: System.Reflection.AssemblyCompany("Pluxy")]
 [assembly: System.Reflection.AssemblyProduct("Pluxy")]
-[assembly: System.Reflection.AssemblyVersion("1.8.20.0")]
+[assembly: System.Reflection.AssemblyVersion("1.8.21.0")]
 
 namespace Pluxy {
     internal static class Program {
@@ -51,7 +51,7 @@ namespace Pluxy {
         private bool checkingUpdate;
         private DateTime nextUpdateCheck=DateTime.MinValue, nextUpdateOffer=DateTime.MinValue;
         private UpdateRelease pendingUpdate;
-        private UpdateWindow updateWindow;
+        private UpdateSession updates;
         private string serverOperation;
         private bool quitting,choosing,busy,started,balloon,background,shutdownComplete,shuttingDown;
         private Task showSignal;
@@ -82,7 +82,7 @@ namespace Pluxy {
                 await Task.WhenAll(players.ToArray().Select(player=>player.Shutdown()));
                 await music.Stop(); music.Dispose();
                 serverMonitor.Stop(); serverMonitor.Dispose();
-                updateMonitor.Stop(); updateMonitor.Dispose(); if(updateWindow!=null) updateWindow.Close();
+                updateMonitor.Stop(); updateMonitor.Dispose(); if(updates!=null) updates.Dispose();
                 if(tray!=null) { tray.Visible=false; tray.Dispose(); } server.Dispose(); api.Dispose();
                 shutdownComplete=true; Close();
             };
@@ -117,6 +117,7 @@ namespace Pluxy {
                     if(!e.IsSuccess) return;
                     if(!started) { started=true; if(prefs.mode=="server") await ChangeMode("server"); }
                     UpdateServerControls();
+                    if(updates!=null) updates.Publish();
                     if(screenshot!=null && browser.Source!=null && browser.Source.Host=="pluxy.app") {
                         await Task.Delay(1800);
                         var result=Native.Object(Native.Json.DeserializeObject(await core.CallDevToolsProtocolMethodAsync("Page.captureScreenshot","{}")));
@@ -152,21 +153,21 @@ namespace Pluxy {
                 MessageBox.Show("Le composant d'affichage Microsoft manque. Relancez l'installateur Pluxy : il le préparera automatiquement.","Pluxy",MessageBoxButtons.OK,MessageBoxIcon.Information); quitting=true; Close();
             } catch(Exception error) { Native.Log(error); MessageBox.Show("Impossible d'ouvrir Pluxy. Relancez l'installateur pour réparer l'application.","Pluxy",MessageBoxButtons.OK,MessageBoxIcon.Error); quitting=true; Close(); }
         }
-        private void Restore() { Show(); WindowState=FormWindowState.Normal; Activate(); }
+        private void Restore() { Show(); if(WindowState==FormWindowState.Minimized) WindowState=FormWindowState.Normal; Activate(); }
         private void Quit() { quitting=true; Close(); }
-        private void ShowUpdater(UpdateRelease known=null) {
+        private async void ShowUpdater(UpdateRelease known=null) {
             if(quitting) return;
-            if(updateWindow!=null && !updateWindow.IsDisposed) { updateWindow.Activate(); return; }
             Restore(); nextUpdateOffer=DateTime.UtcNow.AddHours(24);
             prefs.updateOfferAfter=nextUpdateOffer.Ticks; prefs.Save();
-            updateWindow=new UpdateWindow(async path=> {
+            if(updates==null) updates=new UpdateSession(async path=> {
                 if(busy) throw new IOException("Attendez la fin de l’opération du serveur avant d’installer.");
-                using(var process=Process.Start(new ProcessStartInfo(path,"/SP- /SILENT /NORESTART /PLUXYUPDATE=1 /DIR=\""+Native.Root.TrimEnd(Path.DirectorySeparatorChar)+"\"") {UseShellExecute=true})) {
+                var installLog=Path.Combine(Native.Data,"Updates","install-"+DateTime.UtcNow.ToString("yyyyMMdd-HHmmss")+".log");
+                using(var process=Process.Start(new ProcessStartInfo(path,"/SP- /VERYSILENT /NORESTART /PLUXYUPDATE=1 /LOG="+Native.Quote(installLog)+" /DIR=\""+Native.Root.TrimEnd(Path.DirectorySeparatorChar)+"\"") {UseShellExecute=true})) {
                     if(process==null) throw new IOException("L’installateur n’a pas pu démarrer.");
                 }
                 await Task.Yield(); Quit();
-            },known);
-            updateWindow.Show(this);
+            },state=>Event("updateState",state));
+            await updates.Open(known);
         }
         private async Task CheckAutomaticUpdate() {
             if(quitting || checkingUpdate) return;
@@ -281,6 +282,10 @@ namespace Pluxy {
                 else if(command=="serverStart" || command=="serverStop" || command=="serverRestart") await ControlServer(command);
                 else if(command=="quit") Quit();
                 else if(command=="updates") ShowUpdater();
+                else if(command=="updateAction" && updates!=null) {
+                    var payload=Native.Object(Native.Json.DeserializeObject(message.WebMessageAsJson));
+                    await updates.Handle(Native.Text(Native.Object(payload.ContainsKey("args")?payload["args"]:null),"action"));
+                }
                 return;
             }
             string id="";
@@ -329,6 +334,7 @@ namespace Pluxy {
                     prefs.ApplyReader(api.Server,key); prefs.Save(); result=ReaderState();
                 }
                 else if(method=="updates") { ShowUpdater(); result=true; }
+                else if(method=="updateAction") { if(updates!=null) await updates.Handle(Native.Text(args,"action")); result=true; }
                 else if(method=="backup") {
                     using(var dialog=new SaveFileDialog { Title="Sauvegarder les réglages et l'historique",Filter="Sauvegarde Pluxy (*.zip)|*.zip",FileName="Pluxy-"+DateTime.Now.ToString("yyyy-MM-dd")+".zip" }) {
                         result=false; if(dialog.ShowDialog(this)==DialogResult.OK) { SettingsBackup.Export(dialog.FileName); result=true; }
