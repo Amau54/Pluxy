@@ -18,9 +18,13 @@ def test_quick_apks_are_built_once_and_publication_requires_all_gates():
     assert "serverapp/build/outputs/apk" not in source
     assert "assembleDebug" not in sections["android"] + sections["dev-release"]
     for name in ("dev-release", "release"):
-        assert "needs: [python, android, apk]" in sections[name]
+        dependencies = re.search(r"(?m)^    needs: \[([^]]+)\]$", sections[name])
+        assert dependencies is not None
+        assert {"python", "android", "apk", "android-startup"} <= {
+            value.strip() for value in dependencies.group(1).split(",")
+        }
     assert "artifact-ids: ${{ needs.apk.outputs.artifact_id }}" in sections["dev-release"]
-    assert "secrets." not in sections["apk"] + sections["android"]
+    assert "secrets." not in sections["apk"] + sections["android"] + sections["android-startup"]
     assert "github.event_name == 'push' && github.ref == 'refs/heads/main'" in sections["dev-release"]
     assert "environment: play-release" in sections["release"]
     assert "cancel-in-progress: ${{ github.event_name == 'pull_request' }}" in source
