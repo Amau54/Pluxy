@@ -1,8 +1,6 @@
 package com.pluxy.tv.ui
 
 import android.content.Intent
-import android.content.ActivityNotFoundException
-import android.net.Uri
 import android.content.res.Configuration
 import android.animation.AnimatorInflater
 import android.graphics.Typeface
@@ -266,15 +264,8 @@ class SeriesActivity : ThemedActivity() {
         overview.visibility =
             if (resources.configuration.screenHeightDp < 440 || metadata.overview.isNullOrBlank())
                 View.GONE else View.VISIBLE
-        val trailerUrl = LanUrlPolicy.safeYoutubeTrailer(metadata.trailerUrl)
-        trailerButton.visibility = if (trailerUrl == null) View.GONE else View.VISIBLE
-        trailerButton.setOnClickListener(if (trailerUrl == null) null else View.OnClickListener {
-            try {
-                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(trailerUrl)))
-            } catch (_: ActivityNotFoundException) {
-                Toast.makeText(this, "Aucune application pour ouvrir la bande-annonce", Toast.LENGTH_SHORT).show()
-            }
-        })
+        val trailerUrl = TrailerLinks.from(metadata.trailerUrl)?.web
+        TrailerPlayer.bind(this, trailerButton, trailerUrl)
         if (focusedControlTag == "trailer" && trailerUrl != null && currentFocus == null) {
             trailerButton.requestFocus()
         }

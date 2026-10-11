@@ -163,6 +163,9 @@ class SettingsActivity : ThemedActivity() {
 
 
         section("Préférences de lecture")
+        rowButton("Lecteur des bandes-annonces", TrailerPlayer.preferenceLabel(this),
+            "Choisir SmartTube, YouTube ou une autre application installée.")
+            .setOnClickListener { anchor -> TrailerPlayer.choosePreference(this, anchor) { render() } }
         val autoNext = PluxyApplication.autoPlayNextEpisode(this)
         localSwitchRow("Épisode suivant automatique", autoNext) {
             PluxyApplication.setAutoPlayNextEpisode(this, !autoNext)

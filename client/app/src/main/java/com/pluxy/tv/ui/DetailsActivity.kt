@@ -2,7 +2,6 @@ package com.pluxy.tv.ui
 
 import android.content.Intent
 import android.graphics.Typeface
-import android.net.Uri
 import android.os.Bundle
 import android.view.Gravity
 import android.view.LayoutInflater
@@ -411,13 +410,7 @@ class DetailsActivity : ThemedActivity() {
 
         // Bande-annonce
         val trailerBtn = findViewById<Button>(R.id.trailer)
-        val trailerUrl = LanUrlPolicy.safeYoutubeTrailer(m.trailerUrl)
-        if (trailerUrl != null) {
-            trailerBtn.visibility = View.VISIBLE
-            trailerBtn.setOnClickListener { openTrailer(trailerUrl) }
-        } else {
-            trailerBtn.visibility = View.GONE
-        }
+        TrailerPlayer.bind(this, trailerBtn, m.trailerUrl)
     }
 
     private fun play() {
@@ -460,14 +453,6 @@ class DetailsActivity : ThemedActivity() {
             .putExtra(PlayerActivity.EXTRA_FORCE_DIRECT, forceDirect)
             .putExtra(PlayerActivity.EXTRA_START_FROM_BEGINNING, startFromBeginning)
             .putExtra(PlayerActivity.EXTRA_AUTO_RESUME, autoResume))
-    }
-
-    private fun openTrailer(url: String) {
-        try {
-            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-        } catch (e: Exception) {
-            Toast.makeText(this, "Aucune application pour ouvrir la bande-annonce", Toast.LENGTH_SHORT).show()
-        }
     }
 
     companion object {
