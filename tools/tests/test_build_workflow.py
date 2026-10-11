@@ -48,6 +48,8 @@ def test_only_unpublished_control_apks_generate_a_runner_key():
     assert 'keytool -genkeypair -keystore "$HOME/.android/debug.keystore"' in sections["apk"]
     assert 'if [[ ! -f "$HOME/.android/debug.keystore" ]]' in sections["apk"]
     assert sections["apk"].index("keytool -genkeypair") < sections["apk"].index(":app:assembleDebug")
+    assert 'keytool -genkeypair -keystore "$HOME/.android/debug.keystore"' in sections["android-startup"]
+    assert sections["android-startup"].index("keytool -genkeypair") < sections["android-startup"].index(":app:connectedDebugAndroidTest")
     assert "-genkeypair" not in sections["dev-release"] + sections["release"]
 
 
