@@ -9,6 +9,7 @@ namespace Pluxy {
     internal sealed class PlayerButton : Button {
         public string Symbol;
         public bool StrongFocus;
+        public bool TextOnly;
         public Color Accent=Color.FromArgb(246,173,132);
         private bool hover;
         private Bitmap glow;
@@ -29,6 +30,11 @@ namespace Pluxy {
             g.PixelOffsetMode=PixelOffsetMode.HighQuality;
             bool active=Enabled && (hover || Focused);
             if(string.IsNullOrEmpty(Symbol)) {
+                if(TextOnly) {
+                    TextRenderer.DrawText(g,Text,Font,ClientRectangle,active?Color.White:ForeColor,TextFormatFlags.HorizontalCenter|TextFormatFlags.VerticalCenter);
+                    if(active) using(var edge=new Pen(Color.White,Math.Max(1,2*g.DpiX/96f))) g.DrawLine(edge,Padding.Left,Height-6*g.DpiX/96f,Width-Padding.Right,Height-6*g.DpiX/96f);
+                    return;
+                }
                 using(var path=Round(new RectangleF(2,2,Width-4,Height-4),8*Math.Min(Width,Height)/40f)) {
                     if(active) using(var brush=new SolidBrush(Color.FromArgb(43,45,53))) g.FillPath(brush,path);
                     if(Focused) using(var edge=new Pen(Accent,1.2f)) g.DrawPath(edge,path);

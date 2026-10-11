@@ -4,6 +4,23 @@ using System.Drawing.Drawing2D;
 using System.Windows.Forms;
 
 namespace Pluxy {
+    internal sealed class NextEpisodePrompt : Form {
+        public event EventHandler CancelRequested;
+        public NextEpisodePrompt() {
+            FormBorderStyle=FormBorderStyle.None; ShowInTaskbar=false;
+            StartPosition=FormStartPosition.Manual; AutoScaleMode=AutoScaleMode.None;
+            Text=AccessibleName="Épisode suivant";
+            // Un panneau WinForms transparent repeint le parent, pas la surface vidéo native.
+            BackColor=TransparencyKey=Color.Black; KeyPreview=true;
+            FormClosing+=(s,e)=> {
+                if(e.CloseReason!=CloseReason.UserClosing) return;
+                e.Cancel=true;
+                if(CancelRequested!=null) CancelRequested(this,EventArgs.Empty);
+                else Hide();
+            };
+        }
+    }
+
     internal sealed class PlayerSurface : Panel {
         public Color Accent=Color.FromArgb(246,173,132);
         public PlayerSurface() {

@@ -8,6 +8,7 @@ using System.Windows.Forms;
 
 namespace Pluxy {
     internal sealed class PlayerWindow : Form {
+        private const int NextEpisodeDelaySeconds=5;
         private MpvSession mpv=new MpvSession();
         private IDictionary<string,object> media;
         private System.Threading.CancellationTokenSource skipLifetime=new System.Threading.CancellationTokenSource();
@@ -69,9 +70,10 @@ namespace Pluxy {
         private bool previewBusy;
         private string previewUnsupported;
         private DateTime previewRetryAt=DateTime.MinValue;
-        private readonly PlayerSurface nextPrompt=new PlayerSurface { Size=new Size(350,140),Padding=new Padding(16),Visible=false };
-        private readonly Label nextTitle=new Label { Dock=DockStyle.Top,Height=50,AutoEllipsis=true,ForeColor=Color.FromArgb(241,243,248) };
-        private readonly Label nextCountdown=new Label { Dock=DockStyle.Top,Height=24,ForeColor=Color.FromArgb(173,180,195) };
+        private readonly NextEpisodePrompt nextPrompt=new NextEpisodePrompt { Size=new Size(350,128),Padding=new Padding(8) };
+        private readonly Label nextTitle=new Label { Dock=DockStyle.Top,Height=50,AutoEllipsis=true,ForeColor=Color.FromArgb(241,243,248),BackColor=Color.Black };
+        private readonly Label nextCountdown=new Label { Dock=DockStyle.Top,Height=24,ForeColor=Color.FromArgb(173,180,195),BackColor=Color.Black };
+        private Button nextPlay;
         private readonly System.Diagnostics.Stopwatch nextClock=new System.Diagnostics.Stopwatch();
         private bool nextHandled;
         public PlayerWindow(LibraryClient api,string id,string title,string url,string audio,double start,object[] subtitles=null)
@@ -90,9 +92,9 @@ namespace Pluxy {
             accent=theme=="ocean"?Color.FromArgb(131,217,229):theme=="midnight"?Color.FromArgb(196,207,235):Color.FromArgb(246,173,132);
             timeline.Accent=accent; status.ForeColor=accent;
             timeline.Height=Scale(22); status.Height=Scale(28);
-            previewPanel.Accent=nextPrompt.Accent=accent;
+            previewPanel.Accent=accent;
             previewPanel.Size=new Size(Scale(176),Scale(122)); previewImage.Height=Scale(94); previewTime.Height=Scale(28);
-            nextPrompt.Size=new Size(Scale(350),Scale(140)); nextPrompt.Padding=new Padding(Scale(16)); nextTitle.Height=Scale(50); nextCountdown.Height=Scale(24);
+            nextPrompt.Size=new Size(Scale(350),Scale(128)); nextPrompt.Padding=new Padding(Scale(8)); nextPrompt.Font=Font; nextTitle.Height=Scale(50); nextCountdown.Height=Scale(24);
             controls=new PlayerSurface { Accent=accent,Height=Scale(hintsEnabled?102:84),Padding=new Padding(Scale(12),Scale(3),Scale(12),Scale(8)),Anchor=AnchorStyles.Top|AnchorStyles.Left };
             var buttons=new FlowLayoutPanel { Dock=DockStyle.Fill,WrapContents=false,BackColor=controls.BackColor }; actionButtons=buttons;
             pause=ControlButton("Ⅱ","Lire / pause · Espace",async(s,e)=> { if(!ready || closing) return; try { if(Convert.ToBoolean(await mpv.Command("get_property","eof-reached"))) { await Run("seek",0,"absolute+exact"); await Run("set_property","pause",false); } else await Run("cycle","pause"); } catch(Exception error) { Native.Log(error); } });
@@ -117,13 +119,20 @@ namespace Pluxy {
             Controls.Add(screen); Controls.Add(controls); Controls.Add(status);
             previewPanel.Controls.Add(previewImage); previewPanel.Controls.Add(previewTime); Controls.Add(previewPanel);
             previewTimer.Tick+=async(s,e)=>await UpdatePreview(); previewTimer.Start();
-            var nextActions=new FlowLayoutPanel { Dock=DockStyle.Bottom,Height=Scale(44),FlowDirection=FlowDirection.RightToLeft };
-            nextActions.Controls.Add(ControlButton("Rester","Rester sur cet épisode",(s,e)=>CancelNextPrompt()));
-            nextActions.Controls.Add(ControlButton("Lire maintenant","Lire l'épisode suivant",async(s,e)=>await NextEpisode()));
-            nextPrompt.Controls.Add(nextCountdown); nextPrompt.Controls.Add(nextTitle); nextPrompt.Controls.Add(nextActions); Controls.Add(nextPrompt);
+            var nextActions=new FlowLayoutPanel { Dock=DockStyle.Bottom,Height=Scale(44),FlowDirection=FlowDirection.RightToLeft,BackColor=Color.Black,WrapContents=false };
+            var stay=ControlButton("Rester","Rester sur cet épisode",(s,e)=>CancelNextPrompt());
+            nextPlay=ControlButton("Lire maintenant","Lire l'épisode suivant",async(s,e)=>await NextEpisode());
+            foreach(var action in new[]{stay,nextPlay}) { ((PlayerButton)action).TextOnly=true; action.BackColor=Color.Black; }
+            nextActions.Controls.Add(stay); nextActions.Controls.Add(nextPlay);
+            nextPrompt.Controls.Add(nextCountdown); nextPrompt.Controls.Add(nextTitle); nextPrompt.Controls.Add(nextActions);
+            nextPrompt.KeyDown+=(s,e)=> { if(e.KeyCode==Keys.Escape) { e.Handled=true; e.SuppressKeyPress=true; CancelNextPrompt(); } else if(e.KeyCode==Keys.F11) { e.Handled=true; ToggleFull(); } };
+            nextPrompt.Deactivate+=(s,e)=>CancelNextWhenUnfocused();
+            nextPrompt.CancelRequested+=(s,e)=>CancelNextPrompt();
+            Disposed+=(s,e)=>nextPrompt.Dispose();
             retryButton=ControlButton("Réessayer","Reprendre au même endroit",async(s,e)=> { recoveryAttempts=0; await Recover(position); }); retryButton.Visible=false; retryButton.Dock=DockStyle.Top; Controls.Add(retryButton); retryButton.BringToFront();
             controls.BringToFront();
             Resize+=(s,e)=>LayoutControls();
+            Move+=(s,e)=>LayoutControls();
             LayoutControls();
             time.Margin=new Padding(Scale(10),Scale(14),Scale(12),0); time.Font=new Font("Segoe UI",9);
             timeline.AccessibleName="Position dans la vidéo";
@@ -143,7 +152,7 @@ namespace Pluxy {
             };
             KeyUp+=async(s,e)=> { if((e.KeyCode==Keys.Right || e.KeyCode==Keys.Left) && seekDirection!=0) { e.Handled=true; UpdateSeek(); seekDirection=0; seekTimer.Stop(); seekClock.Stop(); await Run("seek",seekTarget,"absolute+exact"); } };
             seekTimer.Tick+=(s,e)=>UpdateSeek();
-            Deactivate+=(s,e)=> { seekDirection=0; seekTimer.Stop(); seekClock.Stop(); CancelNextPrompt(); };
+            Deactivate+=(s,e)=> { seekDirection=0; seekTimer.Stop(); seekClock.Stop(); CancelNextWhenUnfocused(); };
             Shown+=async(s,e)=> {
                 Native.DarkFrame(this);
                 bool opened=false;
@@ -157,7 +166,7 @@ namespace Pluxy {
             };
         }
         public async Task Shutdown() {
-            if(closing) return; closing=true; skipLifetime.Cancel(); timer.Stop(); seekTimer.Stop(); mpv.Dispose();
+            if(closing) return; closing=true; CancelNextPrompt(); skipLifetime.Cancel(); timer.Stop(); seekTimer.Stop(); mpv.Dispose();
             previewTimer.Stop(); previewLifetime.Cancel(); previewImage.Image=null;
             foreach(var bitmap in previewCache.Values) bitmap.Dispose(); previewCache.Clear();
             try { var save=api.SaveProgress(server,id,position,duration,progressSession,++progressSequence,profile); await Task.WhenAny(save,Task.Delay(2000)); if(save.IsCompleted) await save; else saveObserver=save.ContinueWith(t=>Native.Log(t.Exception),TaskContinuationOptions.OnlyOnFaulted); } catch(Exception error) { Native.Log(error); }
@@ -264,9 +273,9 @@ namespace Pluxy {
                 bool ended=Convert.ToBoolean(await mpv.Command("get_property","eof-reached"));
                 if(ended && nextButton.Enabled && !nextHandled) ShowNextPrompt(episodeIndex+1);
                 if(nextPrompt.Visible && autoplay) {
-                    int remaining=Math.Max(0,8-(int)nextClock.Elapsed.TotalSeconds);
+                    int remaining=Math.Max(0,NextEpisodeDelaySeconds-(int)nextClock.Elapsed.TotalSeconds);
                     nextCountdown.Text="Lecture dans "+remaining+" s";
-                    if(remaining==0 && ContainsFocus) { await NextEpisode(); return; }
+                    if(remaining==0 && (ContainsFocus || nextPrompt.ContainsFocus)) { await NextEpisode(); return; }
                 }
                 if(!dragging && duration>0) timeline.Value=(int)Math.Max(0,Math.Min(10000,position/duration*10000));
                 time.Text=Clock(position)+" / "+Clock(duration); pause.Text=Convert.ToBoolean(paused)?"▶":"Ⅱ";
@@ -333,7 +342,7 @@ namespace Pluxy {
             }
             volume.Width=Scale(compact?60:88); time.Margin=new Padding(Scale(compact?5:10),Scale(14),Scale(compact?6:12),0);
             skipButton.Location=new Point(Math.Max(Scale(12),ClientSize.Width-skipButton.Width-Scale(24)),Math.Max(Scale(12),controls.Top-skipButton.Height-Scale(12)));
-            nextPrompt.Location=new Point(Math.Max(Scale(12),ClientSize.Width-nextPrompt.Width-Scale(24)),Math.Max(Scale(12),controls.Top-nextPrompt.Height-Scale(12)));
+            nextPrompt.Location=PointToScreen(new Point(Math.Max(Scale(12),ClientSize.Width-nextPrompt.Width-Scale(24)),Math.Max(Scale(12),controls.Top-nextPrompt.Height-Scale(12))));
         }
         private async Task LoadAutomaticSegments(string ownerId,string ownerServer,object[] nativeChapters,System.Threading.CancellationToken token) {
             try {
@@ -376,10 +385,14 @@ namespace Pluxy {
             string title=MediaPresentation.EpisodeTitle(episode);
             string code=MediaPresentation.EpisodeCode(episode);
             nextTitle.Text="Épisode suivant\n"+(title.Length>0?title:"Épisode "+Native.Number(episode,"episode"))+" · "+code;
-            nextCountdown.Text=autoplay?"Lecture dans 8 s":"Prêt lorsque vous l'êtes";
-            nextClock.Restart(); nextPrompt.Visible=true; nextPrompt.BringToFront();
+            nextCountdown.Text=autoplay?"Lecture dans "+NextEpisodeDelaySeconds+" s":"Prêt lorsque vous l'êtes";
+            nextClock.Restart(); nextPrompt.Show(this); nextPlay.Focus();
         }
         private void CancelNextPrompt() { nextPrompt.Visible=false; nextClock.Reset(); }
+        private void CancelNextWhenUnfocused() {
+            if(closing || !IsHandleCreated || IsDisposed) return;
+            BeginInvoke((Action)(()=> { if(!closing && !ContainsFocus && !nextPrompt.ContainsFocus) CancelNextPrompt(); }));
+        }
         private async Task UpdatePreview() {
             if(closing || !ready || duration<=0 || (!dragging && seekDirection==0)) { previewPanel.Visible=false; return; }
             double target=seekDirection!=0?seekTarget:duration*timeline.Value/10000;

@@ -1,4 +1,7 @@
-# APK de test — Pluxy 1.7.21 (75)
+# APK de test — Pluxy 1.7.22 (76)
+
+L’épisode suivant démarre après 5 secondes. Le titre, le décompte et les actions
+s’affichent sans panneau ni voile sur la vidéo. Le bouton sélectionné est souligné.
 
 Cette mise à jour détecte les intros et génériques automatiquement, sans clé API
 ni repère à saisir. Les chapitres nommés restent prioritaires. Sinon, le serveur
@@ -24,7 +27,7 @@ Les reprises de lecture sont conservées localement pendant une coupure réseau,
 les grandes bibliothèques utilisent un index persistant et les correspondances
 de films et de séries peuvent être corrigées depuis leur fiche.
 
-Le lecteur Windows 1.8.15 utilise aussi la détection automatique, les dossiers
+Le lecteur Windows 1.8.16 utilise aussi la détection automatique, les dossiers
 musicaux et le mini lecteur. Les options de l’application sont intégrées dans
 l’interface du serveur, sans bandeau supplémentaire.
 L’installateur Windows est disponible sur le canal PC ; il n’est pas signé

@@ -6,7 +6,7 @@
 
 Vos films, séries, photos et musique sur la TV.
 
-**Android 1.7.21 · Windows 1.8.15**
+**Android 1.7.22 · Windows 1.8.16**
 
 [Application Android](https://github.com/Amau54/Pluxy/releases/download/dev-latest/Pluxy-debug.apk)
 · [Application PC](https://github.com/Amau54/Pluxy/releases/download/pc-latest/Pluxy-Setup.exe)
@@ -51,6 +51,8 @@ Le choix est mémorisé. **Options → Changer de mode** permet de le modifier.
 Le profil Général est utilisé par défaut. Dans Réglages → Options, vous pouvez activer plusieurs profils pour séparer l’historique et les réglages de lecture, sans compte.
 
 Les intros et génériques sont détectés automatiquement, sans clé API ni repère à saisir. Le serveur compare le son des épisodes d’une même saison et recherche les génériques sur fond sombre. Les chapitres clairement nommés sont utilisés en priorité. L’analyse se fait en arrière-plan puis reste en cache : le bouton de passage apparaît seulement quand un segment est reconnu. Une scène après le générique reste lisible. Les formats non pris en charge et les passages incertains ne sont pas sautés.
+L’épisode suivant démarre après 5 secondes, avec un décompte sans panneau sur la vidéo.
+Vous pouvez choisir **Lire maintenant**, **Rester ici**, ou désactiver l’enchaînement dans les réglages.
 Une mauvaise correspondance peut être corrigée depuis la fiche du film ou de la série ;
 le choix reste conservé après un nouveau scan. Sur Windows, la musique continue
 dans un mini lecteur pendant que vous parcourez la bibliothèque.

@@ -2472,8 +2472,6 @@ class PlayerActivity : ThemedActivity() {
             error(R.drawable.ic_episode_placeholder)
         }
         val countdown = dialog.findViewById<TextView>(R.id.nextEpisodeCountdown)
-        val progress = dialog.findViewById<android.widget.ProgressBar>(R.id.nextEpisodeProgress)
-        progress.visibility = if (automatic) View.VISIBLE else View.GONE
         countdown.text = if (automatic) getString(R.string.player_next_countdown, NEXT_EPISODE_DELAY_SECONDS)
             else getString(R.string.player_next_manual)
         nextEpisodeDialog = dialog
@@ -2499,7 +2497,6 @@ class PlayerActivity : ThemedActivity() {
                         if (seconds <= 0) playNextEpisode(next)
                         else {
                             countdown.text = getString(R.string.player_next_countdown, seconds)
-                            progress.progress = seconds * 1_000 / NEXT_EPISODE_DELAY_SECONDS
                             handler.postDelayed(this, 1_000L)
                         }
                     }
@@ -2524,9 +2521,10 @@ class PlayerActivity : ThemedActivity() {
             attributes = attributes.apply {
                 x = edge
                 y = resources.getDimensionPixelSize(R.dimen.player_edge_gap)
-                dimAmount = 0.15f
+                dimAmount = 0f
             }
-            addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+            clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+            decorView.elevation = 0f
         }
         hideControls()
     }
@@ -2952,7 +2950,7 @@ class PlayerActivity : ThemedActivity() {
         private const val CONTROLLER_TIMEOUT_MS = 3_000
         private const val SEEK_PREVIEW_TICK_MS = 50L
         private const val SEEK_RELEASE_FALLBACK_MS = 900L
-        private const val NEXT_EPISODE_DELAY_SECONDS = 8
+        private const val NEXT_EPISODE_DELAY_SECONDS = 5
         private const val NEXT_EPISODE_FETCH_ATTEMPTS = 2
         // Durée de lecture CONTINUE minimale avant qu'un buffering puisse compter comme
         // un rebuffer réseau. Les reprises post-seek (tampon mince, transcodage qui
