@@ -7,6 +7,7 @@ let scanning = false;
 let statusPending = false;
 let statusTimer;
 let toastTimer;
+let desktopServerState = null;
 const $ = id => document.getElementById(id);
 
 function toast(message, error = false) {
@@ -61,12 +62,32 @@ function isDirty() {
 
 function updateControls() {
   document.querySelectorAll('button, input, select').forEach(element => {
+    if (element.closest('#desktopMenu') || element.id === 'desktopOptions') return;
     if (element.id !== 'retryButton') element.disabled = !CFG || saving || picking;
   });
   $('scanButton').disabled = !CFG || saving || picking || scanning;
   $('saveButton').disabled = !CFG || saving || picking || !isDirty();
   $('saveButton').textContent = saving ? 'Enregistrement…' : 'Enregistrer les réglages';
   $('saveState').textContent = saving ? 'Enregistrement en cours…' : !CFG ? 'Chargement des réglages…' : isDirty() ? 'Modifications à enregistrer' : 'Tous les réglages sont enregistrés';
+  if (desktopServerState && (desktopServerState.busy || !desktopServerState.running)) {
+    document.querySelectorAll('main button, main input, main select, .actions button').forEach(element => element.disabled = true);
+    $('saveState').textContent = desktopServerState.busy ? desktopServerState.status : 'Serveur arrêté';
+    $('statusText').textContent = desktopServerState.busy ? desktopServerState.status : 'Arrêté';
+    $('statusDot').className = 'dot';
+  }
+  updateDesktopControls();
+}
+
+function updateDesktopControls() {
+  if (!window.chrome?.webview) return;
+  const state = desktopServerState;
+  document.querySelectorAll('[data-desktop]').forEach(button => {
+    const action = button.dataset.desktop;
+    button.disabled = !state || state.busy || saving || picking;
+    if (action === 'serverStart') button.disabled ||= !!state?.running;
+    if (action === 'serverStop' || action === 'serverRestart') button.disabled ||= !state?.canStop;
+  });
+  $('desktopServerStatus').textContent = state?.status || 'Vérification du serveur…';
 }
 
 function renderFolders() {
@@ -183,7 +204,7 @@ async function load() {
 }
 
 async function updateStatus() {
-  if (statusPending) return;
+  if (statusPending || desktopServerState && !desktopServerState.running) return;
   statusPending = true;
   clearTimeout(statusTimer);
   try {
@@ -204,7 +225,7 @@ async function updateStatus() {
   } finally {
     statusPending = false;
     updateControls();
-    if (!document.hidden) statusTimer = setTimeout(updateStatus, 5000);
+    if (!document.hidden && (!desktopServerState || desktopServerState.running)) statusTimer = setTimeout(updateStatus, 5000);
   }
 }
 
@@ -339,8 +360,21 @@ async function checkDiagnostics() {
 if (window.chrome?.webview) {
   $('desktopOptions').hidden = false;
   $('desktopOptions').addEventListener('click', () => $('desktopMenu').showModal());
-  document.querySelectorAll('[data-desktop]').forEach(button => button.addEventListener('click', () => {
+  window.chrome.webview.addEventListener('message', event => {
+    const message = event.data;
+    if (message.eventName === 'serverState') {
+      const previous = desktopServerState;
+      desktopServerState = message.data;
+      if (!desktopServerState.running) clearTimeout(statusTimer);
+      updateControls();
+      if (desktopServerState.running && !previous?.running && CFG) updateStatus();
+    } else if (message.eventName === 'serverError') toast(message.data, true);
+  });
+  document.querySelectorAll('[data-desktop]').forEach(button => button.addEventListener('click', async () => {
+    if (button.dataset.desktop.startsWith('server') && desktopServerState?.running && isDirty() && !await save()) return;
     $('desktopMenu').close();
     window.chrome.webview.postMessage({method: button.dataset.desktop});
   }));
+  updateDesktopControls();
+  window.chrome.webview.postMessage({method: 'serverState'});
 }

@@ -142,10 +142,6 @@ details[open] summary::after { transform: rotate(45deg); }
 .actions .quick { display: grid; gap: 10px; margin-top: 18px; }
 .actions .primary, .actions .secondary { width: 100%; }
 .save-state { margin: 17px 0 0; color: var(--muted); font-size: 12px; }
-.help { padding: 25px 6px 0; }
-.help h2 { display: flex; align-items: center; gap: 8px; color: #d3d9e4; font-size: 12px; font-weight: 500; margin-bottom: 8px; }
-.help h2 .icon { width: 15px; height: 15px; color: var(--quiet); }
-.help .desc { font-size: 12px; }
 .notice { margin-top: 20px; padding: 16px 18px; border-radius: 12px; border: 1px solid rgba(246, 173, 132, .3); background: rgba(77, 47, 39, .75); color: #f4c8ae; font-size: 13px; }
 .notice p { margin: 0 0 10px; }
 .footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; color: var(--quiet); font-size: 11px; padding-top: 30px; }
@@ -176,7 +172,6 @@ details[open] summary::after { transform: rotate(45deg); }
   .settings-panel { backdrop-filter: none; background: linear-gradient(145deg, rgba(34, 41, 54, .91), rgba(17, 22, 32, .94)); }
   .card { padding: 22px; }
   details { padding: 0 22px; }
-  .help { padding: 22px 4px 0; }
   .footer { font-size: 10px; }
 }
 @media (max-width: 420px) {
@@ -211,6 +206,8 @@ details[open] summary::after { transform: rotate(45deg); }
 .desktop-menu::backdrop { background:#05070b90; backdrop-filter:blur(6px); }
 .desktop-menu-heading { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
 .desktop-menu > button { display:block; width:100%; text-align:left; margin:6px 0; }
+.desktop-server-status { margin:0 0 12px; font-size:12px; color:var(--muted); }
+.desktop-menu hr { border:0; border-top:1px solid var(--line); margin:14px 0; }
 .toast { left:auto; right:24px; top:24px; bottom:auto; transform:translateY(-12px); border:1px solid var(--line); background:linear-gradient(145deg,#282c37ed,#171b24f5); color:var(--txt); border-radius:14px; backdrop-filter:blur(24px); max-width:min(440px,calc(100vw - 48px)); text-align:left; }
 .toast.show { transform:translateY(0); }
 .toast.error { background:linear-gradient(145deg,#382831ed,#211b24f5); border-color:#f6ad8440; color:var(--txt); }

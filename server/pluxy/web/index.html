@@ -62,10 +62,19 @@
       <div class="row"><div><label class="label" for="tmdbKey">Clé API ou jeton TMDB</label><span class="hint">Créez gratuitement une clé sur themoviedb.org. Elle reste uniquement sur ce PC.</span></div><div class="control"><input id="tmdbKey" type="password" autocomplete="off" placeholder="Facultatif"></div></div>
       <div class="row"><div><label class="label" for="metaLang">Langue des fiches</label></div><div class="control"><select id="metaLang"><option value="fr-FR">Français</option><option value="en-US">English</option></select></div></div>
       <div class="row"><div><label class="label" for="delivery">Livraison transcodée</label></div><div class="control"><select id="delivery"><option value="hls">HLS (recommandé)</option><option value="direct">Flux direct</option></select></div></div>
-      <div class="row"><div><label class="label" for="port">Port local</label><span class="hint">Modifier nécessite de redémarrer Pluxy depuis l’icône Windows.</span></div><div class="control"><input id="port" required type="number" min="1" max="65535"></div></div>
+      <div class="row"><div><label class="label" for="port">Port local</label><span class="hint">Modifier nécessite de redémarrer le serveur.</span></div><div class="control"><input id="port" required type="number" min="1" max="65535"></div></div>
     </div></details>
-  </main><aside aria-label="Enregistrement et aide"><section class="card glass actions"><h2>Vos réglages</h2><p class="desc">Enregistrez vos modifications pour les appliquer au serveur.</p><p id="saveState" class="save-state" role="status" aria-live="polite">Chargement des réglages…</p><div class="quick"><button class="primary" id="saveButton" onclick="save()">Enregistrer les réglages</button><button class="secondary" id="diagnosticsButton" onclick="checkDiagnostics()">Vérifier TMDB et les miniatures</button><p id="diagnosticsResult" role="status"></p><button class="secondary" onclick="refreshMetadata()">Rafraîchir TMDB</button></div></section><section class="help"><h2><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7v.1"/></svg>Depuis la barre des tâches</h2><p class="desc">L’icône Pluxy près de l’horloge Windows permet de démarrer, arrêter ou redémarrer le serveur.</p></section></aside></div>
+  </main><aside aria-label="Enregistrement"><section class="card glass actions"><h2>Vos réglages</h2><p class="desc">Enregistrez vos modifications pour les appliquer au serveur.</p><p id="saveState" class="save-state" role="status" aria-live="polite">Chargement des réglages…</p><div class="quick"><button class="primary" id="saveButton" onclick="save()">Enregistrer les réglages</button><button class="secondary" id="diagnosticsButton" onclick="checkDiagnostics()">Vérifier TMDB et les miniatures</button><p id="diagnosticsResult" role="status"></p><button class="secondary" onclick="refreshMetadata()">Rafraîchir TMDB</button></div></section></aside></div>
   <footer class="footer"><span>Pluxy utilise TMDB, sans être approuvé ni certifié par TMDB.</span><a href="https://github.com/Amau54/Pluxy/blob/main/docs/PRIVACY_POLICY.md">Confidentialité</a></footer>
 </div><div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
-<dialog id="desktopMenu" class="desktop-menu"><form method="dialog" class="desktop-menu-heading"><strong>Options</strong><button class="icon-button" aria-label="Fermer">×</button></form><button class="secondary" data-desktop="chooseMode">Changer de mode</button><button class="secondary" data-desktop="fullscreen">Plein écran / fenêtre</button><button class="secondary" data-desktop="quit">Quitter l’application</button></dialog>
+<dialog id="desktopMenu" class="desktop-menu">
+  <form method="dialog" class="desktop-menu-heading"><strong>Options</strong><button class="icon-button" aria-label="Fermer">×</button></form>
+  <p id="desktopServerStatus" class="desktop-server-status" role="status" aria-live="polite">Vérification du serveur…</p>
+  <button class="secondary" data-desktop="serverStart">Démarrer le serveur</button>
+  <button class="secondary" data-desktop="serverStop">Arrêter le serveur</button>
+  <button class="secondary" data-desktop="serverRestart">Redémarrer le serveur</button>
+  <hr>
+  <button class="secondary" data-desktop="chooseMode">Changer de mode</button>
+  <button class="secondary" data-desktop="quit">Quitter l’application</button>
+</dialog>
 <script src="/settings.js" defer></script></body></html>

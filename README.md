@@ -6,7 +6,7 @@
 
 Vos films, séries, photos et musique sur la TV.
 
-**Android 1.7.23 · Windows 1.8.17**
+**Android 1.7.23 · Windows 1.8.18**
 
 [Application Android](https://github.com/Amau54/Pluxy/releases/download/dev-latest/Pluxy-debug.apk)
 · [Application PC](https://github.com/Amau54/Pluxy/releases/download/pc-latest/Pluxy-Setup.exe)

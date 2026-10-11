@@ -15,7 +15,7 @@ using Microsoft.Web.WebView2.WinForms;
 [assembly: System.Reflection.AssemblyDescription("Lecteur et serveur multimédia Pluxy")]
 [assembly: System.Reflection.AssemblyCompany("Pluxy")]
 [assembly: System.Reflection.AssemblyProduct("Pluxy")]
-[assembly: System.Reflection.AssemblyVersion("1.8.17.0")]
+[assembly: System.Reflection.AssemblyVersion("1.8.18.0")]
 
 namespace Pluxy {
     internal static class Program {
@@ -44,6 +44,10 @@ namespace Pluxy {
         private readonly MusicSession music;
         private readonly EventWaitHandle signal=new EventWaitHandle(false,EventResetMode.AutoReset,Native.InstanceName+"Show");
         private NotifyIcon tray;
+        private ToolStripMenuItem startServer,stopServer,restartServer,serverStatus;
+        private readonly System.Windows.Forms.Timer serverMonitor=new System.Windows.Forms.Timer { Interval=4000 };
+        private bool checkingServer;
+        private string serverOperation;
         private bool quitting,choosing,busy,started,balloon,background,shutdownComplete,shuttingDown;
         private Task showSignal;
         private readonly string screenshot;
@@ -62,9 +66,9 @@ namespace Pluxy {
             Shown+=async(s,e)=>await Initialize();
             FormClosing+=async(s,e)=> {
                 if(e.CloseReason==CloseReason.WindowsShutDown || e.CloseReason==CloseReason.TaskManagerClosing || e.CloseReason==CloseReason.ApplicationExitCall) quitting=true;
-                if(!quitting && prefs.mode=="server" && server.Owned) {
+                if(!quitting && prefs.mode=="server" && tray!=null) {
                     e.Cancel=true; Hide();
-                    if(!balloon && tray!=null) { balloon=true; tray.ShowBalloonTip(2500,"Pluxy","Le serveur reste disponible. Retrouvez Pluxy près de l'horloge.",ToolTipIcon.Info); }
+                    if(!balloon) { balloon=true; tray.ShowBalloonTip(2500,"Pluxy","Pluxy reste accessible près de l’horloge.",ToolTipIcon.Info); }
                     return;
                 }
                 if(shutdownComplete) return;
@@ -72,6 +76,7 @@ namespace Pluxy {
                 quitting=true; signal.Set();
                 await Task.WhenAll(players.ToArray().Select(player=>player.Shutdown()));
                 await music.Stop(); music.Dispose();
+                serverMonitor.Stop(); serverMonitor.Dispose();
                 if(tray!=null) { tray.Visible=false; tray.Dispose(); } server.Dispose(); api.Dispose();
                 shutdownComplete=true; Close();
             };
@@ -99,6 +104,7 @@ namespace Pluxy {
                 core.NavigationCompleted+=async(s,e)=> {
                     if(!e.IsSuccess) return;
                     if(!started) { started=true; if(prefs.mode=="server") await ChangeMode("server"); }
+                    UpdateServerControls();
                     if(screenshot!=null && browser.Source!=null && browser.Source.Host=="pluxy.app") {
                         await Task.Delay(1800);
                         var result=Native.Object(Native.Json.DeserializeObject(await core.CallDevToolsProtocolMethodAsync("Page.captureScreenshot","{}")));
@@ -108,8 +114,22 @@ namespace Pluxy {
                 };
                 tray=new NotifyIcon { Icon=Icon,Text="Pluxy",Visible=true };
                 var trayMenu=new ContextMenuStrip(); trayMenu.Items.Add("Afficher Pluxy",null,(s,e)=>Restore());
+                serverStatus=new ToolStripMenuItem { Enabled=false };
+                trayMenu.Items.Add(serverStatus);
+                startServer=new ToolStripMenuItem("Démarrer le serveur",null,async(s,e)=>await ControlServer("serverStart"));
+                stopServer=new ToolStripMenuItem("Arrêter le serveur",null,async(s,e)=>await ControlServer("serverStop"));
+                restartServer=new ToolStripMenuItem("Redémarrer le serveur",null,async(s,e)=>await ControlServer("serverRestart"));
+                trayMenu.Items.AddRange(new ToolStripItem[]{startServer,stopServer,restartServer,new ToolStripSeparator()});
                 trayMenu.Items.Add("Changer de mode",null,(s,e)=>ChooseMode()); trayMenu.Items.Add("Quitter Pluxy",null,(s,e)=>Quit());
+                trayMenu.Opening+=(s,e)=>UpdateServerControls();
                 tray.ContextMenuStrip=trayMenu; tray.DoubleClick+=(s,e)=>Restore();
+                serverMonitor.Tick+=async(s,e)=> {
+                    if(checkingServer || busy || quitting || prefs.mode!="server") return;
+                    checkingServer=true;
+                    try { await server.Refresh(); UpdateServerControls(); }
+                    finally { checkingServer=false; }
+                };
+                serverMonitor.Start(); UpdateServerControls();
                 showSignal=Task.Run(()=> { while(!quitting) { signal.WaitOne(); if(!quitting && IsHandleCreated) BeginInvoke((Action)Restore); } });
                 browser.Source=new Uri(Origin+"index.html");
                 if(background) Hide();
@@ -124,11 +144,40 @@ namespace Pluxy {
             if(browser.CoreWebView2!=null) browser.CoreWebView2.Navigate(Origin+"index.html");
             else browser.Source=new Uri(Origin+"index.html");
         }
-        private void Options() {
-            var menu=new ContextMenuStrip(); menu.Items.Add("Changer de mode…",null,(s,e)=>ChooseMode());
-            menu.Items.Add(fullscreen?"Quitter le plein écran":"Plein écran · F11",null,(s,e)=>ToggleFullscreen());
-            menu.Items.Add("Afficher le dossier des réglages",null,(s,e)=> { Directory.CreateDirectory(Native.Data); Process.Start(new ProcessStartInfo(Native.Data) { UseShellExecute=true }); });
-            menu.Items.Add("Quitter Pluxy",null,(s,e)=>Quit()); menu.Show(Cursor.Position);
+        private void UpdateServerControls() {
+            if(quitting) return;
+            bool active=prefs.mode=="server",running=server.Running;
+            string status=serverOperation ?? (running?"Serveur démarré":"Serveur arrêté");
+            if(startServer!=null) {
+                serverStatus.Visible=startServer.Visible=stopServer.Visible=restartServer.Visible=active;
+                serverStatus.Text=status;
+                startServer.Enabled=active && !busy && !running;
+                stopServer.Enabled=restartServer.Enabled=active && !busy && server.Owned;
+                string label=active?"Pluxy · "+status:"Pluxy";
+                tray.Text=label.Length>63?label.Substring(0,63):label;
+            }
+            Event("serverState",new {running=running,busy=busy,canStop=server.Owned,status=status});
+        }
+        private async Task ControlServer(string command) {
+            if(busy || quitting) return;
+            if(command!="serverStart" && command!="serverStop" && command!="serverRestart") return;
+            busy=true; serverOperation=command=="serverStop"?"Arrêt du serveur…":command=="serverRestart"?"Redémarrage du serveur…":"Démarrage du serveur…";
+            UpdateServerControls();
+            try {
+                if(command=="serverStop") {
+                    if(server.Running && !server.Owned) throw new IOException("Ce serveur a été démarré par une autre application.");
+                    await Task.Run(()=>server.Stop());
+                } else {
+                    Action<string> progress=message=> { serverOperation=message; UpdateServerControls(); };
+                    if(command=="serverRestart") await server.Restart(progress); else await server.Start(progress);
+                    prefs.mode="server"; prefs.Save(); choosing=false;
+                    browser.Source=new Uri(server.Address);
+                }
+            } catch(Exception error) {
+                if(quitting) return;
+                Native.Log(error); Event("serverError",error.Message);
+                if(tray!=null && !Visible) tray.ShowBalloonTip(3500,"Pluxy",error.Message,ToolTipIcon.Error);
+            } finally { busy=false; serverOperation=null; UpdateServerControls(); }
         }
         private void Event(string name,object data) { if(browser.CoreWebView2!=null && !quitting) browser.CoreWebView2.PostWebMessageAsJson(Native.Json.Serialize(new{eventName=name,data=data})); }
         private void ToggleFullscreen() {
@@ -150,7 +199,7 @@ namespace Pluxy {
         }
         private async Task ChangeMode(string mode) {
             if(mode!="reader" && mode!="server") throw new ArgumentException("Choisissez Lecteur ou Serveur.");
-            if(busy) throw new IOException("La préparation est déjà en cours."); busy=true;
+            if(busy) throw new IOException("La préparation est déjà en cours."); busy=true; UpdateServerControls();
             try {
                 if(mode=="server") {
                     await server.Start(message=> { Event("status",message); });
@@ -160,7 +209,8 @@ namespace Pluxy {
                     await Task.Run(()=>server.Stop()); prefs.mode="reader"; prefs.Save(); choosing=false;
                     if(browser.Source==null || browser.Source.Host!="pluxy.app") browser.Source=new Uri(Origin+"index.html");
                 }
-            } finally { busy=false; }
+            } catch(Exception) { if(!quitting) throw; }
+            finally { busy=false; UpdateServerControls(); }
         }
         private object ReaderState() { return new {mode=choosing?"":prefs.mode,server=prefs.server,serverName=prefs.serverName,theme=prefs.theme,audio=prefs.audio,playerActionHints=prefs.playerActionHints,playerFocusContrast=prefs.playerFocusContrast,profile=api.ProfileId,multipleProfiles=prefs.multipleProfiles,busy=busy,fullscreen=fullscreen}; }
         private async Task Message(CoreWebView2WebMessageReceivedEventArgs message) {
@@ -172,7 +222,8 @@ namespace Pluxy {
                 if(message.WebMessageAsJson.Length>4096) return;
                 var command=Native.Text(Native.Object(Native.Json.DeserializeObject(message.WebMessageAsJson)),"method");
                 if(command=="chooseMode") ChooseMode();
-                else if(command=="fullscreen") ToggleFullscreen();
+                else if(command=="serverState") UpdateServerControls();
+                else if(command=="serverStart" || command=="serverStop" || command=="serverRestart") await ControlServer(command);
                 else if(command=="quit") Quit();
                 return;
             }

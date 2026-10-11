@@ -192,10 +192,17 @@ namespace Pluxy {
             if(Array.IndexOf(args,"--test-bootstrap")>=0) {
                 using(var controller=new ServerController()) {
                     await controller.Start(message=>{});
-                    Check(controller.Owned,"Serveur préparé et démarré sans console");
+                    Check(controller.Owned && controller.Running,"Serveur préparé et démarré sans console");
                     using(var api=new LibraryClient()) await api.Connect(controller.Address);
+                    await controller.Restart(message=>{});
+                    using(var api=new LibraryClient()) await api.Connect(controller.Address);
+                    Check(controller.Owned && controller.Running,"Redémarrage du serveur et nouvelle connexion disponibles");
                     controller.Stop();
-                    Check(!controller.Owned,"Arrêt du serveur lancé par l'application");
+                    await controller.Refresh();
+                    Check(!controller.Owned && !controller.Running,"Arrêt du serveur lancé par l'application");
+                    await controller.Start(message=>{});
+                    using(var api=new LibraryClient()) await api.Connect(controller.Address);
+                    Check(controller.Owned && controller.Running,"Un serveur arrêté peut être relancé sans fermer Pluxy");
                 }
             }
             string server=Argument(args,"--test-server");

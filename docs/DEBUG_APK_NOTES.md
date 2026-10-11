@@ -33,9 +33,12 @@ Les reprises de lecture sont conservées localement pendant une coupure réseau,
 les grandes bibliothèques utilisent un index persistant et les correspondances
 de films et de séries peuvent être corrigées dans leurs options.
 
-Le lecteur Windows 1.8.17 utilise aussi la détection automatique, les dossiers
+Le lecteur Windows 1.8.18 utilise aussi la détection automatique, les dossiers
 musicaux et le mini lecteur. Les options de l’application sont intégrées dans
 l’interface du serveur, sans bandeau supplémentaire.
+Les commandes Démarrer, Arrêter et Redémarrer sont accessibles dans Options et
+depuis l’icône Windows. La fenêtre peut être fermée même lorsque le serveur est
+arrêté : l’icône reste disponible pour le relancer.
 L’installateur Windows est disponible sur le canal PC ; il n’est pas signé
 avec un certificat Authenticode de confiance.
 
