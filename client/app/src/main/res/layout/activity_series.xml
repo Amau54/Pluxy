@@ -3,7 +3,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:fitsSystemWindows="true"
-    android:background="@drawable/bg_tv_ambient">
+    android:background="?attr/pluxyAmbientBackground">
 
     <ImageView
         android:id="@+id/backdrop"

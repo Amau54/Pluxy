@@ -4,9 +4,9 @@
         <shape android:shape="rectangle">
             <gradient
                 android:angle="315"
-                android:startColor="?attr/pluxyBgElev"
-                android:centerColor="?attr/pluxyBg"
-                android:endColor="?attr/pluxyBgFull" />
+                android:startColor="@color/bg_elev"
+                android:centerColor="@color/bg"
+                android:endColor="@color/bg_full" />
         </shape>
     </item>
     <item android:gravity="top|right" android:right="-180dp" android:top="-220dp">
@@ -15,15 +15,15 @@
             <gradient
                 android:type="radial"
                 android:gradientRadius="310dp"
-                android:startColor="?attr/pluxyAmbientCoral"
-                android:endColor="?attr/pluxyAmbientCoralTrans" />
+                android:startColor="@color/ambient_coral"
+                android:endColor="@color/ambient_coral_trans" />
         </shape>
     </item>
     <item android:gravity="bottom|left" android:left="-180dp" android:bottom="-250dp">
         <shape android:shape="oval">
             <size android:width="560dp" android:height="560dp" />
             <gradient android:type="radial" android:gradientRadius="280dp"
-                android:startColor="?attr/pluxyAmbientRose" android:endColor="?attr/pluxyAmbientRoseTrans" />
+                android:startColor="@color/ambient_rose" android:endColor="@color/ambient_rose_trans" />
         </shape>
     </item>
 </layer-list>

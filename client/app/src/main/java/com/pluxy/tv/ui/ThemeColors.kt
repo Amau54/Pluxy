@@ -5,6 +5,16 @@ import android.util.TypedValue
 import androidx.annotation.ColorRes
 import com.pluxy.tv.R
 
+// Android 9 loses a radial gradient's literal radius when applying themed colors.
+// Select a complete palette drawable instead, keeping both the colors and radius.
+fun Context.ambientBackgroundResource(): Int {
+    val value = TypedValue()
+    check(theme.resolveAttribute(R.attr.pluxyAmbientBackground, value, true) && value.resourceId != 0) {
+        "Fond Pluxy manquant"
+    }
+    return value.resourceId
+}
+
 /** Les vues créées en Kotlin suivent la même palette que les layouts. */
 fun Context.pluxyColor(@ColorRes resource: Int): Int {
     val attribute = when (resource) {

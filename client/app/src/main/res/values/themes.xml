@@ -18,6 +18,7 @@
         <item name="pluxyAmbientCoralTrans">@color/ambient_coral_trans</item>
         <item name="pluxyAmbientRose">@color/ambient_rose</item>
         <item name="pluxyAmbientRoseTrans">@color/ambient_rose_trans</item>
+        <item name="pluxyAmbientBackground">@drawable/bg_tv_ambient</item>
         <item name="pluxyGlowEdge">@color/glow_edge</item>
         <item name="pluxyAccent">@color/accent</item>
         <item name="pluxyAccentBright">@color/accent_bright</item>

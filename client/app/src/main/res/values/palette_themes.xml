@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <style name="Theme.Pluxy.Ocean" parent="Theme.Pluxy">
+        <item name="pluxyAmbientBackground">@drawable/bg_tv_ambient_ocean</item>
         <item name="pluxyPlayerGlassTop">#B5203747</item>
         <item name="pluxyPlayerGlassBottom">#DE08131D</item>
         <item name="pluxyBg">#080F16</item>
@@ -27,6 +28,7 @@
         <item name="pluxyScrimStrong">#D0080F16</item>
     </style>
     <style name="Theme.Pluxy.Midnight" parent="Theme.Pluxy">
+        <item name="pluxyAmbientBackground">@drawable/bg_tv_ambient_midnight</item>
         <item name="pluxyPlayerGlassTop">#B81E2129</item>
         <item name="pluxyPlayerGlassBottom">#DE07090E</item>
         <item name="pluxyBg">#050608</item>

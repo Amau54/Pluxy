@@ -41,7 +41,7 @@ class ModeActivity : ThemedActivity() {
         val scroll = ScrollView(this).apply {
             isFillViewport = true
             fitsSystemWindows = true
-            setBackgroundResource(R.drawable.bg_tv_ambient)
+            setBackgroundResource(ambientBackgroundResource())
             addView(content)
         }
         setContentView(scroll)

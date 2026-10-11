@@ -209,9 +209,69 @@ jobs:
           compression-level: 0
           retention-days: 3
 
+  android-startup:
+    name: Android 9 - demarrage et palettes
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: JDK 17
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Cache Gradle et validation du wrapper
+        uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+      - name: Installer le SDK et Android 9
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            'platforms;android-36' 'build-tools;36.0.0' 'platform-tools' 'emulator' \
+            'system-images;android-28;google_apis;x86_64'
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+      - name: Tester le chargement des themes et le premier lancement
+        working-directory: client
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo chmod 666 /dev/kvm
+          echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd \
+            -n pluxy-startup-api28 -k 'system-images;android-28;google_apis;x86_64' --force
+          "$ANDROID_HOME/emulator/emulator" -avd pluxy-startup-api28 -port 5554 \
+            -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect \
+            -memory 1536 > emulator-startup.log 2>&1 &
+          emulator_pid=$!
+          trap 'adb -s emulator-5554 emu kill || kill "$emulator_pid" || true' EXIT
+          timeout 180 adb -s emulator-5554 wait-for-device
+          booted=false
+          for attempt in $(seq 1 120); do
+            if [[ "$(adb -s emulator-5554 shell getprop sys.boot_completed | tr -d '\r')" == 1 ]]; then
+              booted=true
+              break
+            fi
+            sleep 2
+          done
+          if [[ "$booted" != true ]]; then cat emulator-startup.log; exit 1; fi
+          chmod +x gradlew
+          ANDROID_SERIAL=emulator-5554 ./gradlew :app:connectedDebugAndroidTest --console=plain --build-cache
+      - name: Conserver les resultats de compatibilite
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: android9-startup-${{ github.sha }}
+          path: |
+            client/app/build/reports/androidTests/
+            client/app/build/outputs/androidTest-results/
+            client/emulator-startup.log
+          retention-days: 7
+
   dev-release:
     name: APK debug continus
-    needs: [python, android, apk]
+    needs: [python, android, apk, android-startup]
     # Without these protected signing secrets, a hosted runner would generate a
     # different debug certificate and make Android reject an in-place update.
     if: >-
@@ -323,7 +383,7 @@ jobs:
 
   release:
     name: Artefacts signes Play Store et APK privees
-    needs: [python, android, apk]
+    needs: [python, android, apk, android-startup]
     if: >-
       startsWith(github.ref, 'refs/tags/v') ||
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' &&

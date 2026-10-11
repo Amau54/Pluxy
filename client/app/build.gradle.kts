@@ -38,8 +38,9 @@ android {
         applicationId = "com.pluxy.tv"
         minSdk = 23            // Android TV 6.0+ ET mobile (Android 6+)
         targetSdk = 36
-        versionCode = 81
-        versionName = "1.7.27"
+        versionCode = 82
+        versionName = "1.7.28"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     signingConfigs {
@@ -121,6 +122,8 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
 
     testImplementation("junit:junit:4.13.2")
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("junit:junit:4.13.2")
 }
 
 

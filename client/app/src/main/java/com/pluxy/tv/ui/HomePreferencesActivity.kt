@@ -40,7 +40,7 @@ class HomePreferencesActivity : ThemedActivity() {
         focusedTag = savedInstanceState?.getString(STATE_FOCUS)
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundResource(R.drawable.bg_tv_ambient)
+            setBackgroundResource(ambientBackgroundResource())
             val safe = resources.getDimensionPixelSize(R.dimen.screen_pad)
             setPadding(safe, dp(24), safe, dp(20))
         }

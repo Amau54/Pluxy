@@ -15,6 +15,7 @@
     <attr name="pluxyAmbientCoralTrans" format="color" />
     <attr name="pluxyAmbientRose" format="color" />
     <attr name="pluxyAmbientRoseTrans" format="color" />
+    <attr name="pluxyAmbientBackground" format="reference" />
     <attr name="pluxyGlowEdge" format="color" />
     <attr name="pluxyAccent" format="color" />
     <attr name="pluxyAccentBright" format="color" />

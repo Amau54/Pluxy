@@ -46,7 +46,7 @@ class SettingsActivity : ThemedActivity() {
         restoredScrollY = savedInstanceState?.getInt("settings_scroll")
 
         scroll = ScrollView(this).apply {
-            setBackgroundResource(R.drawable.bg_tv_ambient)
+            setBackgroundResource(ambientBackgroundResource())
             fitsSystemWindows = true
             isFillViewport = true
             clipChildren = false

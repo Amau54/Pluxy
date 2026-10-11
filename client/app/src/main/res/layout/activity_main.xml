@@ -4,7 +4,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:fitsSystemWindows="true"
-    android:background="@drawable/bg_tv_ambient"
+    android:background="?attr/pluxyAmbientBackground"
     android:paddingTop="@dimen/library_top_pad"
     android:paddingBottom="@dimen/library_bottom_pad">
 

@@ -4,7 +4,7 @@
     android:layout_height="match_parent"
     android:fitsSystemWindows="true"
     android:fillViewport="true"
-    android:background="@drawable/bg_tv_ambient"
+    android:background="?attr/pluxyAmbientBackground"
     android:scrollbars="none">
 
     <LinearLayout
