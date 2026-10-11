@@ -77,7 +77,7 @@ jobs:
           chmod +x gradlew
           ./gradlew \
             :app:compileDebugKotlin :serverapp:compileDebugKotlin \
-            --console=plain
+            --no-build-cache --rerun-tasks --console=plain
 
       - name: Analyser
         uses: github/codeql-action/analyze@3b0bd1d116c0bde30213346b22d4f634d96a2fb0 # v3
