@@ -211,7 +211,7 @@ namespace Pluxy {
             if(conversionQuality!="direct" && conversionProfiles.Length>0) {
                 var preset=Native.Object(conversionProfiles[conversionIndex]);
                 streamOffset=resume;
-                url=server+"/stream/convert/"+LibraryClient.ItemPath(id)+"/"+Uri.EscapeDataString(Native.Text(preset,"id"))+"?start_ms="+((long)(resume*1000)).ToString(CultureInfo.InvariantCulture)+"&copy_audio="+(audio=="passthrough"?"true":"false");
+                url=server+"/stream/convert/"+LibraryClient.ItemPath(id)+"/"+Uri.EscapeDataString(Native.Text(preset,"id"))+"?start_ms="+((long)(resume*1000)).ToString(CultureInfo.InvariantCulture)+"&copy_audio="+(audio=="compatible"?"false":"true");
             } else url=server+"/stream/direct/"+LibraryClient.ItemPath(id);
             await mpv.Start(url,screen.Handle,audio,streamOffset>0?0:resume);
             if(closing) return;

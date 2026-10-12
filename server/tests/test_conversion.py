@@ -20,7 +20,8 @@ def sample(width=3840, height=1608):
 
 
 def profiles():
-    return [dict(id=k, label=l, codec=c, width=w, height=h, bitrate_mbps=b) for k,l,c,w,h,b in PROFILES]
+    return [dict(id=key, label=label, codec=codec, width=width, height=height, bitrate_mbps=bitrate)
+            for key,label,codec,width,height,bitrate in PROFILES]
 
 
 def test_quality_ladder_keeps_aspect_ratio_and_reduces_bitrate():
@@ -41,11 +42,13 @@ def test_small_source_is_never_enlarged_and_audio_adaptation_is_kept():
     assert cmd[cmd.index("-ss")+1]=="600.000"
     assert cmd[cmd.index("-c:a")+1]=="eac3"
     assert cmd[-2:]==["matroska","pipe:1"]
+    assert cmd[cmd.index("-max_interleave_delta")+1]=="100000"
     assert "-master_display" not in cmd and "-max_cll" not in cmd and "-spatial_aq" not in cmd
 
 
 def test_software_hdr_uses_x265_metadata_and_h264_can_keep_truehd():
-    cfg=PluxyConfig(); cfg.transcoding.hardware_acceleration=False
+    cfg=PluxyConfig()
+    cfg.transcoding.hardware_acceleration=False
     original=PlaybackDecision(mode=PlaybackMode.DIRECT_PLAY,audio_action="copy")
     hdr=conversion_decision(sample(),original,profiles()[0],cfg)
     cmd=build_transcode_cmd(sample(),hdr,cfg,Path("."),direct_stream=True)
@@ -71,7 +74,8 @@ def test_conversion_route_validates_time_profile_and_releases_failed_process(mon
         commands.append(cmd)
         raise FileNotFoundError()
     monkeypatch.setattr(routes_stream.subprocess,"Popen",fail)
-    app=FastAPI(); app.include_router(routes_stream.router)
+    app=FastAPI()
+    app.include_router(routes_stream.router)
     with TestClient(app) as client:
         assert client.get("/stream/convert/film/unknown").status_code==422
         assert client.get("/stream/convert/film/hevc_4k?start_ms=1000000").status_code==416
@@ -87,7 +91,8 @@ def test_encoder_failure_cannot_look_like_the_end_of_an_episode():
     import io
     import pytest
     from pluxy.api.routes_stream import _RemuxResponse
-    slots=threading.BoundedSemaphore(1); slots.acquire()
+    slots=threading.BoundedSemaphore(1)
+    slots.acquire()
     proc=SimpleNamespace(stdout=io.BytesIO(b"partial video"),poll=lambda:1,wait=lambda **_:1)
     response=_RemuxResponse(proc,slots,0,strict=True)
     async def read():

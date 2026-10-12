@@ -259,6 +259,7 @@ def build_transcode_cmd(
     # ---- Sortie ---------------------------------------------------------- #
     if direct_stream:
         cmd += ["-map", "0:s?", "-c:s", "copy", "-avoid_negative_ts", "disabled",
+                "-max_interleave_delta", "100000", "-flush_packets", "1",
                 "-cluster_time_limit", "1000", "-f", "matroska", "pipe:1"]
         return cmd
     if hls_session:
