@@ -584,6 +584,8 @@ class PluxyHttpServer(
         put("server_kind", "android")
         put("transcoding_available", false)
         put("direct_stream_available", false)
+        put("conversion_profiles", JSONArray())
+        put("conversion_unavailable_reason", "Ce serveur Android transmet la vidéo originale. La conversion nécessite un serveur PC Pluxy.")
     }
 
     /**

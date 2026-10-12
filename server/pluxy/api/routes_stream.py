@@ -37,7 +37,8 @@ from ..profiles import reader_watch
 from ..state import AppState, get_state
 from ..tools import NO_WINDOW
 from ..security import playback_key, session_token
-from ..transcoder import build_direct_stream_cmd
+from ..transcoder import build_direct_stream_cmd, build_transcode_cmd
+from ..conversion import available_profiles, conversion_decision
 from ..subtitle_seek import shift_subtitles
 
 router = APIRouter(tags=["stream"])
@@ -61,9 +62,10 @@ class _LeasedSegmentResponse(FileResponse):
 
 class _RemuxResponse(StreamingResponse):
     """Un flux interrompu libère son processus et sa place, même sans premier octet."""
-    def __init__(self, proc, slots, start_ms: int):
+    def __init__(self, proc, slots, start_ms: int, strict: bool = False):
         self.proc = proc
         self.slots = slots
+        self.strict = strict
         self._closed = False
         self._close_lock = threading.Lock()
         super().__init__(self._pump(), media_type="video/x-matroska",
@@ -101,8 +103,16 @@ class _RemuxResponse(StreamingResponse):
     async def _pump(self):
         try:
             while not self._closed:
-                data = await asyncio.to_thread(self.proc.stdout.read, 256 * 1024)
+                read = getattr(self.proc.stdout, "read1", self.proc.stdout.read)
+                data = await asyncio.to_thread(read, 64 * 1024)
                 if not data:
+                    if self.strict and not self._closed:
+                        try:
+                            code = await asyncio.to_thread(self.proc.wait, timeout=2)
+                        except subprocess.TimeoutExpired as error:
+                            raise OSError("La conversion s’est interrompue") from error
+                        if code != 0:
+                            raise OSError("La conversion a échoué")
                     break
                 yield data
         finally:
@@ -359,6 +369,47 @@ def stream_remux(item_id: str, request: Request,
         raise
 
     return _RemuxResponse(proc, st.remux_slots, start_ms)
+
+
+@router.get("/stream/convert/{item_id}/{profile_id}")
+def stream_convert(item_id: str, profile_id: str, request: Request,
+                   start_ms: int = Query(0, ge=0, le=604_800_000), copy_audio: bool = False):
+    st = get_state(request)
+    item = st.library.get(item_id)
+    if not item:
+        raise HTTPException(404, "Média introuvable")
+    profile = next((p for p in available_profiles(st.cfgm.cfg) if p["id"] == profile_id), None)
+    if not profile:
+        raise HTTPException(422, "Qualité de conversion indisponible sur ce serveur")
+    if request.headers.get("range") not in (None, "bytes=0-"):
+        raise HTTPException(416, "Ce flux utilise une position temporelle", headers={"Accept-Ranges": "none"})
+    if not st.remux_slots.acquire(blocking=False):
+        raise HTTPException(503, "Trop de conversions simultanées")
+    try:
+        cached = st.decision_for(playback_key(request), item_id)
+        media, original = cached if cached else (_safe_probe_limited(st, item.path), None)
+        original = original or decide(media, ClientCapabilities(), st.cfgm.cfg)
+        if media.duration > 0 and start_ms / 1000 >= media.duration:
+            raise HTTPException(416, "Position après la fin du média")
+        decision = conversion_decision(media, original, profile, st.cfgm.cfg)
+        if copy_audio:
+            decision = decision.model_copy(update={"audio_action": "copy"})
+        cfg = st.cfgm.cfg.model_copy(deep=True)
+        cfg.transcoding.hardware_acceleration = profile.get("hardware", cfg.transcoding.hardware_acceleration)
+        cfg.transcoding.encoder = "hevc_nvenc"
+        command = build_transcode_cmd(media, decision, cfg, Path("."), start_time=start_ms / 1000,
+                                      compat=decision.compat, direct_stream=True)
+        proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, creationflags=NO_WINDOW)
+    except ValueError as error:
+        st.remux_slots.release()
+        raise HTTPException(422, str(error)) from error
+    except OSError as error:
+        st.remux_slots.release()
+        raise HTTPException(503, "La conversion ne peut pas démarrer") from error
+    except Exception:
+        st.remux_slots.release()
+        raise
+    return _RemuxResponse(proc, st.remux_slots, start_ms, strict=True)
 
 
 # --------------------------------------------------------------------------- #

@@ -214,7 +214,9 @@ class PlaybackDecision(BaseModel):
     target_video_codec: Optional[str] = None
     target_audio_codec: Optional[str] = None
     target_audio_channels: int = 6
-    target_bitrate_mbps: Optional[int] = None
+    target_bitrate_mbps: Optional[float] = None
+    target_width: Optional[int] = None
+    target_height: Optional[int] = None
     container: str = "mkv"
     delivery: str = "direct"               # direct | hls
     # URL relative que le client doit ouvrir.

@@ -2,6 +2,7 @@ package com.pluxy.tv.player
 
 import com.pluxy.tv.api.BufferConfig
 import com.pluxy.tv.api.PlaybackDecision
+import com.pluxy.tv.api.ConversionProfile
 
 /**
  * Stratégie choisie par l'utilisateur. Elle reste locale au lecteur : le mode
@@ -25,8 +26,8 @@ enum class PlaybackStrategy(
     ),
     COMPATIBILITY(
         key = "compatibility",
-        title = "Compatibilité",
-        description = "Demande du H.264 1080p au serveur PC. Sur Android : original avec tampon renforcé.",
+        title = "Conversion",
+        description = "Commence à la meilleure qualité compatible, puis s’adapte. Nécessite un serveur capable de convertir.",
     );
 
     companion object {
@@ -66,6 +67,8 @@ object PlaybackPlanner {
         transcodingAvailable: Boolean,
         supportsHevc: Boolean = true,
         preserveAudio: Boolean = false,
+        conversionProfiles: List<ConversionProfile> = emptyList(),
+        conversionQuality: String = "auto",
     ): List<PlaybackAttempt> {
         val directUrl = "/stream/direct/$itemId"
         val mainUrl = "/stream/hls/$itemId/main/index.m3u8"
@@ -99,6 +102,16 @@ object PlaybackPlanner {
             adaptiveTarget = adaptive,
         )
 
+        val conversions = conversionProfiles.filter { supportsHevc || it.codec != "hevc" }.map {
+            PlaybackAttempt("/stream/convert/$itemId/${it.id}" + if (preserveAudio) "?copy_audio=true" else "",
+                "conversion", PlaybackTier.ADAPTED, it.label, adaptiveTarget = true)
+        }
+        if (conversions.isNotEmpty() && strategy == PlaybackStrategy.COMPATIBILITY) {
+            return if (conversionQuality == "auto") conversions else listOfNotNull(
+                conversions.firstOrNull { it.url.substringBefore('?').endsWith("/$conversionQuality") }
+                    ?.copy(adaptiveTarget = false) ?: conversions.firstOrNull()?.copy(adaptiveTarget = false))
+        }
+
         when (strategy) {
             PlaybackStrategy.DIRECT -> {
                 if (decision.mode == "direct_stream" && preservesOriginalVideo(decision)) {
@@ -122,6 +135,16 @@ object PlaybackPlanner {
 
             PlaybackStrategy.AUTO -> {
                 val initialIsHls = deliveryFor(decision.streamUrl, decision.delivery) == "hls"
+                if (conversions.isNotEmpty()) {
+                    if (!initialIsHls) {
+                        if (!preserveAudio || decision.audioAction == "copy") {
+                            add(PlaybackAttempt(decision.streamUrl, decision.delivery, PlaybackTier.ORIGINAL, "Vidéo originale"))
+                        }
+                        add(rawDirect())
+                    }
+                    conversions.forEach(::add)
+                    return attempts
+                }
                 if (initialIsHls) {
                     val initialIsCompat = decision.compat || decision.streamUrl.contains("/compat/")
                     add(

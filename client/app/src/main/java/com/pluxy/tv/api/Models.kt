@@ -208,6 +208,17 @@ data class ClientRuntime(
     @Json(name = "transcoding_available") val transcodingAvailable: Boolean = true,
     @Json(name = "direct_stream_available") val directStreamAvailable: Boolean = true,
     @Json(name = "direct_stream_seek_available") val directStreamSeekAvailable: Boolean = false,
+    @Json(name = "conversion_profiles") val conversionProfiles: List<ConversionProfile> = emptyList(),
+)
+
+@JsonClass(generateAdapter = true)
+data class ConversionProfile(
+    val id: String,
+    val label: String,
+    val codec: String,
+    val width: Int,
+    val height: Int,
+    @Json(name = "bitrate_mbps") val bitrateMbps: Double,
 )
 
 // --------------------------------------------------------------------------- //

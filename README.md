@@ -6,7 +6,7 @@
 
 Vos films, séries, photos et musique sur la TV.
 
-**Android 1.7.29 · Windows 1.8.21**
+**Android 1.7.30 · Windows 1.8.22**
 
 [Application Android](https://github.com/Amau54/Pluxy/releases/download/dev-latest/Pluxy-debug.apk)
 · [Application PC](https://github.com/Amau54/Pluxy/releases/download/pc-latest/Pluxy-Setup.exe)
@@ -39,6 +39,18 @@ reste affiché sans aperçu. Aucun réencodage du film n'est nécessaire.
 Pour conserver la vidéo 4K/HDR, choisissez **Mode de lecture → Vidéo originale (4K/HDR)**.
 Le lecteur ne réduit alors pas la résolution et n'accepte aucun réencodage vidéo.
 Le HDR dépend aussi de l'écran et de son décodeur.
+
+Pour alléger un fichier, choisissez **Mode de lecture → Conversion**, puis
+**Qualité de conversion**. Automatique commence au meilleur palier accepté par
+le lecteur et le serveur : 4K H.265, 4K à débit réduit, 1080p, 720p ou 480p.
+Il descend si la lecture bloque et peut remonter après une période stable.
+Un choix manuel conserve la qualité choisie. La vidéo n'est jamais agrandie.
+
+La conversion est disponible avec le serveur PC. La 4K nécessite un encodeur
+matériel compatible ; sans lui, les paliers disponibles commencent au plus à
+1080p. Le serveur Android transmet actuellement les fichiers originaux et peut
+renforcer le tampon, mais ne convertit pas la vidéo. Il faut mettre à jour le
+serveur PC et le lecteur pour utiliser les nouveaux paliers.
 
 **Sortie audio** se règle séparément, dans les réglages ou le menu du lecteur.
 Automatique utilise les capacités annoncées par la sortie audio et adapte le son

@@ -75,7 +75,7 @@ class PluxyApi(val baseUrl: String, val sessionId: String = UUID.randomUUID().to
     fun abs(relative: String): String {
         val resolved = LanUrlPolicy.resolveSameServer(baseUrl, relative)
         val url = resolved.toHttpUrl()
-        return if (url.encodedPath.startsWith("/stream/hls/")) {
+        return if (url.encodedPath.startsWith("/stream/hls/") || url.encodedPath.startsWith("/stream/convert/")) {
             url.newBuilder().setQueryParameter("session", sessionId).build().toString()
         } else resolved
     }

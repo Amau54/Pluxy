@@ -152,6 +152,9 @@ class PlayerActivity : ThemedActivity() {
     private var modeLabel = ""
     private var activeStrategy = PlaybackStrategy.AUTO
     private var transcodingAvailable = false
+    private var conversionProfiles = emptyList<com.pluxy.tv.api.ConversionProfile>()
+    private var conversionBufferActive = false
+    private val adaptiveConversion get() = ConversionPolicy.adaptive(activeStrategy, PluxyApplication.conversionQuality(this))
     private var directStreamSeekAvailable = false
     private var serverKind = "pc"
     private var reinforcedBufferActive = false
@@ -169,7 +172,7 @@ class PlayerActivity : ThemedActivity() {
     private val adaptiveHistory = ArrayDeque<Int>()
     private var lastAdaptiveChangeAtMs = 0L
     private var lastQualifiedStallAtMs = 0L
-    private val isTranscode get() = attempts.getOrNull(attemptIdx)?.delivery == "hls"
+    private val isTranscode get() = attempts.getOrNull(attemptIdx)?.delivery in setOf("hls", "conversion")
 
     // ---- Bascule adaptative Pluxy au débit réseau ------------------------- //
     // Un rebuffering (le tampon se vide -> le lecteur se fige pour recharger) n'est PAS
@@ -1398,7 +1401,8 @@ class PlayerActivity : ThemedActivity() {
         val entries = listOf(
             "Vitesse" to { pickSpeed() },
             "Format de l’image" to { pickAspect() },
-            "Compatibilité de lecture" to { pickPlaybackStrategy() },
+            "Mode de lecture" to { pickPlaybackStrategy() },
+            "Qualité de conversion" to { pickConversionQuality() },
             "Sortie audio" to { pickAudioOutput(findViewById(R.id.btnGear)) },
             getString(R.string.player_information_action) to { showDiagnostics() },
         )
@@ -1441,11 +1445,32 @@ class PlayerActivity : ThemedActivity() {
             activeStrategy.key,
         ) { value ->
             val selected = choices.firstOrNull { it.key == value } ?: return@showPlayerChoices
+            if (selected == PlaybackStrategy.COMPATIBILITY && !transcodingAvailable) {
+                Toast.makeText(this, "Ce serveur Android transmet l’original. La conversion nécessite un serveur PC Pluxy.", Toast.LENGTH_LONG).show()
+                return@showPlayerChoices
+            }
             if (selected == activeStrategy) return@showPlayerChoices
             PluxyApplication.setPlaybackStrategy(this, selected.key)
             forceDirectForLaunch = false
             strategyOverride = null
             reprepareForStrategy(selected)
+        }
+    }
+
+    private fun pickConversionQuality() {
+        if (conversionProfiles.isEmpty()) {
+            Toast.makeText(this, "Les qualités de conversion nécessitent un serveur PC Pluxy à jour.", Toast.LENGTH_LONG).show()
+            return
+        }
+        showPlayerChoices(findViewById(R.id.btnGear), "Qualité de conversion",
+            listOf(CompactChoiceMenu.Choice("Automatique", "auto", "Meilleure qualité compatible, puis baisse si nécessaire")) +
+                conversionProfiles.map { CompactChoiceMenu.Choice(it.label, it.id, "Qualité fixe · aucun changement automatique") },
+            PluxyApplication.conversionQuality(this)) { value ->
+            PluxyApplication.setConversionQuality(this, value)
+            PluxyApplication.setPlaybackStrategy(this, PlaybackStrategy.COMPATIBILITY.key)
+            forceDirectForLaunch = false
+            strategyOverride = null
+            reprepareForStrategy(PlaybackStrategy.COMPATIBILITY)
         }
     }
 
@@ -1599,8 +1624,16 @@ class PlayerActivity : ThemedActivity() {
                         mode = "direct_play", streamUrl = "/stream/direct/${item.id}", delivery = "direct",
                         reasons = listOf("Lecture du fichier original demandée, sans conversion."),
                     ) else api.decide(item.id, audioFallbackLevel, failedAudioCodec, strategy == PlaybackStrategy.DIRECT)
+                    val runtime = api.clientRuntime()
+                    conversionProfiles = ConversionPolicy.compatible(runtime.conversionProfiles, item, DeviceProfile.capabilities())
+                    if (conversionProfiles.isNotEmpty() && PluxyApplication.conversionQuality(this@PlayerActivity) != "auto" &&
+                        conversionProfiles.none { it.id == PluxyApplication.conversionQuality(this@PlayerActivity) }) {
+                        PluxyApplication.setConversionQuality(this@PlayerActivity, "auto")
+                        Toast.makeText(this@PlayerActivity, "La qualité choisie n’est pas disponible ici. Conversion automatique sélectionnée.", Toast.LENGTH_LONG).show()
+                    }
                     if (audioMode == AudioOutputMode.PASSTHROUGH &&
-                        (decision.audioAction != "copy" || strategy == PlaybackStrategy.COMPATIBILITY)) {
+                        ((strategy == PlaybackStrategy.DIRECT && decision.audioAction != "copy") ||
+                            (conversionProfiles.isEmpty() && (decision.audioAction != "copy" || strategy == PlaybackStrategy.COMPATIBILITY)))) {
                         showTerminalPlaybackError("Ce flux demande une conversion audio. Le passthrough forcé conserve le son original. " +
                             "Choisissez une autre sortie audio ou le mode Vidéo originale.", audioFailure = true)
                         return@launch
@@ -1610,11 +1643,10 @@ class PlayerActivity : ThemedActivity() {
                             "Vérifiez les réglages de transcodage du serveur ou choisissez le mode automatique.")
                         return@launch
                     }
-                    val runtime = api.clientRuntime()
                     val progress = ProgressOutbox.pendingResume(api.baseUrl, item.id)
                         ?: api.getProgress(item.id)
 
-                    if (!decision.playable && strategy != PlaybackStrategy.DIRECT) {
+                    if (!decision.playable && strategy != PlaybackStrategy.DIRECT && conversionProfiles.isEmpty()) {
                         showUnsupportedDecision(decision)
                         return@launch
                     }
@@ -1644,6 +1676,8 @@ class PlayerActivity : ThemedActivity() {
                         transcodingAvailable = runtime.transcodingAvailable,
                         supportsHevc = DeviceProfile.capabilities().supportsHevc,
                         preserveAudio = audioMode == AudioOutputMode.PASSTHROUGH,
+                        conversionProfiles = conversionProfiles,
+                        conversionQuality = PluxyApplication.conversionQuality(this@PlayerActivity),
                     )
                     attemptIdx = 0
                     modeLabel = describeAttempt(attempts.first(), 0)
@@ -1717,7 +1751,12 @@ class PlayerActivity : ThemedActivity() {
         setLoadingVisible(true)
         val currentBytes = java.util.concurrent.atomic.AtomicLong()
         transferBytes = currentBytes
-        val exo = PluxyPlayerFactory.build(this, buffer!!, api.baseUrl, api.sessionId,
+        conversionBufferActive = attempts.getOrNull(attemptIdx)?.delivery == "conversion"
+        val playbackBuffer = if (conversionBufferActive) buffer!!.copy(
+            bufferForPlaybackMs = buffer!!.bufferForPlaybackMs.coerceAtMost(1_500),
+            bufferForPlaybackAfterRebufferMs = buffer!!.bufferForPlaybackAfterRebufferMs.coerceAtMost(2_500),
+        ) else buffer!!
+        val exo = PluxyPlayerFactory.build(this, playbackBuffer, api.baseUrl, api.sessionId,
             sourceBitrateBps = if (isTranscode) 0L else (sourceBitrateMbps() * 1_000_000).toLong()) {
             currentBytes.addAndGet(it.toLong())
         }
@@ -1785,7 +1824,7 @@ class PlayerActivity : ThemedActivity() {
         if (seekRebuildRunnable != null) return
         player?.let { p ->
             val attempt = attempts.getOrNull(attemptIdx)
-            if (PlaybackSeekRecoveryPolicy.needsAudioReset(attempt?.delivery == "direct",
+            if (PlaybackSeekRecoveryPolicy.needsAudioReset(attempt?.delivery in setOf("direct", "conversion"),
                     p.audioFormat?.sampleMimeType,
                     AudioOutputMode.fromKey(PluxyApplication.audioOutputMode(this)) == AudioOutputMode.PASSTHROUGH)) {
                 rebuildAfterSeek(t, separateAudioRelease = true, recoveryCount = 0)
@@ -1848,7 +1887,7 @@ class PlayerActivity : ThemedActivity() {
         player = null
         previous.release()
         setLoadingVisible(true)
-        setStatus("Reprise à ${fmtPlayerTime(targetMs)} · vidéo originale…")
+        setStatus("Reprise à ${fmtPlayerTime(targetMs)} · ${attempts.getOrNull(attemptIdx)?.label ?: "vidéo"}…")
         val rebuild = object : Runnable {
             override fun run() {
                 if (seekKeyHeld && activityStarted) {
@@ -1871,6 +1910,7 @@ class PlayerActivity : ThemedActivity() {
     private fun buildMediaItem(url: String, delivery: String): MediaItem {
         val b = MediaItem.Builder().setUri(Uri.parse(api.abs(url)))
         if (delivery == "hls") b.setMimeType(MimeTypes.APPLICATION_M3U8)
+        if (delivery == "conversion") b.setMimeType(MimeTypes.VIDEO_MATROSKA)
         fun subtitleUri(index: Int): Uri {
             val uri = Uri.parse(api.abs("/stream/subs/${item.id}/$index"))
             return if (streamPositionOffsetMs > 0) uri.buildUpon()
@@ -2633,6 +2673,7 @@ class PlayerActivity : ThemedActivity() {
                     networkLoading = p.isLoading,
                 ) || PlaybackBufferWatchPolicy.isStuck(
                     now - bufWatchStartedAtMs, now - bufWatchProgressAtMs, isTranscode,
+                    conversion = attempts.getOrNull(attemptIdx)?.delivery == "conversion",
                 )) { onLoadStuck(); return }
             handler.postDelayed(this, BUF_WATCH_POLL_MS)
         }
@@ -2666,7 +2707,7 @@ class PlayerActivity : ThemedActivity() {
             PlaybackSeekRecoveryPolicy.Action.NORMAL_FALLBACK -> Unit
         }
         when {
-            activeStrategy == PlaybackStrategy.AUTO && maybeDownshift(learnNetworkConstraint = networkStallStartMs > 0L) -> Unit
+            adaptiveConversion && maybeDownshift(learnNetworkConstraint = networkStallStartMs > 0L) -> Unit
             attemptIdx + 1 < attempts.size -> {
                 setStatus("Chargement lent — bascule…")
                 loadAttempt(attemptIdx + 1, restorePos = pos)
@@ -2697,6 +2738,15 @@ class PlayerActivity : ThemedActivity() {
         // retries=0 pour un démarrage neuf.)
         if (idx != attemptIdx) retries = 0
         attemptIdx = idx
+        if ((attempts[idx].delivery == "conversion") != conversionBufferActive) {
+            savedPositionMs = restorePos
+            savedPlayWhenReady = playWhenReady
+            p.release()
+            player = null
+            playerView.player = null
+            buildPlayer()
+            return
+        }
         retryRunnable?.let { handler.removeCallbacks(it) }
         handler.removeCallbacks(bufferWatchdog)
         // Annule un seek progressif EN ATTENTE : sans ça son commit différé s'appliquerait
@@ -2770,7 +2820,7 @@ class PlayerActivity : ThemedActivity() {
             if (learnNetworkConstraint) warnNetworkLimitOnce()
             return false
         }
-        if (activeStrategy != PlaybackStrategy.AUTO) return false
+        if (!adaptiveConversion) return false
         val target = PlaybackPlanner.nextAdaptiveIndex(attempts, attemptIdx)
         if (target <= attemptIdx) {
             // Le serveur Android ne peut pas réencoder : on conserve donc strictement le
@@ -2781,12 +2831,14 @@ class PlayerActivity : ThemedActivity() {
             warnNetworkLimitOnce()
             return false
         }
-        if (learnNetworkConstraint) recordNetworkConstraintOnce()
+        if (learnNetworkConstraint && attempts.getOrNull(attemptIdx)?.delivery != "conversion") recordNetworkConstraintOnce()
         rebufferTimes.clear()
         stallWindow.clear()
         networkStallStartMs = 0L
         val toCompat = attempts[target].tier == PlaybackTier.COMPATIBILITY
-        val msg = if (!learnNetworkConstraint) {
+        val msg = if (attempts[target].delivery == "conversion") {
+            "Qualité adaptée : ${attempts[target].label}…"
+        } else if (!learnNetworkConstraint) {
             if (toCompat) "Lecture bloquée : essai du mode compatible 1080p…"
             else "Lecture bloquée : essai d'un flux adapté…"
         } else if (toCompat) "Réseau limité : passage en 1080p compatible…"
@@ -2807,7 +2859,7 @@ class PlayerActivity : ThemedActivity() {
     private fun maybeRecoverQuality() {
         val p = player ?: return
         maybeRecordStableProfile(p)
-        if (activeStrategy != PlaybackStrategy.AUTO || !p.isPlaying || adaptiveHistory.isEmpty()) return
+        if (!adaptiveConversion || !p.isPlaying || adaptiveHistory.isEmpty()) return
         val current = attempts.getOrNull(attemptIdx) ?: return
         if (current.tier !in setOf(PlaybackTier.ADAPTED, PlaybackTier.COMPATIBILITY)) return
         val now = SystemClock.elapsedRealtime()

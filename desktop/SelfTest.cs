@@ -271,6 +271,22 @@ namespace Pluxy {
                 }
             }
             string url=Argument(args,"--video");
+            string conversionServer=Argument(args,"--test-conversion-server");
+            if(conversionServer!=null) {
+                string conversionId=Argument(args,"--test-conversion-item");
+                using(var client=new LibraryClient()) {
+                    var presets=await client.ConversionProfiles(conversionServer);
+                    Check(presets.Length>0,"Les qualités de conversion sont annoncées par le serveur");
+                    foreach(var preset in new[]{"hevc_4k","h264_720"}) {
+                        foreach(long offset in new[]{600000L,610000L}) using(var converted=new MpvSession()) {
+                            string convertedUrl=conversionServer+"/stream/convert/"+LibraryClient.ItemPath(conversionId)+"/"+preset+"?start_ms="+offset+"&copy_audio=true";
+                            await converted.Start(convertedUrl,IntPtr.Zero,"compatible",0,true);
+                            Check(Math.Abs(await WaitPosition(converted,0))<1,"Le flux "+preset+" demandé à "+offset+" ms démarre sur une horloge relative à zéro");
+                            Check(Convert.ToInt32(await converted.Command("get_property","height"))==(preset=="hevc_4k"?1608:536),"La résolution réelle du flux "+preset+" est décodée par le lecteur Windows");
+                        }
+                    }
+                }
+            }
             if(url!=null) {
                 using(var player=new MpvSession()) {
                     await player.Start(url,IntPtr.Zero,"auto",0,true);

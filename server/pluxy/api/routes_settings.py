@@ -129,6 +129,7 @@ def client_runtime(request: Request) -> dict:
     tailles de buffer ExoPlayer + préférences sous-titres.
     """
     cfg = get_state(request).cfgm.cfg
+    from ..conversion import available_profiles
     return {
         "buffer": cfg.client_buffer.model_dump(),
         "subtitles": cfg.subtitles.model_dump(),
@@ -137,4 +138,5 @@ def client_runtime(request: Request) -> dict:
         "transcoding_available": ffmpeg_available(cfg),
         "direct_stream_available": ffmpeg_available(cfg),
         "direct_stream_seek_available": ffmpeg_available(cfg),
+        "conversion_profiles": available_profiles(cfg),
     }

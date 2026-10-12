@@ -88,6 +88,12 @@ class PluxyApplication : Application() {
             readerPrefs(ctx).edit().putString(KEY_PLAYBACK_STRATEGY, value).apply()
         }
 
+        fun conversionQuality(ctx: Context): String = readerPrefs(ctx).getString("conversion_quality", "auto") ?: "auto"
+
+        fun setConversionQuality(ctx: Context, value: String) {
+            readerPrefs(ctx).edit().putString("conversion_quality", value).apply()
+        }
+
         fun autoPlayNextEpisode(ctx: Context): Boolean =
             readerPrefs(ctx).getBoolean(KEY_AUTO_PLAY_NEXT, true)
 

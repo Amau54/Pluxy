@@ -18,6 +18,11 @@ namespace Pluxy {
         private Button skipButton,optionsButton;
         private readonly LibraryClient api;
         private string server,id,url;
+        private object[] conversionProfiles=new object[0];
+        private string conversionQuality="direct";
+        private int conversionIndex;
+        private double streamOffset;
+        private bool conversionBusy;
         public string MediaId { get { return id; } }
         public readonly HashSet<string> ProgressIds = new HashSet<string>();
         private readonly string audio;
@@ -155,6 +160,7 @@ namespace Pluxy {
             Deactivate+=(s,e)=> { seekDirection=0; seekTimer.Stop(); seekClock.Stop(); CancelNextWhenUnfocused(); };
             Shown+=async(s,e)=> {
                 Native.DarkFrame(this);
+                try { conversionProfiles=await api.ConversionProfiles(server); } catch(Exception error) { Native.Log(error); }
                 bool opened=false;
                 try { await OpenMedia(start); opened=true; }
                 catch(Exception error) { Native.Log(error); }
@@ -188,6 +194,7 @@ namespace Pluxy {
                     double value=Convert.ToDouble(command[1],CultureInfo.InvariantCulture);
                     resume=Convert.ToString(command[2]).StartsWith("absolute",StringComparison.Ordinal)?value:position+value;
                     resume=Math.Max(0,duration>0?Math.Min(duration-.25,resume):resume);
+                    if(conversionQuality!="direct") { await ChangeConversion(conversionQuality,resume,false); return; }
                     CancelNextPrompt(); nextHandled=false;
                     seekGraceUntil=DateTime.UtcNow.AddSeconds(5); restoreReserveAfterSeek=true;
                     await mpv.Command("set_property","cache-pause-wait",3);
@@ -200,10 +207,16 @@ namespace Pluxy {
         private async Task OpenMedia(double resume) {
             activeSkip=null; skipButton.Visible=false;
             ready=false; timer.Stop();
-            await mpv.Start(url,screen.Handle,audio,resume);
+            streamOffset=0;
+            if(conversionQuality!="direct" && conversionProfiles.Length>0) {
+                var preset=Native.Object(conversionProfiles[conversionIndex]);
+                streamOffset=resume;
+                url=server+"/stream/convert/"+LibraryClient.ItemPath(id)+"/"+Uri.EscapeDataString(Native.Text(preset,"id"))+"?start_ms="+((long)(resume*1000)).ToString(CultureInfo.InvariantCulture)+"&copy_audio="+(audio=="passthrough"?"true":"false");
+            } else url=server+"/stream/direct/"+LibraryClient.ItemPath(id);
+            await mpv.Start(url,screen.Handle,audio,streamOffset>0?0:resume);
             if(closing) return;
             foreach(var value in subtitleTracks ?? new object[0]) { var sub=Native.Object(value); int index=(int)Native.Number(sub,"index",-1); if(index<0) continue;
-                try { await mpv.Command("sub-add",server+"/stream/subs/"+LibraryClient.ItemPath(id)+"/"+index,"auto",Native.Text(sub,"label"),Native.Text(sub,"lang")); } catch(Exception error) { Native.Log(error); }
+                try { await mpv.Command("sub-add",server+"/stream/subs/"+LibraryClient.ItemPath(id)+"/"+index+"?start_ms="+((long)(streamOffset*1000)),"auto",Native.Text(sub,"label"),Native.Text(sub,"lang")); } catch(Exception error) { Native.Log(error); }
             }
             if(wasPaused) await mpv.Command("set_property","pause",true);
             skipChapters=new object[0];
@@ -220,15 +233,16 @@ namespace Pluxy {
             if(recovering || closing) return;
             recovering=true; ready=false; timer.Stop(); seekTimer.Stop(); seekDirection=0; dragging=false; position=resume;
             try {
-                while(recoveryAttempts<3 && !closing) {
+                int retryLimit=conversionQuality=="auto"?3+conversionProfiles.Length:3;
+                while(recoveryAttempts<retryLimit && !closing) {
                     status.Visible=true; status.Text="Reconnexion · reprise à "+Clock(resume)+"…"; ShowControls();
                     recoveryAttempts++; mpv.Dispose(); mpv=new MpvSession();
                     try {
                         server=await api.PlaybackServer(server,id); if(closing) return;
-                        url=server+"/stream/direct/"+LibraryClient.ItemPath(id);
+                        if(conversionQuality=="auto" && conversionIndex+1<conversionProfiles.Length) conversionIndex++;
                         await OpenMedia(resume); return;
                     } catch(Exception error) { Native.Log(error); status.Text=error.Message; }
-                    if(recoveryAttempts<3) await Task.Delay(1500);
+                    if(recoveryAttempts<retryLimit) await Task.Delay(1500);
                 }
                 mpv.Dispose(); status.Visible=true; status.Text="Lecture interrompue à "+Clock(resume)+". Réessayez lorsque le serveur est disponible."; retryButton.Visible=true;
             } finally { recovering=false; }
@@ -266,7 +280,9 @@ namespace Pluxy {
                     await mpv.Command("set_property","cache-pause-wait",bufferPolicy.ResumeSeconds);
                     restoreReserveAfterSeek=false;
                 }
-                position=Convert.ToDouble(pos,CultureInfo.InvariantCulture); duration=Convert.ToDouble(dur,CultureInfo.InvariantCulture);
+                position=streamOffset+Convert.ToDouble(pos,CultureInfo.InvariantCulture);
+                duration=conversionQuality=="direct"?Convert.ToDouble(dur,CultureInfo.InvariantCulture):Native.Number(media,"duration",0);
+                if(duration<=0) duration=streamOffset+Convert.ToDouble(dur,CultureInfo.InvariantCulture);
                 UpdateSkip();
                 int episodeIndex=episodes.FindIndex(e=>Native.Text(Native.Object(e),"id")==id);
                 nextButton.Enabled=episodeIndex>=0 && episodeIndex+1<episodes.Count;
@@ -366,11 +382,38 @@ namespace Pluxy {
             skipButton.AccessibleName=skipButton.Text;
             if(skipButton.Visible) skipButton.BringToFront();
         }
+        private async Task ChangeConversion(string quality,double resume,bool reset) {
+            if(conversionBusy || closing) return;
+            conversionBusy=true;
+            try {
+                conversionQuality=quality;
+                if(reset) conversionIndex=quality=="auto"?0:Array.FindIndex(conversionProfiles,p=>Native.Text(Native.Object(p),"id")==quality);
+                conversionIndex=Math.Max(0,conversionIndex);
+                recoveryAttempts=0; ready=false; timer.Stop(); mpv.Dispose(); mpv=new MpvSession();
+                status.Visible=true; status.Text="Application de la qualité · reprise à "+Clock(resume)+"…";
+                bool failed=false;
+                try { await OpenMedia(resume); } catch(Exception error) { Native.Log(error); failed=true; }
+                if(failed) await Recover(resume);
+            } finally { conversionBusy=false; }
+        }
         private void ShowSkipMenu() {
             if(!ready || closing) return;
             ShowControls();
             var menu=new PlayerMenu(accent);
             menu.Closed+=(s,e)=>{ menu.Dispose(); if(!closing) ShowControls(); };
+            menu.Items.Add(new ToolStripMenuItem("Qualité vidéo") { Enabled=false });
+            var direct=new ToolStripMenuItem("Originale · aucune conversion") { Checked=conversionQuality=="direct" };
+            direct.Click+=async(s,e)=>await ChangeConversion("direct",position,true); menu.Items.Add(direct);
+            if(conversionProfiles.Length>0) {
+                var automatic=new ToolStripMenuItem("Conversion automatique") { Checked=conversionQuality=="auto" };
+                automatic.Click+=async(s,e)=>await ChangeConversion("auto",position,true); menu.Items.Add(automatic);
+                foreach(var value in conversionProfiles) {
+                    var preset=Native.Object(value); string key=Native.Text(preset,"id");
+                    var choice=new ToolStripMenuItem(Native.Text(preset,"label")+" · fixe") { Checked=conversionQuality==key };
+                    choice.Click+=async(s,e)=>await ChangeConversion(key,position,true); menu.Items.Add(choice);
+                }
+            } else menu.Items.Add(new ToolStripMenuItem("Conversion indisponible sur ce serveur") { Enabled=false });
+            menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add(new ToolStripMenuItem("Format de l’image") { Enabled=false });
             var original=new ToolStripMenuItem("Original · proportions conservées");
             original.Click+=async(s,e)=>{ await Run("set_property","keepaspect",true); await Run("set_property","panscan",0); }; menu.Items.Add(original);

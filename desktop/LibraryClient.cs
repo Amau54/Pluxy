@@ -81,6 +81,11 @@ namespace Pluxy {
             var settings=Native.Object(runtime.ContainsKey("server")?runtime["server"]:null);
             return new { url = candidate, name = Native.Text(runtime,"server_name",Native.Text(settings,"name","Pluxy")) };
         }
+        public async Task<object[]> ConversionProfiles(string server) {
+            var runtime=Native.Object(await Get(server,"/api/settings/client"));
+            object profiles;
+            return runtime.TryGetValue("conversion_profiles",out profiles)?profiles as object[] ?? new object[0]:new object[0];
+        }
         internal static UdpClient DiscoverySocket() {
             var udp=new UdpClient(0);
             try {

@@ -25,13 +25,14 @@ from .tools import NO_WINDOW, has_libplacebo
 # ===========================================================================
 #  Construction des arguments FFmpeg
 # ===========================================================================
-def _audio_args(decision: PlaybackDecision, cfg: PluxyConfig) -> List[str]:
+def _audio_args(decision: PlaybackDecision, cfg: PluxyConfig, all_tracks: bool = False) -> List[str]:
     """
     Audio : copie (passthrough) si le client gère la source, sinon transcodage vers
     le codec/canaux décidés (garanti audible par le client). Repli AAC universel.
     """
+    mapping = "0:a?" if all_tracks else "0:a:0?"
     if decision.audio_action == "copy":
-        return ["-map", "0:a:0?", "-c:a", "copy"]
+        return ["-map", mapping, "-c:a", "copy"]
     codec = decision.target_audio_codec or cfg.audio.target_codec
     ch = max(1, decision.target_audio_channels or cfg.audio.target_channels)
     if codec == "aac":
@@ -39,7 +40,7 @@ def _audio_args(decision: PlaybackDecision, cfg: PluxyConfig) -> List[str]:
     else:
         bitrate = cfg.audio.bitrate_kbps           # 640k AC3/EAC3 5.1
     return [
-        "-map", "0:a:0?",
+        "-map", mapping,
         "-c:a", codec,
         "-ac", str(ch),
         "-b:a", f"{bitrate}k",
@@ -122,6 +123,7 @@ def build_transcode_cmd(
     seg_duration: float | None = None,
     hls_session: bool = False,
     start_number: int = 0,
+    direct_stream: bool = False,
 ) -> List[str]:
     """
     Transcode matériel NVENC.
@@ -144,12 +146,20 @@ def build_transcode_cmd(
     if do_tonemap:
         chain, needs_vulkan = _tone_map_chain(cfg)
         vf.append(chain)
-        if compat:
+        if compat and not decision.target_height:
             vf.append("scale=-2:1080")               # après tonemap (frames système)
-    elif compat and tc.hardware_acceleration:
+    elif compat and tc.hardware_acceleration and not decision.target_height:
         vf.append("scale_cuda=-2:1080:format=nv12")  # SDR : downscale GPU
-    elif compat:
+    elif compat and not decision.target_height:
         vf.append("scale=-2:1080,format=yuv420p")
+
+    if decision.target_width and decision.target_height:
+        width, height = decision.target_width, decision.target_height
+        if tc.hardware_acceleration and not do_tonemap:
+            pixel = "p010le" if src_hdr and not compat else "nv12"
+            vf.append(f"scale_cuda={width}:{height}:format={pixel}")
+        else:
+            vf.append(f"scale={width}:{height}")
 
     cmd: List[str] = [
         cfg.ffmpeg.ffmpeg_path,
@@ -199,7 +209,7 @@ def build_transcode_cmd(
             "-c:v", tc.encoder,                        # hevc_nvenc
             "-preset", tc.preset, "-tune", tc.tune, "-rc", tc.rc_mode,
             "-b:v", f"{cap_mbps}M", "-maxrate", f"{cap_mbps}M", "-bufsize", f"{bufsize}M",
-            "-spatial_aq", "1", "-rc-lookahead", "20", "-gpu", str(tc.gpu_index),
+            "-spatial-aq", "1", "-rc-lookahead", "20", "-gpu", str(tc.gpu_index),
             "-forced-idr", "1",                        # keyframes forcées respectées
         ]
         # PAS de `-pix_fmt p010le` (échec conversion CPU sur frames CUDA).
@@ -212,20 +222,28 @@ def build_transcode_cmd(
                 cmd += ["-profile:v", "main10"]
             if v and v.is_hdr:
                 cmd += ["-color_primaries", "bt2020",
-                        "-color_trc", "smpte2084",
+                        "-color_trc", v.color_transfer or "smpte2084",
                         "-colorspace", "bt2020nc",
                         "-color_range", "tv"]
                 # Métadonnées HDR10 statiques (mastering display + content light level).
                 # Insérées en SEI par hevc_nvenc -> déclenche le mode HDR de la TV.
-                if v.master_display:
-                    cmd += ["-master_display", v.master_display]
-                if v.max_cll:
-                    cmd += ["-max_cll", v.max_cll]
+                # NVENC receives mastering/light-level data from decoded frame side
+                # data. These are not FFmpeg command-line options.
+                cmd += ["-extra_sei", "1"]
     else:
         cmd += [
             "-c:v", "libx265", "-preset", "fast",
             "-b:v", f"{cap_mbps}M", "-maxrate", f"{cap_mbps}M", "-bufsize", f"{bufsize}M",
         ]
+        if src_hdr and not do_tonemap:
+            params = ["hdr10=1", "repeat-headers=1"]
+            if v.master_display:
+                params.append(f"master-display={v.master_display}")
+            if v.max_cll:
+                params.append(f"max-cll={v.max_cll}")
+            cmd += ["-pix_fmt", "yuv420p10le", "-color_primaries", "bt2020",
+                    "-color_trc", v.color_transfer or "smpte2084", "-colorspace", "bt2020nc",
+                    "-x265-params", ":".join(params)]
 
     if do_tonemap:
         # Signale la conversion au lecteur au lieu de laisser des tags HDR hérités.
@@ -233,12 +251,16 @@ def build_transcode_cmd(
                 "-colorspace", "bt709", "-color_range", "tv"]
 
     # ---- Audio ----------------------------------------------------------- #
-    if compat:
+    if compat and not direct_stream:
         cmd += ["-map", "0:a:0?", "-c:a", "aac", "-ac", "2", "-b:a", "192k"]
     else:
-        cmd += _audio_args(decision, cfg)
+        cmd += _audio_args(decision, cfg, all_tracks=direct_stream)
 
     # ---- Sortie ---------------------------------------------------------- #
+    if direct_stream:
+        cmd += ["-map", "0:s?", "-c:s", "copy", "-avoid_negative_ts", "disabled",
+                "-cluster_time_limit", "1000", "-f", "matroska", "pipe:1"]
+        return cmd
     if hls_session:
         # SESSION CONTINUE (façon Plex/Jellyfin) : un seul FFmpeg produit des segments
         # mpegts PARFAITEMENT alignés (keyframes forcées toutes les T s) -> aucune

@@ -4,7 +4,8 @@ package com.pluxy.tv.player
 internal object PlaybackBufferWatchPolicy {
     const val BYTE_PROGRESS_THRESHOLD = 64 * 1024L
 
-    fun isStuck(elapsedMs: Long, idleMs: Long, isHls: Boolean): Boolean =
+    fun isStuck(elapsedMs: Long, idleMs: Long, isHls: Boolean, conversion: Boolean = false): Boolean =
+        if (conversion) idleMs >= 15_000L || elapsedMs >= 45_000L else
         idleMs >= (if (isHls) 45_000L else 20_000L) ||
             elapsedMs >= (if (isHls) 180_000L else 90_000L)
 }
