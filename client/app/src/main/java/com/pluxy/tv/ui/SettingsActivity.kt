@@ -30,7 +30,8 @@ class SettingsActivity : ThemedActivity() {
     private lateinit var scroll: ScrollView
     private lateinit var rows: LinearLayout
     private lateinit var statusView: TextView
-    private val optionsPage: Boolean get() = intent.getBooleanExtra("secondary_options", false)
+    private var category = SettingsCategory.PLAYBACK
+    private val categoryButtons = linkedMapOf<SettingsCategory, Button>()
     private var restoredFocusTag: String? = null
     private var restoredScrollY: Int? = null
     private val sub by lazy { pluxyColor(R.color.text_secondary) }
@@ -42,12 +43,11 @@ class SettingsActivity : ThemedActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        category = SettingsCategory.fromKey(savedInstanceState?.getString("settings_category") ?: intent.getStringExtra("settings_category"))
         restoredFocusTag = savedInstanceState?.getString("settings_focus")
         restoredScrollY = savedInstanceState?.getInt("settings_scroll")
 
         scroll = ScrollView(this).apply {
-            setBackgroundResource(ambientBackgroundResource())
-            fitsSystemWindows = true
             isFillViewport = true
             clipChildren = false
             clipToPadding = false
@@ -62,9 +62,9 @@ class SettingsActivity : ThemedActivity() {
         }
         scroll.clipChildren = false
         scroll.addView(rows)
-        setContentView(scroll)
+        setContentView(createSettingsLayout())
 
-        title(if (optionsPage) "Options" else "Réglages")
+        title(category.label)
         statusView = TextView(this).apply {
             setTextColor(pluxyColor(R.color.text_tertiary)); textSize = 14f
             setPadding(0, 0, 0, dp(4))
@@ -73,6 +73,69 @@ class SettingsActivity : ThemedActivity() {
         rows.addView(statusView)
 
         render()
+    }
+
+    private fun createSettingsLayout(): View {
+        val navigation = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, dp(24), 0, dp(16))
+        }
+        navigation.addView(TextView(this).apply {
+            text = "Réglages"
+            textSize = 22f
+            setTextColor(pluxyColor(R.color.text_primary))
+            setPadding(dp(10), 0, dp(10), dp(14))
+        })
+        val categories: android.view.ViewGroup = if (television) LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        } else android.widget.GridLayout(this).apply { columnCount = 3 }
+        SettingsCategory.entries.forEachIndexed { index, entry ->
+            val button = Button(this).apply {
+                id = View.generateViewId()
+                tag = "category:${entry.key}"
+                text = entry.label
+                isAllCaps = false
+                textSize = if (television) 16f else 14f
+                gravity = Gravity.START or Gravity.CENTER_VERTICAL
+                minHeight = dp(48)
+                stateListAnimator = null
+                setPadding(dp(12), dp(6), dp(12), dp(6))
+                setBackgroundResource(R.drawable.bg_settings_category)
+                setOnClickListener {
+                    if (category != entry) {
+                        category = entry
+                        restoredFocusTag = tag as String
+                        restoredScrollY = 0
+                        render()
+                    }
+                }
+            }
+            categoryButtons[entry] = button
+            if (categories is android.widget.GridLayout) categories.addView(button,
+                android.widget.GridLayout.LayoutParams().apply {
+                    width = 0
+                    height = dp(48)
+                    columnSpec = android.widget.GridLayout.spec(index % 3, 1f)
+                    rowSpec = android.widget.GridLayout.spec(index / 3)
+                })
+            else categories.addView(button, LinearLayout.LayoutParams(-1, -2))
+        }
+        navigation.addView(categories)
+        val safeSide = resources.getDimensionPixelSize(R.dimen.screen_pad)
+        return LinearLayout(this).apply {
+            orientation = if (television) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
+            fitsSystemWindows = true
+            setBackgroundResource(ambientBackgroundResource())
+            setPadding(safeSide, 0, if (television) 0 else safeSide, 0)
+            addView(navigation, LinearLayout.LayoutParams(if (television) dp(192) else -1, -2))
+            if (television) {
+                rows.setPadding(dp(24), dp(24), safeSide, dp(24))
+                addView(scroll, LinearLayout.LayoutParams(0, -1, 1f))
+            } else {
+                rows.setPadding(0, dp(8), 0, dp(24))
+                addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+            }
+        }
     }
 
     /**
@@ -85,84 +148,64 @@ class SettingsActivity : ThemedActivity() {
         restoredFocusTag = null
         restoredScrollY = null
         renderContent()
+        categoryButtons.forEach { (entry, button) ->
+            button.isSelected = category == entry
+            button.setTextColor(pluxyColor(if (category == entry) R.color.accent else R.color.text_secondary))
+        }
         rows.post {
             scroll.scrollTo(0, previousScrollY.coerceAtLeast(0))
-            val target = focusedTag?.let { rows.findViewWithTag<View>(it) }
-                ?: rows.findViewWithTag<View>(if (optionsPage) "setting:Activer plusieurs profils" else "setting:Changer de serveur")
+            val target = focusedTag?.let { findViewById<View>(android.R.id.content).findViewWithTag<View>(it) }
+                ?: (2 until rows.childCount).map { rows.getChildAt(it) }.firstOrNull { it.isFocusable }
+            if (television) {
+                val first = (2 until rows.childCount).map { rows.getChildAt(it) }.firstOrNull { it.isFocusable }
+                first?.let { if (it.id == View.NO_ID) it.id = View.generateViewId() }
+                categoryButtons.values.forEach { it.nextFocusRightId = first?.id ?: View.NO_ID }
+            }
             if (television) target?.requestFocusFromTouch() else target?.requestFocus()
         }
     }
 
     private fun renderContent() {
-        // On retire tout sauf le titre (index 0) et le status (index 1).
         while (rows.childCount > 2) rows.removeViewAt(2)
         val configured = PluxyApplication.isConfigured(this)
-        statusView.text = if (configured) "Serveur configuré" else "Aucun serveur configuré"
-
-        if (optionsPage) {
-            renderOptions(configured)
-        } else {
-            section("Connexion")
-            rowButton(
-                "Changer de serveur",
-                if (configured) PluxyApplication.serverName(this) else "Non configuré",
-                "Recherche les serveurs Pluxy présents sur le réseau domestique.",
-            ).setOnClickListener {
-                serverLauncher.launch(Intent(this, ServerSetupActivity::class.java))
-            }
-
-            if (configured && FamilyProfileSelection.enabled(this)) {
-                val server = PluxyApplication.serverBaseUrl(this)
-                rowButton("Profil familial", FamilyProfileSelection.name(server), "Historique et préférences de lecture séparés.")
-                    .setOnClickListener { anchor -> pickFamilyProfile(anchor, server) }
-            }
-
-            section("Lecture")
-            val playbackStrategy = PlaybackStrategy.fromKey(
-                PluxyApplication.playbackStrategy(this),
-            )
-            rowButton(
-                "Mode de lecture",
-                playbackStrategy.title,
-                playbackStrategy.description,
-                showHint = false,
-            ).setOnClickListener { anchor -> pickPlaybackStrategy(anchor, playbackStrategy) }
-            val output = AudioOutputMode.fromKey(PluxyApplication.audioOutputMode(this))
-            rowButton("Sortie audio", output.title, output.description, showHint = false)
-                .setOnClickListener { anchor -> pickAudioOutput(anchor) }
-            section("Apparence")
-            val appearance = AppearancePreferences.theme(this)
-            rowButton("Thème", appearance.label, appearance.description, showHint = false)
-                .setOnClickListener { anchor -> pickAppearanceTheme(anchor, appearance) }
-            rowButton("Options", "›", "Profils, bibliothèque, accessibilité et réglages avancés.")
-                .setOnClickListener {
-                    restoredFocusTag = "setting:Options"
-                    startActivity(Intent(this, SettingsActivity::class.java).putExtra("secondary_options", true))
-                }
+        (rows.getChildAt(0) as TextView).text = category.label
+        statusView.visibility = if (category == SettingsCategory.CONNECTION) View.VISIBLE else View.GONE
+        statusView.text = if (configured) PluxyApplication.serverName(this) else "Aucun serveur configuré"
+        when (category) {
+            SettingsCategory.CONNECTION -> renderConnection(configured)
+            SettingsCategory.PLAYBACK -> renderPlayback()
+            SettingsCategory.APPEARANCE -> renderAppearance()
+            SettingsCategory.LIBRARY -> renderLibrary(configured)
+            SettingsCategory.PROFILES -> renderProfiles(configured)
+            SettingsCategory.ACCESSIBILITY -> renderAccessibility()
+            SettingsCategory.APPLICATION -> renderApplication()
         }
         addClose()
     }
 
-    private fun renderOptions(configured: Boolean) {
-        section("Profils")
-        val multipleProfiles = FamilyProfileSelection.enabled(this)
-        localSwitchRow("Activer plusieurs profils", multipleProfiles) {
-            FamilyProfileSelection.setEnabled(this, !multipleProfiles)
-            lifecycleScope.launch {
-                if (configured) CatalogueRepository.invalidate(PluxyApplication.serverBaseUrl(this@SettingsActivity))
-                render()
-            }
+    private fun renderConnection(configured: Boolean) {
+        rowButton(
+            "Changer de serveur",
+            if (configured) PluxyApplication.serverName(this) else "Non configuré",
+            "Recherche les serveurs Pluxy présents sur le réseau domestique.",
+        ).setOnClickListener {
+            serverLauncher.launch(Intent(this, ServerSetupActivity::class.java))
         }
-        if (!multipleProfiles) rowButton("Profil utilisé", "Général", "L’historique existant est conservé.")
-            .apply { isFocusable = false; isClickable = false }
-        if (configured && FamilyProfileSelection.enabled(this)) {
-            val server = PluxyApplication.serverBaseUrl(this)
-            rowButton("Profil familial", FamilyProfileSelection.name(server), "Historique et préférences de lecture séparés.")
-                .setOnClickListener { anchor -> pickFamilyProfile(anchor, server) }
-        }
+    }
 
-
-        section("Préférences de lecture")
+    private fun renderPlayback() {
+        val playbackStrategy = PlaybackStrategy.fromKey(
+            PluxyApplication.playbackStrategy(this),
+        )
+        rowButton(
+            "Mode de lecture",
+            playbackStrategy.title,
+            playbackStrategy.description,
+            showHint = false,
+        ).setOnClickListener { anchor -> pickPlaybackStrategy(anchor, playbackStrategy) }
+        val output = AudioOutputMode.fromKey(PluxyApplication.audioOutputMode(this))
+        rowButton("Sortie audio", output.title, output.description, showHint = false)
+            .setOnClickListener { anchor -> pickAudioOutput(anchor) }
         rowButton("Lecteur des bandes-annonces", TrailerPlayer.preferenceLabel(this),
             "Choisir SmartTube, YouTube ou une autre application installée.")
             .setOnClickListener { anchor -> TrailerPlayer.choosePreference(this, anchor) { render() } }
@@ -182,9 +225,12 @@ class SettingsActivity : ThemedActivity() {
             subtitleModeLabel(PluxyApplication.subsMode(this)),
             "Affiche automatiquement les sous-titres ou les masque.",
         ).setOnClickListener { anchor -> pickSubtitleMode(anchor) }
+    }
 
-
-        section("Affichage")
+    private fun renderAppearance() {
+        val appearance = AppearancePreferences.theme(this)
+        rowButton("Thème", appearance.label, appearance.description, showHint = false)
+            .setOnClickListener { anchor -> pickAppearanceTheme(anchor, appearance) }
         rowButton("Densité", LibraryPreferences.density(this).label,
             "Ajuste la taille des affiches ; les commandes restent faciles à utiliser.", showHint = true)
             .setOnClickListener { anchor ->
@@ -193,8 +239,9 @@ class SettingsActivity : ThemedActivity() {
                     LibraryPreferences.density(this).key,
                     onSelect = { LibraryPreferences.setDensity(this, CardDensity.fromStored(it)); render() })
             }
+    }
 
-        section("Bibliothèque")
+    private fun renderLibrary(configured: Boolean) {
         rowButton(
             "Personnaliser l’accueil",
             "Rubriques et ordre",
@@ -211,6 +258,7 @@ class SettingsActivity : ThemedActivity() {
             stateListAnimator = null
             setPadding(dp(10), dp(6), dp(10), dp(6))
             minHeight = dp(48)
+            if (television) nextFocusLeftId = categoryButtons.getValue(category).id
             setOnClickListener { button ->
                 button.isEnabled = false
                 lifecycleScope.launch {
@@ -235,8 +283,27 @@ class SettingsActivity : ThemedActivity() {
                 }
             }
         }, lp().also { it.topMargin = dp(2) })
+    }
 
-        section("Accessibilité")
+    private fun renderProfiles(configured: Boolean) {
+        val multipleProfiles = FamilyProfileSelection.enabled(this)
+        localSwitchRow("Activer plusieurs profils", multipleProfiles) {
+            FamilyProfileSelection.setEnabled(this, !multipleProfiles)
+            lifecycleScope.launch {
+                if (configured) CatalogueRepository.invalidate(PluxyApplication.serverBaseUrl(this@SettingsActivity))
+                render()
+            }
+        }
+        if (!multipleProfiles) rowButton("Profil utilisé", "Général", "L’historique existant est conservé.")
+            .apply { isFocusable = false; isClickable = false }
+        if (configured && FamilyProfileSelection.enabled(this)) {
+            val server = PluxyApplication.serverBaseUrl(this)
+            rowButton("Profil familial", FamilyProfileSelection.name(server), "Historique et préférences de lecture séparés.")
+                .setOnClickListener { anchor -> pickFamilyProfile(anchor, server) }
+        }
+    }
+
+    private fun renderAccessibility() {
         val contrast = PluxyApplication.playerFocusContrast(this)
         localSwitchRow("Focus du lecteur plus contrasté", contrast) {
             PluxyApplication.setPlayerFocusContrast(this, !contrast)
@@ -247,14 +314,14 @@ class SettingsActivity : ThemedActivity() {
             PluxyApplication.setPlayerActionHints(this, !actionHints)
             render()
         }
+    }
 
-        section("Application")
+    private fun renderApplication() {
         rowButton("Mises à jour", "Vérifier ›", "Télécharger et installer la dernière version depuis GitHub.")
             .setOnClickListener { com.pluxy.server.updates.AppUpdates.open(this) }
         rowButton("Mode de l’application", "Lecteur ›", "Choisir Lecteur ou Serveur pour cet appareil.", showHint = true)
             .setOnClickListener { startActivity(Intent(this, ModeActivity::class.java)
                 .putExtra(com.pluxy.server.ApplicationMode.EXTRA_CHOOSE_MODE, true)) }
-
     }
 
     override fun onResume() {
@@ -265,7 +332,7 @@ class SettingsActivity : ThemedActivity() {
     private fun addClose() {
         val close = Button(this).apply {
             tag = "setting:close"
-            text = if (optionsPage) "Retour" else getString(R.string.action_close)
+            text = getString(R.string.action_close)
             isAllCaps = false
             setTextColor(pluxyColor(R.color.text_primary))
             textSize = if (television) 17f else 15f
@@ -273,6 +340,7 @@ class SettingsActivity : ThemedActivity() {
             stateListAnimator = null
             minHeight = dp(48)
             setPadding(dp(12), dp(6), dp(12), dp(6))
+            if (television) nextFocusLeftId = categoryButtons.getValue(category).id
             setOnClickListener { finish() }
         }
         rows.addView(close, lp().also { it.topMargin = dp(16) })
@@ -288,16 +356,6 @@ class SettingsActivity : ThemedActivity() {
         })
     }
 
-    private fun section(text: String) {
-        rows.addView(TextView(this).apply {
-            this.text = text.uppercase()
-            setTextColor(pluxyColor(R.color.text_tertiary)); textSize = if (television) 13f else 12f
-            typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
-            letterSpacing = 0.05f
-            setPadding(dp(10), dp(20), dp(10), dp(4))
-        })
-    }
-
     private fun rowButton(label: String, value: String, hint: String?, showHint: Boolean = false): LinearLayout {
         val row = LinearLayout(this).apply {
             tag = "setting:$label"
@@ -305,6 +363,7 @@ class SettingsActivity : ThemedActivity() {
             gravity = Gravity.CENTER_VERTICAL
             isFocusable = true
             isClickable = true
+            if (television) nextFocusLeftId = categoryButtons.getValue(category).id
             minimumHeight = dp(48)
             contentDescription = listOfNotNull(label, value, hint).joinToString(". ")
             setBackgroundResource(R.drawable.bg_setting_row)
@@ -357,6 +416,7 @@ class SettingsActivity : ThemedActivity() {
             setTextColor(pluxyColor(R.color.text_primary))
             textSize = if (television) 17f else 15f
             isFocusable = true
+            if (television) nextFocusLeftId = categoryButtons.getValue(category).id
             setBackgroundResource(R.drawable.bg_setting_row)
             setPadding(dp(10), dp(6), dp(10), dp(6))
             minHeight = dp(48)
@@ -410,6 +470,7 @@ class SettingsActivity : ThemedActivity() {
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
+        outState.putString("settings_category", category.key)
         outState.putString("settings_focus", currentFocus?.tag as? String)
         outState.putInt("settings_scroll", scroll.scrollY)
         super.onSaveInstanceState(outState)

@@ -91,13 +91,7 @@ class DetailsActivity : ThemedActivity() {
         updatePlaybackActions(item.watched)
         playBtn.requestFocus()
         findViewById<Button>(R.id.trailer).visibility = View.GONE
-        findViewById<Button>(R.id.playSettings).setOnClickListener { anchor ->
-            CompactChoiceMenu.show(this, anchor, "Options", listOf(
-                CompactChoiceMenu.Choice("Langue audio et sous-titres", "playback"),
-                CompactChoiceMenu.Choice("Corriger les informations", "metadata")), "", onSelect = { choice ->
-                if (choice == "metadata") MetadataMatchDialog.show(this, item) { loadMetadata() } else showPlaybackSettings()
-            })
-        }
+        findViewById<Button>(R.id.playSettings).setOnClickListener { showPlaybackSettings() }
         findViewById<TextView>(R.id.playDiagnostic).setOnClickListener { showDiagnosticDetails() }
         findViewById<TextView>(R.id.overview).setOnClickListener {
             AlertDialog.Builder(this).setTitle(R.string.label_synopsis)
@@ -235,35 +229,56 @@ class DetailsActivity : ThemedActivity() {
         }
     }
 
-    /** Réglages de lecture EN AMONT : langue audio préférée + sous-titres. */
+    private fun settingsDp(value: Int) = (value * resources.displayMetrics.density).toInt()
+
     private fun showPlaybackSettings() {
         val langs = listOf("fr" to "Français", "en" to "English", "es" to "Español",
             "de" to "Deutsch", "it" to "Italiano", "" to "Original (auto)")
-        val current = PluxyApplication.audioLang(this)
-        var pickedLang = current
-        AlertDialog.Builder(this)
-            .setTitle("Langue audio préférée")
-            .setSingleChoiceItems(langs.map { it.second }.toTypedArray(),
-                langs.indexOfFirst { it.first == current }.coerceAtLeast(0)) { _, w ->
-                pickedLang = langs[w].first
-            }
-            .setPositiveButton("Suivant") { _, _ -> chooseSubsThen(pickedLang) }
-            .setNegativeButton("Annuler", null)
-            .show()
-    }
-
-    private fun chooseSubsThen(lang: String) {
-        val modes = listOf("auto" to "Sous-titres : automatiques", "off" to "Sous-titres : désactivés")
-        val current = PluxyApplication.subsMode(this)
-        AlertDialog.Builder(this)
-            .setTitle("Sous-titres")
-            .setSingleChoiceItems(modes.map { it.second }.toTypedArray(),
-                modes.indexOfFirst { it.first == current }.coerceAtLeast(0)) { d, w ->
-                PluxyApplication.setPlaybackPrefs(this, lang, modes[w].first)
-                Toast.makeText(this, "Réglages enregistrés", Toast.LENGTH_SHORT).show()
-                d.dismiss()
-            }
-            .show()
+        val column = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(settingsDp(16), settingsDp(8), settingsDp(16), settingsDp(8))
+        }
+        fun row(label: String) = Button(this).apply {
+            text = label
+            isAllCaps = false
+            textSize = 16f
+            gravity = android.view.Gravity.START or android.view.Gravity.CENTER_VERTICAL
+            minHeight = settingsDp(48)
+            stateListAnimator = null
+            setTextColor(pluxyColor(R.color.text_primary))
+            setBackgroundResource(R.drawable.bg_setting_row)
+            setPadding(settingsDp(12), settingsDp(8), settingsDp(12), settingsDp(8))
+            column.addView(this, android.widget.LinearLayout.LayoutParams(-1, -2))
+        }
+        fun audioLabel() = "Audio · ${langs.firstOrNull { it.first == PluxyApplication.audioLang(this) }?.second ?: "Original (auto)"}"
+        fun subtitleLabel() = "Sous-titres · ${if (PluxyApplication.subsMode(this) == "off") "Désactivés" else "Automatiques"}"
+        val audio = row(audioLabel())
+        val subtitles = row(subtitleLabel())
+        val metadata = row("Corriger les informations")
+        val dialog = AlertDialog.Builder(this).setTitle("Réglages du média").setView(column)
+            .setNegativeButton("Fermer", null).create()
+        audio.setOnClickListener { anchor ->
+            CompactChoiceMenu.show(this, anchor, "Langue audio",
+                langs.map { CompactChoiceMenu.Choice(it.second, it.first) }, PluxyApplication.audioLang(this),
+                onSelect = { value ->
+                    PluxyApplication.setPlaybackPrefs(this, value, PluxyApplication.subsMode(this))
+                    audio.text = audioLabel()
+                })
+        }
+        subtitles.setOnClickListener { anchor ->
+            CompactChoiceMenu.show(this, anchor, "Sous-titres",
+                listOf(CompactChoiceMenu.Choice("Désactivés", "off"), CompactChoiceMenu.Choice("Automatiques", "auto")),
+                PluxyApplication.subsMode(this), onSelect = { value ->
+                    PluxyApplication.setPlaybackPrefs(this, PluxyApplication.audioLang(this), value)
+                    subtitles.text = subtitleLabel()
+                })
+        }
+        metadata.setOnClickListener {
+            dialog.dismiss()
+            MetadataMatchDialog.show(this, item) { loadMetadata() }
+        }
+        dialog.setOnShowListener { audio.requestFocus() }
+        dialog.show()
     }
 
     private fun loadMetadata() {

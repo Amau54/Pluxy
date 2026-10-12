@@ -1550,7 +1550,7 @@ class MainActivity : ThemedActivity() {
     private fun openLibraryScreenOptions(anchor: View) {
         val density = LibraryPreferences.density(this)
         val choices = buildList {
-            if (searchQuery.isBlank()) add(CompactChoiceMenu.Choice("Affichage", "view", when {
+            if (searchQuery.isBlank()) add(CompactChoiceMenu.Choice("Présentation", "view", when {
                 selectedKind in setOf("photo", "audio") -> when (currentQuery().photoView) {
                     "albums" -> "Albums"; "timeline" -> "Chronologie"; else -> "Dossiers"
                 }
@@ -1560,7 +1560,7 @@ class MainActivity : ThemedActivity() {
             }, inlineDetail = true))
             add(CompactChoiceMenu.Choice("Densité", "density", density.label, inlineDetail = true))
         }
-        CompactChoiceMenu.show(this, anchor, "Options de cet écran", choices, "", onSelect = { option ->
+        CompactChoiceMenu.show(this, anchor, "Affichage de la bibliothèque", choices, "", onSelect = { option ->
             if (option == "view") openLibraryViews(anchor)
             else CompactChoiceMenu.show(this, anchor, "Densité",
                 CardDensity.entries.map { CompactChoiceMenu.Choice(it.label, it.key) },

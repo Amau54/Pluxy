@@ -136,8 +136,8 @@ class LibraryBrowserChrome(
             view == "collections" -> "Collections"
             else -> if (television) "Bibliothèque" else "Catalogue"
         }
-        mode.text = if (television) "Options" else displayName
-        mode.contentDescription = if (television) "Options de cet écran, affichage $displayName" else displayName
+        mode.text = if (television) "Affichage" else displayName
+        mode.contentDescription = if (television) "Affichage de la bibliothèque, $displayName" else displayName
         mode.visibility = if (television || searchText.isBlank()) View.VISIBLE else View.GONE
         filters.visibility = if (video && view != "collections" && collectionName == null) View.VISIBLE else View.GONE
         collection.visibility = if (view == "collections" || collectionName != null) View.VISIBLE else View.GONE

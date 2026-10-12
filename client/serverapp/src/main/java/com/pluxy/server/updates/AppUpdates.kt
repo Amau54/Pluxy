@@ -79,10 +79,13 @@ object AppUpdates {
     @Suppress("DEPRECATION")
     internal fun packageInfo(context: Context): PackageInfo = context.packageManager.getPackageInfo(context.packageName, signatureFlags())
     internal fun installedCode(context: Context) = PackageInfoCompat.getLongVersionCode(packageInfo(context))
-    internal fun signatureFlags() = if (Build.VERSION.SDK_INT >= 28) PackageManager.GET_SIGNING_CERTIFICATES else PackageManager.GET_SIGNATURES
+    internal fun signatureFlags() = PackageManager.GET_SIGNATURES or
+        if (Build.VERSION.SDK_INT >= 28) PackageManager.GET_SIGNING_CERTIFICATES else 0
     @Suppress("DEPRECATION")
     internal fun certificates(info: PackageInfo): Set<String> {
-        val signatures = if (Build.VERSION.SDK_INT >= 28) info.signingInfo?.apkContentsSigners else info.signatures
+        val signatures = if (Build.VERSION.SDK_INT >= 28)
+            info.signingInfo?.apkContentsSigners?.takeIf { it.isNotEmpty() } ?: info.signatures
+        else info.signatures
         return signatures.orEmpty().map { sha(it.toByteArray()) }.toSet()
     }
     private fun sha(bytes: ByteArray) = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
@@ -149,7 +152,11 @@ object AppUpdates {
         val hash = digest.digest().joinToString("") { "%02x".format(it) }
         if (hash != release.hash) throw IOException("Le téléchargement a changé ou est incomplet. Relancez la vérification.")
         val apk = context.packageManager.getPackageArchiveInfo(file.absolutePath, signatureFlags()) ?: throw IOException("APK invalide.")
-        if (apk.packageName != context.packageName || apk.versionName != release.version || PackageInfoCompat.getLongVersionCode(apk) != release.code || release.code <= installedCode(context) || certificates(apk) != certificates(packageInfo(context)))
-            throw IOException("Cet APK n’est pas une mise à jour compatible.")
+        val installed = packageInfo(context)
+        UpdatePackagePolicy.failure(
+            UpdatePackageIdentity(installed.packageName, installed.versionName, PackageInfoCompat.getLongVersionCode(installed), certificates(installed)),
+            UpdatePackageIdentity(context.packageName, release.version, release.code, release.certificates),
+            UpdatePackageIdentity(apk.packageName, apk.versionName, PackageInfoCompat.getLongVersionCode(apk), certificates(apk)),
+        )?.let { throw IOException(it.message) }
     }
 }

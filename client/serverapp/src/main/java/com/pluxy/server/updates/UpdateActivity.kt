@@ -38,8 +38,13 @@ class UpdateActivity : AppCompatActivity() {
         else { status.text = "Installation non autorisée. Autorisez Pluxy pour continuer."; action.isEnabled = true }
     }
     private val installer = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
-        status.text = "Si l’installation a été annulée, vous pouvez réessayer."
-        action.isEnabled = true
+        if (release?.code?.let { it <= AppUpdates.installedCode(this) } == true) {
+            apk = null
+            present()
+        } else {
+            status.text = "L’installation n’a pas été terminée. Vous pouvez réessayer."
+            action.isEnabled = true
+        }
     }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -104,7 +109,12 @@ class UpdateActivity : AppCompatActivity() {
         if (busy) return
         busy = true; action.isEnabled = false; status.text = "Recherche de la dernière version sur GitHub…"
         lifecycleScope.launch {
-            try { release = AppUpdates.check(this@UpdateActivity); present() }
+            try {
+                val latest = AppUpdates.check(this@UpdateActivity)
+                if (release != latest) apk = null
+                release = latest
+                present()
+            }
             catch (cancelled: CancellationException) { throw cancelled }
             catch (error: Exception) { release = null; status.text = "Impossible de vérifier les mises à jour. ${error.message.orEmpty()}" }
             finally { busy = false; action.isEnabled = true }
@@ -113,7 +123,9 @@ class UpdateActivity : AppCompatActivity() {
     private fun download() {
         if (busy) return
         val info = release ?: return
-        if (apk?.isFile == true) { install(); return }
+        val cached = File(cacheDir, "updates/pluxy-${info.code}.apk")
+        if (apk == cached && cached.isFile) { install(); return }
+        apk = null
         busy = true; action.isEnabled = false; progress.visibility = View.VISIBLE
         lifecycleScope.launch {
             try {
