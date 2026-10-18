@@ -86,6 +86,17 @@ namespace Pluxy {
             } finally { if(File.Exists(path)) File.Delete(path); }
         }
         private static void VerifySkipSegments() {
+            var auto=new AutoSkipPolicy();
+            var opening=new SkipSegment {kind="intro",startMs=10000,endMs=40000};
+            Check(!auto.Target("one",opening,false,true).HasValue && !auto.Target("one",opening,true,false).HasValue,"Désactiver le passage automatique ou mettre en pause conserve l’intro");
+            Check(auto.Target("one",opening,true,true)==40000 && !auto.Target("one",opening,true,true).HasValue,"L’intro est passée une seule fois, même après un retour arrière");
+            Check(auto.Target("one",new SkipSegment {kind="credits",startMs=900000,endMs=950000},true,true)==950000,"Le passage du générique conserve la scène après le générique");
+            Check(auto.Target("two",opening,true,true)==40000,"L’épisode suivant dispose de son propre passage automatique");
+            var skipPrefs=Native.Json.Deserialize<Preferences>("{}");
+            Check(skipPrefs.autoSkipSegments,"Le passage automatique est activé par défaut pour les anciennes préférences");
+            skipPrefs.autoSkipSegments=false; skipPrefs.StoreReader("server","default"); skipPrefs.ApplyReader("server","other");
+            Check(skipPrefs.autoSkipSegments,"Un nouveau profil garde son propre réglage de passage automatique");
+            skipPrefs.ApplyReader("server","default"); Check(!skipPrefs.autoSkipSegments,"Le réglage désactivé est conservé par profil");
             object[] chapters={new Dictionary<string,object>{{"title","Opening"},{"start_ms",10000},{"end_ms",40000}},
                 new Dictionary<string,object>{{"title","Générique de fin"},{"start_ms",900000},{"end_ms",950000}},
                 new Dictionary<string,object>{{"title","Post credits"},{"start_ms",950000},{"end_ms",1000000}}};

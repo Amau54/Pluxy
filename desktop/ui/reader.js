@@ -24,6 +24,7 @@ window.chrome.webview.addEventListener('message', ({data}) => {
     $('fullscreen').title=fullscreen?'Quitter le plein écran · Échap':'Plein écran · F11'; return;
   }
   if (data.eventName === 'status') { $('loading-text').textContent = data.data; return; }
+  if (data.eventName === 'preferencesChanged') { prefs={...prefs,...data.data}; applyPreferences(); return; }
   if (data.eventName === 'music') { updateMusic(data.data); return; }
   if (data.eventName === 'progressUpdated') { if (prefs.mode === 'reader') refreshProgress(data.data?.id).catch(fail); return; }
   const task = pending.get(data.id); if (!task) return;
@@ -74,6 +75,7 @@ function applyPreferences() {
   document.documentElement.dataset.theme = ['coral','ocean','midnight'].includes(prefs.theme) ? prefs.theme : 'coral';
   $('theme').value = prefs.theme || 'coral'; $('audio').value = prefs.audio || 'auto';
   $('player-action-hints').checked = Boolean(prefs.playerActionHints);
+  $('auto-skip-segments').checked = prefs.autoSkipSegments !== false;
   $('player-focus-contrast').checked = Boolean(prefs.playerFocusContrast);
   $('multiple-profiles').checked = Boolean(prefs.multipleProfiles);
   hidden('family-settings',!prefs.multipleProfiles);
@@ -474,6 +476,10 @@ $('multiple-profiles').addEventListener('change',async()=>{
     await load();
   } catch(error) { applyPreferences(); fail(error); }
   finally { $('multiple-profiles').disabled=false; }
+});
+$('auto-skip-segments').addEventListener('change',async () => {
+  try { await call('preferences',{autoSkipSegments:$('auto-skip-segments').checked}); prefs.autoSkipSegments=$('auto-skip-segments').checked; }
+  catch(error) { $('auto-skip-segments').checked=prefs.autoSkipSegments!==false; fail(error); }
 });
 $('player-action-hints').addEventListener('change',async () => {
   try { await call('preferences',{playerActionHints:$('player-action-hints').checked}); prefs.playerActionHints=$('player-action-hints').checked; }

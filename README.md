@@ -6,7 +6,7 @@
 
 Vos films, séries, photos et musique sur la TV.
 
-**Android 1.7.30 · Windows 1.8.22**
+**Android 1.7.31 · Windows 1.8.23**
 
 [Application Android](https://github.com/Amau54/Pluxy/releases/download/dev-latest/Pluxy-debug.apk)
 · [Application PC](https://github.com/Amau54/Pluxy/releases/download/pc-latest/Pluxy-Setup.exe)
@@ -35,6 +35,10 @@ Pendant un déplacement dans la vidéo, un aperçu apparaît lorsque le serveur 
 extraire une image. Les images sont préparées en arrière-plan et mises en cache.
 Avec un ancien serveur ou un serveur Android antérieur à Android 8.1, le temps
 reste affiché sans aperçu. Aucun réencodage du film n'est nécessaire.
+
+Le lecteur peut passer automatiquement les intros et génériques détectés. Activez
+ou désactivez **Passer automatiquement les intros et génériques** dans les réglages
+de lecture ou les options du lecteur. Désactivé, le bouton « Passer » reste disponible.
 
 Pour conserver la vidéo 4K/HDR, choisissez **Mode de lecture → Vidéo originale (4K/HDR)**.
 Le lecteur ne réduit alors pas la résolution et n'accepte aucun réencodage vidéo.

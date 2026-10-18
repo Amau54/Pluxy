@@ -210,6 +210,11 @@ class SettingsActivity : ThemedActivity() {
             "Choisir SmartTube, YouTube ou une autre application installée.")
             .setOnClickListener { anchor -> TrailerPlayer.choosePreference(this, anchor) { render() } }
         val autoNext = PluxyApplication.autoPlayNextEpisode(this)
+        val autoSkip = PluxyApplication.autoSkipSegments(this)
+        localSwitchRow("Passer automatiquement les intros et génériques", autoSkip) {
+            PluxyApplication.setAutoSkipSegments(this, !autoSkip)
+            render()
+        }
         localSwitchRow("Épisode suivant automatique", autoNext) {
             PluxyApplication.setAutoPlayNextEpisode(this, !autoNext)
             render()

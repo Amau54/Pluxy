@@ -15,7 +15,7 @@ using Microsoft.Web.WebView2.WinForms;
 [assembly: System.Reflection.AssemblyDescription("Lecteur et serveur multimédia Pluxy")]
 [assembly: System.Reflection.AssemblyCompany("Pluxy")]
 [assembly: System.Reflection.AssemblyProduct("Pluxy")]
-[assembly: System.Reflection.AssemblyVersion("1.8.22.0")]
+[assembly: System.Reflection.AssemblyVersion("1.8.23.0")]
 
 namespace Pluxy {
     internal static class Program {
@@ -268,7 +268,7 @@ namespace Pluxy {
             } catch(Exception) { if(!quitting) throw; }
             finally { busy=false; UpdateServerControls(); }
         }
-        private object ReaderState() { return new {mode=choosing?"":prefs.mode,server=prefs.server,serverName=prefs.serverName,theme=prefs.theme,audio=prefs.audio,playerActionHints=prefs.playerActionHints,playerFocusContrast=prefs.playerFocusContrast,profile=api.ProfileId,multipleProfiles=prefs.multipleProfiles,busy=busy,fullscreen=fullscreen}; }
+        private object ReaderState() { return new {mode=choosing?"":prefs.mode,server=prefs.server,serverName=prefs.serverName,theme=prefs.theme,audio=prefs.audio,autoSkipSegments=prefs.autoSkipSegments,playerActionHints=prefs.playerActionHints,playerFocusContrast=prefs.playerFocusContrast,profile=api.ProfileId,multipleProfiles=prefs.multipleProfiles,busy=busy,fullscreen=fullscreen}; }
         private async Task Message(CoreWebView2WebMessageReceivedEventArgs message) {
             Uri source; if(!Uri.TryCreate(message.Source,UriKind.Absolute,out source)) return;
             bool own=source.GetLeftPart(UriPartial.Authority)==Origin.TrimEnd('/');
@@ -318,6 +318,7 @@ namespace Pluxy {
                     string theme=Native.Text(args,"theme",prefs.theme),audio=Native.Text(args,"audio",prefs.audio);
                     if(!new[]{"coral","ocean","midnight"}.Contains(theme) || !new[]{"auto","passthrough","compatible"}.Contains(audio)) throw new ArgumentException("Réglage inconnu.");
                     prefs.theme=theme; prefs.audio=audio;
+                    if(args.ContainsKey("autoSkipSegments") && args["autoSkipSegments"] is bool) prefs.autoSkipSegments=(bool)args["autoSkipSegments"];
                     if(args.ContainsKey("playerActionHints") && args["playerActionHints"] is bool) prefs.playerActionHints=(bool)args["playerActionHints"];
                     if(args.ContainsKey("playerFocusContrast") && args["playerFocusContrast"] is bool) prefs.playerFocusContrast=(bool)args["playerFocusContrast"];
                     prefs.StoreReader(api.Server,api.ProfileId); prefs.Save(); result=true;
@@ -373,6 +374,7 @@ namespace Pluxy {
                     object[] queue=null;
                     if(Native.Text(item,"kind")=="series") queue=await api.Group(itemId,"series");
                     var player=new PlayerWindow(api,itemId,MediaPresentation.PlaybackTitle(item),api.Server+"/stream/direct/"+LibraryClient.ItemPath(itemId),prefs.audio,start,subtitles,queue,item);
+                    player.AutoSkipChanged+=value=> { prefs.autoSkipSegments=value; prefs.StoreReader(api.Server,api.ProfileId); Event("preferencesChanged",ReaderState()); };
                     players.Add(player); player.FormClosed+=(s,e)=> { players.Remove(player); player.ProgressIds.Add(player.MediaId); foreach(var savedId in player.ProgressIds) Event("progressUpdated",new { id=savedId }); }; player.Show(this); result=true; }
                 }
                 else result=await api.Api(method,args);

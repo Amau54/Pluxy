@@ -47,14 +47,15 @@ class AutomaticSegments(private val context: Context, private val library: Media
     }
     fun request(item: MediaEntry): JSONArray {
         val cache = read(item)
-        if (cache?.has("segments") == true && cache.optString("peers") == revision(item)) return cache.getJSONArray("segments")
-        if (!closed && item.kind in setOf("series", "movie", "clip") && item.durationSeconds >= 180 && item.durationSeconds.isFinite()) synchronized(pending) {
+        val known = if (cache != null && cache.optString("peers") == revision(item)) cache.optJSONArray("segments") ?: JSONArray() else JSONArray()
+        if (cache?.has("segments") == true && cache.optString("peers") == revision(item) && cache.optBoolean("complete", true)) return known
+        if (!closed && item.kind in setOf("series", "movie", "clip", "video") && item.durationSeconds >= 180 && item.durationSeconds.isFinite()) synchronized(pending) {
             if (pending.size < 4 && pending.add(item.id)) worker.execute {
                 try { analyze(item) } catch (_: Exception) { /* Optional analysis never blocks playback. */ }
                 finally { synchronized(pending) { pending.remove(item.id) } }
             }
         }
-        return JSONArray()
+        return known
     }
     private fun audio(item: MediaEntry): IntArray {
         read(item)?.optJSONArray("audio")?.takeIf { it.length() > 0 }?.let { values -> return IntArray(values.length()) { values.getInt(it) } }
@@ -133,11 +134,16 @@ class AutomaticSegments(private val context: Context, private val library: Media
         for (peer in peers) {
             if (closed) return
             val match = runCatching { SegmentSignals.repeatedIntro(own, audio(peer)) }.getOrNull()
-            if (match != null) { add("Opening", match.first * 1000L, match.second * 1000L); break }
+            if (match != null) {
+                add("Opening", match.first * 1000L, match.second * 1000L)
+                if (!closed) write(item, JSONObject().put("audio", JSONArray(own.toList())).put("segments", segments)
+                    .put("peers", revision(item)).put("complete", false))
+                break
+            }
         }
         runCatching { credits(item) }.onFailure { debug("Analyse visuelle indisponible : ${it.javaClass.simpleName}") }
             .getOrNull()?.let { add("End credits", it.first, it.second) }
-        if (!closed) write(item, JSONObject().put("audio", JSONArray(own.toList())).put("segments", segments).put("peers", revision(item)))
+        if (!closed) write(item, JSONObject().put("audio", JSONArray(own.toList())).put("segments", segments).put("peers", revision(item)).put("complete", true))
     }
     fun close() { closed = true; worker.shutdownNow() }
 }

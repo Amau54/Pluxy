@@ -693,7 +693,7 @@ class PlayerActivity : ThemedActivity() {
         seekTargetView= findViewById(R.id.seekTarget)
         setupModernControls()
         findViewById<Button>(R.id.skipSegment).setOnClickListener {
-            activeSkipSegment?.let { goToAbsolute(it.endMs); updateSkipSegment() }
+            activeSkipSegment?.let { autoSkipPolicy.mark(item.id, it.kind); goToAbsolute(it.endMs); updateSkipSegment() }
         }
         loadSkipChapters()
         playerView.resizeMode = aspectModes[aspectIdx].first
@@ -1356,6 +1356,7 @@ class PlayerActivity : ThemedActivity() {
     private var skipChapters: List<MediaChapter> = emptyList()
     private var skipChaptersJob: Job? = null
     private var activeSkipSegment: SkipSegment? = null
+    private val autoSkipPolicy = AutoSkipPolicy()
 
     private fun loadSkipChapters(server: String = api.baseUrl) {
         skipChaptersJob?.cancel()
@@ -1366,13 +1367,19 @@ class PlayerActivity : ThemedActivity() {
         skipChaptersJob = lifecycleScope.launch {
             val chapterApi = PluxyApi(server)
             try {
-                repeat(24) {
-                    val chapters = kotlinx.coroutines.withTimeout(10_000) { chapterApi.chapters(ownerId) }
+                repeat(AutoSkipPolicy.PROBE_ATTEMPTS) { attempt ->
+                    val chapters = try {
+                        kotlinx.coroutines.withTimeout(10_000) { chapterApi.chapters(ownerId) }
+                    } catch (_: kotlinx.coroutines.TimeoutCancellationException) { null }
+                    catch (e: CancellationException) { throw e }
+                    catch (_: Exception) { null }
                     if (item.id != ownerId || api.baseUrl != server) return@launch
-                    skipChapters = chapters
-                    updateSkipSegment()
-                    if (SkipSegments.detected(chapters, skipDurationMs).map { it.kind }.toSet().size == 2) return@launch
-                    kotlinx.coroutines.delay(6_000)
+                    if (chapters != null) {
+                        skipChapters = chapters
+                        updateSkipSegment()
+                        if (SkipSegments.detected(chapters, skipDurationMs).map { it.kind }.toSet().size == 2) return@launch
+                    }
+                    kotlinx.coroutines.delay(AutoSkipPolicy.probeDelayMs(attempt))
                 }
             } catch (e: kotlinx.coroutines.TimeoutCancellationException) { /* Chapitres facultatifs. */ }
             catch (e: CancellationException) { throw e }
@@ -1388,6 +1395,20 @@ class PlayerActivity : ThemedActivity() {
         activeSkipSegment = if (player?.playbackState == Player.STATE_READY && !terminalPlaybackError &&
             !isSeeking && !timelineScrubbing && !playerChoiceMenuShowing && nextEpisodeDialog?.isShowing != true)
             SkipSegments.active(segments, reliablePositionMs()) else null
+        val target = autoSkipPolicy.target(item.id, activeSkipSegment,
+            PluxyApplication.autoSkipSegments(this), player?.isPlaying == true && pendingSeekTargetMs == null)
+        if (target != null) {
+            val label = if (activeSkipSegment?.kind == "intro") "Intro passée" else "Générique passé"
+            activeSkipSegment = null
+            if (button.hasFocus()) {
+                if (controlsOverlay.visibility == View.VISIBLE) playPauseButton.requestFocus() else playerView.requestFocus()
+            }
+            button.visibility = View.GONE
+            timeline.nextFocusUpId = R.id.btnExitPlayback
+            goToAbsolute(target)
+            Toast.makeText(this, label, Toast.LENGTH_SHORT).show()
+            return
+        }
         val visible = activeSkipSegment != null
         if (!visible && button.hasFocus()) {
             if (controlsOverlay.visibility == View.VISIBLE) playPauseButton.requestFocus() else playerView.requestFocus()
@@ -1399,6 +1420,10 @@ class PlayerActivity : ThemedActivity() {
 
     private fun openMenu() {
         val entries = listOf(
+            "Intros et génériques : ${if (PluxyApplication.autoSkipSegments(this)) "activé" else "désactivé"}" to {
+                PluxyApplication.setAutoSkipSegments(this, !PluxyApplication.autoSkipSegments(this))
+                Toast.makeText(this, if (PluxyApplication.autoSkipSegments(this)) "Passage automatique activé" else "Passage automatique désactivé", Toast.LENGTH_SHORT).show()
+            },
             "Vitesse" to { pickSpeed() },
             "Format de l’image" to { pickAspect() },
             "Mode de lecture" to { pickPlaybackStrategy() },
@@ -1526,6 +1551,9 @@ class PlayerActivity : ThemedActivity() {
         super.onStart()
         activityStarted = true
         if (!::item.isInitialized) return
+        if (skipChaptersJob?.isActive != true && SkipSegments.detected(skipChapters, skipDurationMs).map { it.kind }.toSet().size < 2) {
+            loadSkipChapters()
+        }
         mediaSession?.isActive = true
         // Récupération du son si la sortie audio change (changement de source HDMI, ARC).
         runCatching { audioManager.registerAudioDeviceCallback(audioDeviceCallback, handler) }
@@ -1545,6 +1573,7 @@ class PlayerActivity : ThemedActivity() {
 
     override fun onStop() {
         activityStarted = false
+        skipChaptersJob?.cancel()
         dismissSeekOverlay()
         cancelSeekRebuild()
         playerChoiceMenuGeneration++

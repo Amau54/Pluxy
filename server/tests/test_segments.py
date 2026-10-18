@@ -69,3 +69,27 @@ def test_missing_media_and_changed_season_invalidate_cached_analysis(tmp_path):
         assert analyzer.request(item) == []
     finally:
         analyzer.close()
+
+
+def test_intro_is_available_while_credits_are_still_being_analyzed(tmp_path, monkeypatch):
+    source = tmp_path / "episode.mkv"
+    source.write_bytes(b"episode")
+    item = SimpleNamespace(id="one", path=str(source), kind="series", duration=1000)
+    analyzer = SegmentAnalyzer(SimpleNamespace(ffmpeg=SimpleNamespace(ffmpeg_path="unused")), SimpleNamespace(all=lambda: []), tmp_path)
+    opening = {"start_ms": 30000, "end_ms": 69000, "title": "Opening"}
+    try:
+        monkeypatch.setattr(analyzer, "revision", lambda _: "season")
+        monkeypatch.setattr(analyzer, "peers", lambda _: [item])
+        monkeypatch.setattr(analyzer, "audio", lambda _: [1, 2])
+        monkeypatch.setattr("pluxy.segments.repeated_intro", lambda *_: (30, 69))
+        def credits(*args, **kwargs):
+            assert analyzer.cached(item)["complete"] is False
+            assert analyzer.request(item) == [opening]
+            return b""
+        monkeypatch.setattr(analyzer, "extract", credits)
+        analyzer.pending.add(item.id)
+        analyzer.analyze(item)
+        assert analyzer.cached(item)["complete"] is True
+        assert analyzer.request(item) == [opening]
+    finally:
+        analyzer.close()

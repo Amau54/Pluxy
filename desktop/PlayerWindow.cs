@@ -15,6 +15,9 @@ namespace Pluxy {
         private Task skipAnalysis;
         private object[] skipChapters=new object[0];
         private SkipSegment activeSkip;
+        private readonly AutoSkipPolicy autoSkipPolicy=new AutoSkipPolicy();
+        private bool autoSkipSegments;
+        private bool optionsShowing;
         private Button skipButton,optionsButton;
         private readonly LibraryClient api;
         private string server,id,url;
@@ -24,6 +27,7 @@ namespace Pluxy {
         private double streamOffset;
         private bool conversionBusy;
         public string MediaId { get { return id; } }
+        public event Action<bool> AutoSkipChanged;
         public readonly HashSet<string> ProgressIds = new HashSet<string>();
         private readonly string audio;
         private readonly string profile;
@@ -87,7 +91,9 @@ namespace Pluxy {
             this.media=media ?? new Dictionary<string,object>{{"id",id}};
             this.api=api; profile=api.ProfileId; this.id=id; server=api.Server; this.url=url; this.audio=audio; this.start=start;
             subtitleTracks=subtitles; position=start; autoplay=Preferences.Load().autoplay;
+            autoSkipSegments=Preferences.Load().autoSkipSegments;
             hintsEnabled=Preferences.Load().playerActionHints;
+            Activated+=(s,e)=> { if(!closing) autoSkipSegments=Preferences.Load().autoSkipSegments; };
             episodes=(queue ?? new object[0]).OrderBy(e=>Native.Number(Native.Object(e),"season")).ThenBy(e=>Native.Number(Native.Object(e),"episode")).ThenBy(e=>Native.Text(Native.Object(e),"id")).ToList();
             Text=title+" · Pluxy"; Size=new Size(1180,760); MinimumSize=new Size(700,440); StartPosition=FormStartPosition.CenterParent;
             BackColor=Color.FromArgb(12,16,22); AutoScaleMode=AutoScaleMode.None; Font=new Font("Segoe UI",10); KeyPreview=true;
@@ -114,7 +120,7 @@ namespace Pluxy {
             fullscreenButton=ControlButton("⛶","Plein écran · F11",(s,e)=>ToggleFull()); buttons.Controls.Add(fullscreenButton);
             optionsButton=ControlButton("Options","Options du lecteur",(s,e)=>ShowSkipMenu()); buttons.Controls.Add(optionsButton);
             skipButton=new PlayerButton {Text="Passer l’intro",Accent=accent,Size=new Size(Scale(192),Scale(40)),Visible=false,Font=new Font("Segoe UI",9),AccessibleName="Passer l’intro"};
-            skipButton.Click+=async(s,e)=>{ var target=activeSkip; if(target!=null) { await Run("seek",target.endMs/1000.0,"absolute+exact"); UpdateSkip(); } };
+            skipButton.Click+=async(s,e)=>{ var target=activeSkip; if(target!=null) { autoSkipPolicy.Mark(id,target.kind); await Run("seek",target.endMs/1000.0,"absolute+exact"); UpdateSkip(); } };
             Controls.Add(skipButton);
             volume=new PlayerSlider { Maximum=100,Value=100,Width=Scale(88),Height=Scale(40),Accent=accent,BackColor=controls.BackColor,AccessibleName="Volume",Margin=new Padding(Scale(12),Scale(3),0,0) };
             volume.MouseUp+=async(s,e)=>await Run("set_property","volume",volume.Value); volume.KeyUp+=async(s,e)=>await Run("set_property","volume",volume.Value); buttons.Controls.Add(volume);
@@ -284,6 +290,11 @@ namespace Pluxy {
                 duration=conversionQuality=="direct"?Convert.ToDouble(dur,CultureInfo.InvariantCulture):Native.Number(media,"duration",0);
                 if(duration<=0) duration=streamOffset+Convert.ToDouble(dur,CultureInfo.InvariantCulture);
                 UpdateSkip();
+                var skipTarget=autoSkipPolicy.Target(id,activeSkip,autoSkipSegments,!wasPaused && !buffering && !conversionBusy);
+                if(skipTarget.HasValue) {
+                    await Run("seek",skipTarget.Value/1000.0,"absolute+exact");
+                    return;
+                }
                 int episodeIndex=episodes.FindIndex(e=>Native.Text(Native.Object(e),"id")==id);
                 nextButton.Enabled=episodeIndex>=0 && episodeIndex+1<episodes.Count;
                 bool ended=Convert.ToBoolean(await mpv.Command("get_property","eof-reached"));
@@ -362,19 +373,23 @@ namespace Pluxy {
         }
         private async Task LoadAutomaticSegments(string ownerId,string ownerServer,object[] nativeChapters,System.Threading.CancellationToken token) {
             try {
-                for(int attempt=0;attempt<24;attempt++) {
+                for(int attempt=0;attempt<80;attempt++) {
                     token.ThrowIfCancellationRequested();
-                    var chapters=await api.Chapters(ownerServer,ownerId);
+                    object[] chapters=null;
+                    try { chapters=await api.Chapters(ownerServer,ownerId); }
+                    catch(System.IO.IOException error) { Native.Log(error); }
                     if(token.IsCancellationRequested || closing || id!=ownerId || server!=ownerServer) return;
-                    skipChapters=nativeChapters.Concat(chapters).ToArray();
-                    UpdateSkip();
-                    if(SkipSegments.Detect(skipChapters,(long)(duration*1000)).Select(segment=>segment.kind).Distinct().Count()==2) return;
-                    await Task.Delay(6000,token);
+                    if(chapters!=null) {
+                        skipChapters=nativeChapters.Concat(chapters).ToArray();
+                        UpdateSkip();
+                        if(SkipSegments.Detect(skipChapters,(long)(duration*1000)).Select(segment=>segment.kind).Distinct().Count()==2) return;
+                    }
+                    await Task.Delay(AutoSkipPolicy.ProbeDelay(attempt),token);
                 }
             } catch(OperationCanceledException) {} catch(Exception error) { Native.Log(error); }
         }
         private void UpdateSkip() {
-            activeSkip=ready && !closing && !recovering && !dragging && seekDirection==0 && !nextPrompt.Visible?
+            activeSkip=ready && !closing && !recovering && !dragging && seekDirection==0 && !nextPrompt.Visible && !optionsShowing?
                 SkipSegments.Active(SkipSegments.Detect(skipChapters,(long)(duration*1000)),(long)(position*1000)):null;
             if(activeSkip==null && skipButton.Focused) pause.Focus();
             skipButton.Visible=activeSkip!=null;
@@ -400,7 +415,8 @@ namespace Pluxy {
             if(!ready || closing) return;
             ShowControls();
             var menu=new PlayerMenu(accent);
-            menu.Closed+=(s,e)=>{ menu.Dispose(); if(!closing) ShowControls(); };
+            optionsShowing=true;
+            menu.Closed+=(s,e)=>{ optionsShowing=false; menu.Dispose(); if(!closing) ShowControls(); };
             menu.Items.Add(new ToolStripMenuItem("Qualité vidéo") { Enabled=false });
             var direct=new ToolStripMenuItem("Originale · aucune conversion") { Checked=conversionQuality=="direct" };
             direct.Click+=async(s,e)=>await ChangeConversion("direct",position,true); menu.Items.Add(direct);
@@ -420,7 +436,14 @@ namespace Pluxy {
             var zoom=new ToolStripMenuItem("Zoom · remplir l’écran");
             zoom.Click+=async(s,e)=>{ await Run("set_property","keepaspect",true); await Run("set_property","panscan",1); }; menu.Items.Add(zoom);
             menu.Items.Add(new ToolStripSeparator());
-            menu.Items.Add(new ToolStripMenuItem("Intros et génériques : détection automatique") { Enabled=false });
+            var skip=new ToolStripMenuItem("Passer automatiquement les intros et génériques") { Checked=autoSkipSegments,CheckOnClick=true };
+            skip.CheckedChanged+=(s,e)=> {
+                autoSkipSegments=skip.Checked;
+                var preferences=Preferences.Load(); preferences.autoSkipSegments=autoSkipSegments;
+                preferences.StoreReader(server,profile); preferences.Save();
+                if(AutoSkipChanged!=null) AutoSkipChanged(autoSkipSegments);
+            };
+            menu.Items.Add(skip);
             menu.Show(optionsButton,new Point(0,0),ToolStripDropDownDirection.AboveRight);
         }
         private void ShowNextPrompt(int index) {

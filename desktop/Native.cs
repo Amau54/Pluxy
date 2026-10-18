@@ -62,6 +62,7 @@ namespace Pluxy {
         public string theme = "coral";
         public string audio = "auto";
         public bool autoplay = true;
+        public bool autoSkipSegments = true;
         public bool playerActionHints = false;
         public bool playerFocusContrast = false;
         public bool multipleProfiles = false;
@@ -69,12 +70,12 @@ namespace Pluxy {
         public string ProfileFor(string address) { string value; return multipleProfiles && profiles!=null && profiles.TryGetValue(address,out value)?value:"default"; }
         public void StoreReader(string address,string profile) {
             if(readers==null) readers=new Dictionary<string,ReaderPreferences>();
-            readers[address+"\n"+profile]=new ReaderPreferences { audio=audio,theme=theme,autoplay=autoplay,hints=playerActionHints,contrast=playerFocusContrast };
+            readers[address+"\n"+profile]=new ReaderPreferences { audio=audio,theme=theme,autoplay=autoplay,skipSegments=autoSkipSegments,hints=playerActionHints,contrast=playerFocusContrast };
         }
         public void ApplyReader(string address,string profile) {
             ReaderPreferences value;
             if(readers==null || !readers.TryGetValue(address+"\n"+profile,out value)) value=new ReaderPreferences();
-            audio=value.audio; theme=value.theme; autoplay=value.autoplay; playerActionHints=value.hints; playerFocusContrast=value.contrast;
+            audio=value.audio; theme=value.theme; autoplay=value.autoplay; autoSkipSegments=value.skipSegments; playerActionHints=value.hints; playerFocusContrast=value.contrast;
         }
         public static Preferences Load() {
             try { return Native.Json.Deserialize<Preferences>(File.ReadAllText(Path.Combine(Native.Data,"desktop.json"))) ?? new Preferences(); }
@@ -89,6 +90,6 @@ namespace Pluxy {
     }
     internal sealed class ReaderPreferences {
         public string audio="auto",theme="coral";
-        public bool autoplay=true,hints=false,contrast=false;
+        public bool autoplay=true,skipSegments=true,hints=false,contrast=false;
     }
 }

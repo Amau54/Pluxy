@@ -154,15 +154,16 @@ class SegmentAnalyzer:
         except OSError:
             return []
         cached = self.cached(item)
-        if cached is not None and "segments" in cached and cached.get("peers") == revision:
-            return cached["segments"]
-        if item.kind not in {"movie", "series", "clip"} or not math.isfinite(item.duration) or item.duration < 180 or self.closed.is_set():
-            return []
+        known = cached.get("segments", []) if cached and cached.get("peers") == revision else []
+        if cached is not None and "segments" in cached and cached.get("peers") == revision and cached.get("complete", True):
+            return known
+        if item.kind not in {"movie", "series", "clip", "video"} or not math.isfinite(item.duration) or item.duration < 180 or self.closed.is_set():
+            return known
         with self.lock:
             if item.id not in self.pending and len(self.pending) < 4:
                 self.pending.add(item.id)
                 self.pool.submit(self.analyze, item)
-        return []
+        return known
 
     def extract(self, item, start: float, seconds: float, video: bool = False) -> bytes:
         args = [self.cfg.ffmpeg.ffmpeg_path, "-v", "error", "-threads", "1", "-ss", str(start), "-i", item.path,
@@ -221,6 +222,8 @@ class SegmentAnalyzer:
                             continue
                         if match:
                             segments.append({"start_ms": match[0] * 1000, "end_ms": match[1] * 1000, "title": "Opening"})
+                            if not self.closed.is_set() and self.key(item) == key:
+                                self.write(item, {"audio": own, "segments": segments, "peers": self.revision(item), "complete": False})
                             break
             if not self.closed.is_set():
                 start = max(item.duration * .65, item.duration - 600)
@@ -230,7 +233,7 @@ class SegmentAnalyzer:
                     segments.append({"start_ms": int((start + interval[0]) * 1000),
                                      "end_ms": int((start + interval[1]) * 1000), "title": "End credits"})
             if not self.closed.is_set() and self.key(item) == key:
-                self.write(item, {"audio": own, "segments": segments, "peers": self.revision(item)})
+                self.write(item, {"audio": own, "segments": segments, "peers": self.revision(item), "complete": True})
         except (OSError, ValueError, OverflowError, subprocess.SubprocessError):
             pass
         finally:
