@@ -12,6 +12,7 @@ import threading
 import time
 
 from .probe import NO_WINDOW
+from .openings import opening_frame, opening_interval
 
 RATE = 8000
 COEFFICIENTS = tuple(2 * math.cos(2 * math.pi * (90 * (3000 / 90) ** (i / 31)) / RATE) for i in range(32))
@@ -102,7 +103,7 @@ def credit_interval(flags: list[bool], step: int = 2) -> tuple[int, int] | None:
 class SegmentAnalyzer:
     def __init__(self, cfg, library, directory: Path):
         self.cfg, self.library = cfg, library
-        self.directory = directory / "segments-v1"
+        self.directory = directory / "segments-v2"
         self.directory.mkdir(parents=True, exist_ok=True)
         self.lock = threading.Lock()
         self.pending: set[str] = set()
@@ -128,7 +129,7 @@ class SegmentAnalyzer:
 
     def key(self, item) -> str:
         stat = Path(item.path).stat()
-        value = f"v1:{item.id}:{item.path}:{stat.st_size}:{stat.st_mtime_ns}:{self.cfg.ffmpeg.ffmpeg_path}"
+        value = f"v2:{item.id}:{item.path}:{stat.st_size}:{stat.st_mtime_ns}:{self.cfg.ffmpeg.ffmpeg_path}"
         return hashlib.sha256(value.encode()).hexdigest()
 
     def cached(self, item) -> dict | None:
@@ -225,6 +226,13 @@ class SegmentAnalyzer:
                             if not self.closed.is_set() and self.key(item) == key:
                                 self.write(item, {"audio": own, "segments": segments, "peers": self.revision(item), "complete": False})
                             break
+            if not segments and item.kind in {"movie", "series"} and not self.closed.is_set():
+                raw = self.extract(item, 0, min(300, item.duration * .4), video=True)
+                interval = opening_interval([opening_frame(raw[i:i + 9216]) for i in range(0, len(raw), 9216)])
+                if interval:
+                    segments.append({"start_ms": interval[0] * 1000, "end_ms": interval[1] * 1000, "title": "Opening"})
+                    if not self.closed.is_set() and self.key(item) == key:
+                        self.write(item, {"audio": own, "segments": segments, "peers": self.revision(item), "complete": False})
             if not self.closed.is_set():
                 start = max(item.duration * .65, item.duration - 600)
                 raw = self.extract(item, start, item.duration - start, video=True)

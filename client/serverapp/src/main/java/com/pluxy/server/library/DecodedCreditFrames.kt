@@ -12,7 +12,14 @@ import java.util.concurrent.TimeUnit
 
 /** Reads actual presentation timestamps; Matroska thumbnails may return an older keyframe. */
 internal object DecodedCreditFrames {
-    fun read(context: Context, item: MediaEntry, start: Double, stopped: () -> Boolean): List<Boolean>? {
+    fun read(context: Context, item: MediaEntry, start: Double, stopped: () -> Boolean): List<Boolean>? =
+        decode(context, item, start, item.durationSeconds, stopped, false) { SegmentSignals.creditFrame(it) }
+
+    fun opening(context: Context, item: MediaEntry, stopped: () -> Boolean): List<OpeningSignals.Frame>? =
+        decode(context, item, 0.0, minOf(300.0, item.durationSeconds * .4), stopped, OpeningSignals.Frame(), OpeningSignals::frame)
+
+    private fun <T> decode(context: Context, item: MediaEntry, start: Double, end: Double,
+        stopped: () -> Boolean, missing: T, classify: (IntArray) -> T): List<T>? {
         val extractor = MediaExtractor()
         var codec: MediaCodec? = null
         try {
@@ -25,8 +32,7 @@ internal object DecodedCreditFrames {
             // Preserve hardware decoder capacity for active playback.
             val decoder = MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos.firstOrNull { info ->
                 !info.isEncoder && info.supportedTypes.any { it.equals(mime, true) } &&
-                    (if (Build.VERSION.SDK_INT >= 29) info.isSoftwareOnly else
-                        info.name.startsWith("OMX.google.") || info.name.startsWith("c2.android.")) &&
+                    SegmentDecoderPolicy.software(info.name, Build.VERSION.SDK_INT >= 29 && info.isSoftwareOnly) &&
                     MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible in info.getCapabilitiesForType(mime).colorFormats
             } ?: return null
             extractor.selectTrack(track)
@@ -35,9 +41,9 @@ internal object DecodedCreditFrames {
             codec = MediaCodec.createByCodecName(decoder.name)
             codec.configure(format, null, null, 0)
             codec.start()
-            val flags = mutableListOf<Boolean>()
+            val flags = mutableListOf<T>()
             var nextTime = (start * 1_000_000).toLong()
-            val endTime = (item.durationSeconds * 1_000_000).toLong()
+            val endTime = (end * 1_000_000).toLong()
             var inputEnded = false
             var outputEnded = false
             val info = MediaCodec.BufferInfo()
@@ -48,10 +54,10 @@ internal object DecodedCreditFrames {
                     if (index >= 0) {
                         val input = codec.getInputBuffer(index)!!
                         val size = extractor.readSampleData(input, 0)
-                        val end = size < 0
-                        codec.queueInputBuffer(index, 0, if (end) 0 else size, if (end) 0 else extractor.sampleTime,
-                            if (end) MediaCodec.BUFFER_FLAG_END_OF_STREAM else 0)
-                        if (end) inputEnded = true else extractor.advance()
+                        val inputFinished = size < 0 || extractor.sampleTime >= endTime
+                        codec.queueInputBuffer(index, 0, if (inputFinished) 0 else size, if (inputFinished) 0 else extractor.sampleTime,
+                            if (inputFinished) MediaCodec.BUFFER_FLAG_END_OF_STREAM else 0)
+                        if (inputFinished) inputEnded = true else extractor.advance()
                     }
                 }
                 val index = codec.dequeueOutputBuffer(info, 1000)
@@ -60,11 +66,11 @@ internal object DecodedCreditFrames {
                         if (info.presentationTimeUs >= nextTime && info.size > 0) {
                             // Missing samples remain false; they cannot create a confident interval.
                             while (info.presentationTimeUs >= nextTime + 2_000_000 && nextTime < endTime) {
-                                flags += false; nextTime += 2_000_000
+                                flags += missing; nextTime += 2_000_000
                             }
                             if (nextTime < endTime) {
                                 val frame = codec.getOutputImage(index)
-                                if (frame == null) flags += false else try {
+                                if (frame == null) flags += missing else try {
                                     if (frame.format != android.graphics.ImageFormat.YUV_420_888) return null
                                     val crop = frame.cropRect
                                     val plane = frame.planes[0]
@@ -75,7 +81,7 @@ internal object DecodedCreditFrames {
                                         val py = crop.top + ((y + 0.5) * crop.height() / 72).toInt().coerceAtMost(crop.height() - 1)
                                         pixels[y * 128 + x] = plane.buffer.get(origin + py * plane.rowStride + px * plane.pixelStride).toInt() and 255
                                     }
-                                    flags += SegmentSignals.creditFrame(pixels)
+                                    flags += classify(pixels)
                                 } finally { frame.close() }
                                 nextTime += 2_000_000
                             }

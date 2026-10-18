@@ -21,12 +21,12 @@ class AutomaticSegments(private val context: Context, private val library: Media
         if (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0)
             android.util.Log.d("PluxySegments", message)
     }
-    private val directory = File(context.filesDir, "segments-v1").apply { mkdirs() }
+    private val directory = File(context.filesDir, "segments-v2").apply { mkdirs() }
     private val pending = mutableSetOf<String>()
     @Volatile private var closed = false
     private val worker = Executors.newSingleThreadExecutor { task -> Thread(task, "pluxy-segments").apply { isDaemon = true; priority = Thread.MIN_PRIORITY } }
     private fun path(item: MediaEntry): File {
-        val key = "v1:${item.id}:${item.uri}:${item.size}:${item.modifiedAtMs}:${item.fingerprint}"
+        val key = "v2:${item.id}:${item.uri}:${item.size}:${item.modifiedAtMs}:${item.fingerprint}"
         val hash = MessageDigest.getInstance("SHA-256").digest(key.toByteArray()).joinToString("") { "%02x".format(it) }
         return File(directory, "$hash.json")
     }
@@ -140,6 +140,15 @@ class AutomaticSegments(private val context: Context, private val library: Media
                     .put("peers", revision(item)).put("complete", false))
                 break
             }
+        }
+        if (segments.length() == 0 && item.kind in setOf("movie", "series") && !closed && Build.VERSION.SDK_INT >= 27) {
+            runCatching { DecodedCreditFrames.opening(context, item) { closed }?.let { OpeningSignals.interval(it) } }
+                .onFailure { debug("Analyse du début indisponible : ${it.javaClass.simpleName}") }
+                .getOrNull()?.let {
+                    add("Opening", it.first * 1000L, it.second * 1000L)
+                    if (!closed) write(item, JSONObject().put("audio", JSONArray(own.toList())).put("segments", segments)
+                        .put("peers", revision(item)).put("complete", false))
+                }
         }
         runCatching { credits(item) }.onFailure { debug("Analyse visuelle indisponible : ${it.javaClass.simpleName}") }
             .getOrNull()?.let { add("End credits", it.first, it.second) }
