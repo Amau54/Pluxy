@@ -11,4 +11,4 @@ httpx==0.28.1
 # Mini-app de la barre des tâches Windows (icône + menu). Optionnel : la tray
 # s'auto-installe ces paquets si absents.
 pystray==0.19.5
-Pillow==12.3.0
+Pillow==13.0.0
