@@ -55,6 +55,7 @@ class LibraryNavigationTest {
         PluxyApplication.setLibraryTab(context, "movie")
         LibraryPreferences.saveQuery(context, TvLibraryContent.Query("movie", sort = "title"))
         LibraryPreferences.saveQuery(context, TvLibraryContent.Query("series", sort = "title"))
+        LibraryPreferences.saveQuery(context, TvLibraryContent.Query("home", sort = "title"))
         val activity = instrumentation.startActivitySync(Intent(context, MainActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) as MainActivity
         try {
@@ -111,6 +112,25 @@ class LibraryNavigationTest {
                 val scope = MainActivity::class.java.getDeclaredField("searchScope").apply { isAccessible = true }.get(activity)
                 scope == "series" && LibraryPreferences.query(context, "series").watchedFilter == "unwatched" &&
                     activity.findViewById<TextView>(R.id.empty).let { it.visibility == View.VISIBLE && it.text.contains("Aucun") }
+            }
+            instrumentation.runOnMainSync {
+                activity.findViewById<View>(R.id.tabHome).performClick()
+                activity.findViewById<View>(R.id.search).performClick()
+            }
+            instrumentation.waitForIdleSync()
+            click("Lecture · Tous")
+            click("Non vus")
+            val homeInput = nodes(instrumentation.uiAutomation.rootInActiveWindow)
+                .first { it.className?.toString()?.endsWith("EditText") == true }
+            homeInput.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, Bundle().apply {
+                putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, "Film")
+            })
+            click("Rechercher")
+            await("Home search must retain its combined filters") {
+                val query = MainActivity::class.java.getDeclaredMethod("currentQuery").apply { isAccessible = true }
+                    .invoke(activity) as TvLibraryContent.Query
+                query.searchScope == "all" && query.watchedFilter == "unwatched" &&
+                    query.search == "Film" && activity.findViewById<View>(R.id.empty).visibility == View.GONE
             }
         } finally { instrumentation.runOnMainSync { activity.finish() } }
     }

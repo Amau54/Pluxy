@@ -149,7 +149,7 @@ class MainActivity : ThemedActivity() {
             LibraryPreferences.collections(this).firstOrNull { it.id == id }
         }
         searchQuery = savedInstanceState?.getString(STATE_SEARCH_QUERY).orEmpty()
-        searchScope = savedInstanceState?.getString(STATE_SEARCH_SCOPE).orEmpty().ifBlank { "all" }
+        searchScope = selectedKind.takeIf { it in setOf("movie", "series", "clip", "photo", "audio") } ?: "all"
         restoreSavedFocus(savedInstanceState)
         lanImages = LanMediaImages.loader(this)
 
@@ -732,7 +732,7 @@ class MainActivity : ThemedActivity() {
     }
 
     private fun currentQuery(): TvLibraryContent.Query = LibraryPreferences.query(
-        this, if (searchQuery.isNotBlank()) searchScope else selectedKind,
+        this, selectedKind,
     ).copy(
         destination = selectedKind, search = searchQuery, searchScope = searchScope,
         photoFolder = if (selectedKind == "photo") PluxyApplication.photoFolder(this) else "",
@@ -1552,7 +1552,7 @@ class MainActivity : ThemedActivity() {
         facets, ::saveBrowserQuery)
 
     private fun saveBrowserQuery(query: TvLibraryContent.Query) {
-        LibraryPreferences.saveQuery(this, if (searchQuery.isNotBlank()) query.copy(destination = searchScope) else query)
+        LibraryPreferences.saveQuery(this, query.copy(destination = selectedKind))
         selectedCollection = null
         focusByDestination.remove(focusStateKey())
         grid.scrollToPosition(0)
