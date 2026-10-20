@@ -4,8 +4,11 @@ import subprocess
 import sys
 import threading
 from types import SimpleNamespace
+from pathlib import Path
 
 import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from pluxy.analysis_budget import AnalysisBudget, WindowsResources
 from pluxy.audio_signals import fingerprints, match
