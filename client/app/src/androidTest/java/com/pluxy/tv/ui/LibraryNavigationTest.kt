@@ -44,10 +44,80 @@ class LibraryNavigationTest {
     private fun nodes(root: AccessibilityNodeInfo?): List<AccessibilityNodeInfo> = if (root == null) emptyList()
         else listOf(root) + (0 until root.childCount).flatMap { nodes(root.getChild(it)) }
     private fun click(text: String) {
-        val node = nodes(instrumentation.uiAutomation.rootInActiveWindow).firstOrNull { it.text?.toString()?.equals(text, ignoreCase = true) == true && it.isClickable }
+        val deadline = System.currentTimeMillis() + 5_000
+        var node: AccessibilityNodeInfo? = null
+        while (node == null && System.currentTimeMillis() < deadline) {
+            node = nodes(instrumentation.uiAutomation.rootInActiveWindow).firstOrNull { it.text?.toString()?.equals(text, ignoreCase = true) == true && it.isClickable }
+            if (node == null) Thread.sleep(50)
+        }
+        if (node == null) capture("tv-library-missing-action.png")
         assertNotNull("Missing action: $text", node)
         assertTrue(node!!.performAction(AccessibilityNodeInfo.ACTION_CLICK))
         instrumentation.waitForIdleSync()
+    }
+    @Test fun railFollowsVisibleDestinationsAfterTheFirstCatalogueLoadAndRefresh() {
+        val server = InstrumentationRegistry.getArguments().getString("library_test_url").orEmpty()
+        assumeTrue("Requires isolated catalogue fixture", server.isNotBlank())
+        PluxyApplication.setServer(context, server, "Test rail")
+        PluxyApplication.setLibraryTab(context, "home")
+        val activity = instrumentation.startActivitySync(Intent(context, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) as MainActivity
+        try {
+            await("All destinations must load") { activity.findViewById<View>(R.id.tabAudio).isShown }
+            val order = listOf(R.id.tabHome, R.id.tabMovies, R.id.tabSeries, R.id.tabVideos, R.id.tabPhotos, R.id.tabAudio, R.id.settings)
+            repeat(2) {
+                instrumentation.runOnMainSync { activity.findViewById<View>(R.id.tabHome).requestFocusFromTouch() }
+                for (id in order.drop(1)) {
+                    instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_DOWN)
+                    await("Down must follow the visible menu, target=$id") { activity.findViewById<View>(id).hasFocus() }
+                }
+                for (id in order.dropLast(1).reversed()) {
+                    instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_UP)
+                    await("Up must follow the visible menu, target=$id") { activity.findViewById<View>(id).hasFocus() }
+                }
+                instrumentation.runOnMainSync { activity.findViewById<View>(R.id.tabHome).performClick() }
+                instrumentation.waitForIdleSync()
+            }
+        } finally { instrumentation.runOnMainSync { activity.finish() } }
+    }
+
+    @Test fun emptySeriesSearchDoesNotSilentlyFilterTheMoviesTab() {
+        val server = InstrumentationRegistry.getArguments().getString("library_test_url").orEmpty()
+        assumeTrue("Requires isolated catalogue fixture", server.isNotBlank())
+        PluxyApplication.setServer(context, server, "Test filtre invisible")
+        PluxyApplication.setLibraryTab(context, "series")
+        for (kind in listOf("home", "movie", "series")) {
+            LibraryPreferences.saveQuery(context, TvLibraryContent.Query(kind, sort = "title"))
+            LibraryPreferences.saveView(context, kind, "library")
+        }
+        val activity = instrumentation.startActivitySync(Intent(context, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) as MainActivity
+        try {
+            await("Series must load") { activity.findViewById<View>(R.id.tabAudio).isShown }
+            instrumentation.runOnMainSync { activity.findViewById<View>(R.id.search).performClick() }
+            instrumentation.waitForIdleSync()
+            click("Rechercher")
+            instrumentation.runOnMainSync { activity.findViewById<View>(R.id.tabMovies).performClick() }
+            await("Unfiltered movies must remain visible after an empty series search") {
+                val grid = activity.findViewById<RecyclerView>(R.id.grid)
+                grid.adapter is LibraryAdapter && grid.adapter!!.itemCount == 2 &&
+                    activity.findViewById<View>(R.id.empty).visibility != View.VISIBLE
+            }
+            capture("tv-movies-without-hidden-filter.png")
+            instrumentation.runOnMainSync {
+                LibraryPreferences.saveQuery(context, TvLibraryContent.Query("movie", year = 1999))
+                activity.findViewById<View>(R.id.tabMovies).performClick()
+            }
+            await("A real filter must still explain the empty result") {
+                activity.findViewById<TextView>(R.id.empty).let { it.isShown && it.text.contains("filtres") } &&
+                    activity.findViewById<Button>(R.id.emptyAction).text == "Réinitialiser les filtres"
+            }
+            instrumentation.runOnMainSync { activity.findViewById<View>(R.id.emptyAction).performClick() }
+            await("Reset must restore the movies") {
+                activity.findViewById<RecyclerView>(R.id.grid).adapter?.itemCount == 2 &&
+                    activity.findViewById<View>(R.id.empty).visibility != View.VISIBLE
+            }
+        } finally { instrumentation.runOnMainSync { activity.finish() } }
     }
     @Test fun tvSettingsAreBelowMusicAndSearchUsesTheOpenCategoryWithIntegratedFilters() {
         val server = InstrumentationRegistry.getArguments().getString("library_test_url").orEmpty()

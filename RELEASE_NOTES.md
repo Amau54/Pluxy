@@ -1,3 +1,8 @@
+## Android 1.7.41
+
+- Navigation TV : Haut et Bas suivent toujours les catégories visibles dans le rail. Les liens sont recalculés après le chargement du catalogue ; Accueil ne saute plus directement à Paramètres.
+- Films : une recherche vide dans une autre rubrique ne masque plus les médias. Les messages de filtre ne s’affichent que si un filtre est réellement actif ; une bibliothèque vide indique le type de média manquant.
+
 ## Windows 1.8.32 · Android 1.7.40
 
 - Séries : le décompte de l’épisode suivant apparaît pendant les cinq dernières secondes du média, puis la lecture enchaîne à sa fin, sans ajouter cinq secondes d’attente.

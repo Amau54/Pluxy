@@ -110,7 +110,7 @@ object TvLibraryContent {
     fun filterItems(items: List<MediaItem>, query: Query): List<MediaItem> = items.filter { item ->
         (query.search.isNotBlank() || query.destination !in MEDIA_KINDS || item.kind == query.destination) &&
             matchesMetadata(item, query) && (query.search.isBlank() || LibraryOrganizer.matchesSearch(item, query.search)) &&
-            (query.searchScope == "all" || item.kind == query.searchScope) &&
+            (query.search.isBlank() || query.searchScope == "all" || item.kind == query.searchScope) &&
             (item.kind !in VIDEO_KINDS || matchesWatched(item, query.watchedFilter))
     }
 

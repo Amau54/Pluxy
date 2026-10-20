@@ -299,10 +299,11 @@ class MainActivity : ThemedActivity() {
             }
             val focused = currentFocus
             if (usesRail()) {
-                val last = destinations().lastOrNull()?.first ?: R.id.tabHome
+                val order = destinations().map { it.first } + R.id.settings
+                val index = order.indexOf(focused?.id)
                 val target = when {
-                    focused?.id == last && event.keyCode == KeyEvent.KEYCODE_DPAD_DOWN -> R.id.settings
-                    focused?.id == R.id.settings && event.keyCode == KeyEvent.KEYCODE_DPAD_UP -> last
+                    index >= 0 && event.keyCode == KeyEvent.KEYCODE_DPAD_DOWN -> order.getOrNull(index + 1) ?: order.last()
+                    index > 0 && event.keyCode == KeyEvent.KEYCODE_DPAD_UP -> order[index - 1]
                     else -> null
                 }
                 if (target != null) {
@@ -615,7 +616,7 @@ class MainActivity : ThemedActivity() {
     }
 
     private fun selectDestination(kind: String) {
-        if (searchQuery.isNotBlank()) clearSearch(updateContent = false)
+        if (searchQuery.isNotBlank() || searchScope != "all") clearSearch(updateContent = false)
         if (selectedKind == kind) {
             loadItems()
             return
@@ -658,9 +659,14 @@ class MainActivity : ThemedActivity() {
             findViewById<View>(viewId).isSelected = selectedKind == kind
         }
         if (usesRail()) {
-            val last = destinations().lastOrNull()?.first ?: R.id.tabHome
-            findViewById<View>(last).nextFocusDownId = R.id.settings
-            findViewById<View>(R.id.settings).nextFocusUpId = last
+            val order = destinations().map { it.first } + R.id.settings
+            // Recalculer toute la chaîne : au démarrage, Accueil peut être seul.
+            order.forEachIndexed { index, id ->
+                findViewById<View>(id).apply {
+                    nextFocusDownId = order.getOrNull(index + 1) ?: id
+                    if (index > 0) nextFocusUpId = order[index - 1]
+                }
+            }
         }
         if (!usesRail()) {
             findViewById<View>(R.id.categoryNavigation).visibility = View.GONE
@@ -760,7 +766,7 @@ class MainActivity : ThemedActivity() {
     private fun currentQuery(): TvLibraryContent.Query = LibraryPreferences.query(
         this, selectedKind,
     ).copy(
-        destination = selectedKind, search = searchQuery, searchScope = searchScope,
+        destination = selectedKind, search = searchQuery, searchScope = if (searchQuery.isBlank()) "all" else searchScope,
         photoFolder = if (selectedKind == "photo") PluxyApplication.photoFolder(this) else "",
         collapsedPhotoFolders = collapsedPhotoFolders.toSet(),
     )
@@ -972,10 +978,8 @@ class MainActivity : ThemedActivity() {
                             PluxyApplication.saveHomeShelves(this@MainActivity, homeOrder, emptySet())
                             applyAndShow(focusFirst = true)
                         }
-                    } else if (query.watchedFilter != "all" && destination in setOf("movie", "series", "clip")) {
-                        showEmpty(emptyMessage(), "Afficher tous les contenus", focusAction) {
-                            saveBrowserQuery(currentQuery().copy(watchedFilter = "all"))
-                        }
+                    } else if (LibraryBrowserChrome.activeFilters(query).isNotEmpty()) {
+                        showFilteredEmpty(query, focusAction)
                     } else if (destination == "home" && discoveredKinds.any { it in setOf("photo", "audio") }) {
                         showEmpty("Vos photos et votre musique sont dans Bibliothèque.", "Ouvrir la bibliothèque", focusAction) { openLastLibrary() }
                     } else showEmpty(emptyMessage(), focusAction = focusAction)
@@ -1002,14 +1006,12 @@ class MainActivity : ThemedActivity() {
                 return@launch
             }
 
-            val (rows, filterHidesResults) = withContext(Dispatchers.Default) {
-                val result = when {
+            val rows = withContext(Dispatchers.Default) {
+                when {
                     collection != null -> TvLibraryContent.collectionContentRows(items, collection)
                     view == "collections" && query.search.isBlank() -> TvLibraryContent.collectionRows(items, LibraryPreferences.collections(this@MainActivity))
                     else -> TvLibraryContent.rows(items, query)
                 }
-                result to (result.isEmpty() && query.search.isNotBlank() && query.watchedFilter != "all" &&
-                    TvLibraryContent.rows(items, query.copy(watchedFilter = "all")).isNotEmpty())
             }
             if (revision != contentRevision) return@launch
             renderBrowser(rows)
@@ -1020,9 +1022,8 @@ class MainActivity : ThemedActivity() {
                 }
                 val focusAction = shouldFocusLibraryEmptyAction(restoreFocus, focusFirst,
                     navigationRevision != focusNavigationRevision, grid.hasFocus(), currentFocus != null)
-                if (filterHidesResults || LibraryBrowserChrome.activeFilters(query).isNotEmpty()) showEmpty("Aucun média ne correspond aux filtres.", "Réinitialiser les filtres", focusAction) {
-                    saveBrowserQuery(query.copy(watchedFilter = "all", genres = emptySet(), year = null, durationMaxMinutes = null, resolution = "all", hdrOnly = false, titlePrefix = ""))
-                } else showEmpty(emptyMessage(), focusAction = focusAction)
+                if (LibraryBrowserChrome.activeFilters(query).isNotEmpty()) showFilteredEmpty(query, focusAction)
+                else showEmpty(emptyMessage(), focusAction = focusAction)
                 return@launch
             }
             showGrid()
@@ -1252,6 +1253,13 @@ class MainActivity : ThemedActivity() {
         browserChrome.render(selectedKind, query, viewMode(), total, nextPageOffset != null, searchQuery, selectedCollection?.name)
     }
 
+    private fun showFilteredEmpty(query: TvLibraryContent.Query, focusAction: Boolean) {
+        showEmpty("Aucun média ne correspond aux filtres.", "Réinitialiser les filtres", focusAction) {
+            saveBrowserQuery(query.copy(watchedFilter = "all", genres = emptySet(), year = null,
+                durationMaxMinutes = null, resolution = "all", hdrOnly = false, titlePrefix = ""))
+        }
+    }
+
     private fun emptyMessage(): String = when {
         searchQuery.isNotBlank() -> "Aucun résultat pour « $searchQuery »."
         allItems.isEmpty() -> "Aucun média. Choisissez vos dossiers dans Pluxy Serveur."
@@ -1260,7 +1268,9 @@ class MainActivity : ThemedActivity() {
         selectedKind == "series" -> "Aucune série dans cette bibliothèque."
         selectedKind == "photo" -> "Aucune photo dans cette bibliothèque."
         selectedKind == "audio" -> "Aucune musique dans cette bibliothèque."
-        else -> "Aucun film ne correspond à ce filtre."
+        selectedKind == "movie" -> "Aucun film dans cette bibliothèque."
+        selectedKind == "clip" -> "Aucune vidéo dans cette bibliothèque."
+        else -> "Aucun média dans cette bibliothèque."
     }
 
     private fun openSearch() {

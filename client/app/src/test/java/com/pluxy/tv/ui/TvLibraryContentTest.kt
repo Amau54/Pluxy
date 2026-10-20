@@ -8,6 +8,13 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TvLibraryContentTest {
+    @Test fun `a blank search never applies the previous search category to the library`() {
+        val items = listOf(media("movie"), media("episode").copy(kind = "series"))
+        val query = TvLibraryContent.Query("movie", searchScope = "series")
+        assertEquals(listOf("movie"), TvLibraryContent.rows(items, query).filterIsInstance<LibRow.MediaRow>().map { it.item.id })
+        assertTrue(TvLibraryContent.rows(items, query.copy(search = "movie")).isEmpty())
+    }
+
     @Test fun `release dates sort movies and series with unknown dates last and watched movies at the end`() {
         val films = listOf(media("older").copy(year = 2020), media("later").copy(year = 2024, releaseDate = "2024-12-01"),
             media("earlier").copy(year = 2024, releaseDate = "2024-01-20"), media("unknown"),
