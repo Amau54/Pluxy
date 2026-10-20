@@ -562,7 +562,8 @@ class PlayerActivity : ThemedActivity() {
             // Some HDMI-CEC bridges report a constant/zero KeyEvent.eventTime.
             eventTimeMs = SystemClock.elapsedRealtime(),
             state = TvPlaybackKeyRouter.State(
-                controlsVisible = controlsOverlay.visibility == View.VISIBLE || findViewById<View>(R.id.skipSegment).hasFocus(),
+                controlsVisible = controlsOverlay.visibility == View.VISIBLE ||
+                    (key == TvPlaybackKeyRouter.Key.BACK && findViewById<View>(R.id.skipSegment).hasFocus()),
                 seekActive = isSeeking || timelineScrubbing,
                 focus = playbackFocus(),
             ),
@@ -713,6 +714,11 @@ class PlayerActivity : ThemedActivity() {
         setupModernControls()
         findViewById<Button>(R.id.skipSegment).setOnClickListener {
             activeSkipSegment?.let { autoSkipPolicy.mark(item.id, it.kind); goToAbsolute(it.endMs); updateSkipSegment() }
+        }
+        findViewById<Button>(R.id.skipSegment).setOnFocusChangeListener { view, focused ->
+            val button = view as Button
+            button.paintFlags = if (focused) button.paintFlags or android.graphics.Paint.UNDERLINE_TEXT_FLAG
+                else button.paintFlags and android.graphics.Paint.UNDERLINE_TEXT_FLAG.inv()
         }
         loadSkipChapters()
         playerView.resizeMode = aspectModes[aspectIdx].first
@@ -1038,6 +1044,7 @@ class PlayerActivity : ThemedActivity() {
         controlsOverlay.visibility = View.GONE
         updateSubtitleClearance()
         playerView.requestFocus()
+        updateSkipSegment()
     }
 
     private fun scheduleControlsHide() {
@@ -1375,12 +1382,14 @@ class PlayerActivity : ThemedActivity() {
     private var skipChapters: List<MediaChapter> = emptyList()
     private var skipChaptersJob: Job? = null
     private var activeSkipSegment: SkipSegment? = null
+    private var autoFocusedSkipSegment: SkipSegment? = null
     private val autoSkipPolicy = AutoSkipPolicy()
 
     private fun loadSkipChapters(server: String = api.baseUrl) {
         skipChaptersJob?.cancel()
         skipChapters = emptyList()
         activeSkipSegment = null
+        autoFocusedSkipSegment = null
         findViewById<View>(R.id.skipSegment).visibility = View.GONE
         val ownerId = item.id
         skipChaptersJob = lifecycleScope.launch {
@@ -1429,6 +1438,7 @@ class PlayerActivity : ThemedActivity() {
             return
         }
         val visible = SkipSegments.offer(activeSkipSegment)
+        if (!visible) autoFocusedSkipSegment = null
         val bottom = ((if (controlsOverlay.visibility == View.VISIBLE) 100 else 22) * resources.displayMetrics.density).toInt()
         (button.layoutParams as FrameLayout.LayoutParams).apply {
             if (bottomMargin != bottom) { bottomMargin = bottom; button.layoutParams = this }
@@ -1439,6 +1449,11 @@ class PlayerActivity : ThemedActivity() {
         button.visibility = if (visible) View.VISIBLE else View.GONE
         button.text = if (activeSkipSegment?.kind == "intro") "Passer l’intro" else "Passer le générique"
         timeline.nextFocusUpId = if (visible) R.id.skipSegment else R.id.btnExitPlayback
+        val television = resources.configuration.uiMode and Configuration.UI_MODE_TYPE_MASK == Configuration.UI_MODE_TYPE_TELEVISION
+        if (visible && television && controlsOverlay.visibility != View.VISIBLE && hasWindowFocus() &&
+            autoFocusedSkipSegment != activeSkipSegment && button.requestFocusFromTouch()) {
+            autoFocusedSkipSegment = activeSkipSegment
+        }
     }
 
     private fun openMenu() {

@@ -1,3 +1,8 @@
+## Android 1.7.42
+
+- TV : « Passer l’intro » et « Passer le générique » prennent automatiquement le focus lorsque les commandes sont masquées. Un soulignement fin et une teinte claire signalent qu’un seul appui suffit, sans fond ni changement de texte.
+- Le focus n’est pas repris en boucle lorsque l’utilisateur navigue. L’avance, le recul et l’ouverture des commandes restent accessibles à la télécommande.
+
 ## Android 1.7.41
 
 - Navigation TV : Haut et Bas suivent toujours les catégories visibles dans le rail. Les liens sont recalculés après le chargement du catalogue ; Accueil ne saute plus directement à Paramètres.
