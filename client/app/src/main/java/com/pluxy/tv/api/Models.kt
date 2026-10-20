@@ -44,6 +44,7 @@ data class MediaItem(
     @Json(name = "external_subs") val externalSubs: List<String> = emptyList(),
     val subtitles: List<SubtitleTrack> = emptyList(),
     val year: Int? = null,
+    @Json(name = "release_date") val releaseDate: String? = null,
     @Json(name = "metadata_title") val metadataTitle: String? = null,
     @Json(name = "poster_url") val posterUrl: String? = null,
     @Json(name = "has_metadata") val hasMetadata: Boolean = false,

@@ -167,7 +167,7 @@ class MainActivity : ThemedActivity() {
         configureCompactNavigation(screenDp)
 
         findViewById<View>(R.id.settings).setOnClickListener {
-            startActivity(Intent(this, SettingsActivity::class.java))
+            startActivity(Intent(this, SettingsActivity::class.java).putExtra("library_destination", selectedKind))
         }
         findViewById<View>(R.id.search).setOnClickListener {
             openSearch()
@@ -298,6 +298,19 @@ class MainActivity : ThemedActivity() {
                 horizontalFocus.cancel()
             }
             val focused = currentFocus
+            if (usesRail()) {
+                val last = destinations().lastOrNull()?.first ?: R.id.tabHome
+                val target = when {
+                    focused?.id == last && event.keyCode == KeyEvent.KEYCODE_DPAD_DOWN -> R.id.settings
+                    focused?.id == R.id.settings && event.keyCode == KeyEvent.KEYCODE_DPAD_UP -> last
+                    else -> null
+                }
+                if (target != null) {
+                    findViewById<View>(target).requestFocusFromTouch()
+                    consumedNavigationKeys.add(event.keyCode)
+                    return true
+                }
+            }
             if (focused != null && isInGrid(focused)) {
                 if (event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT || event.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
                     if (moveHorizontally(focused, event.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT)) {
@@ -499,6 +512,17 @@ class MainActivity : ThemedActivity() {
                 LinearLayout.LayoutParams.WRAP_CONTENT,
             )
         }
+        findViewById<Button>(R.id.settings).apply {
+            (parent as ViewGroup).removeView(this)
+            (swipe.parent as FrameLayout).addView(this, FrameLayout.LayoutParams(
+                resources.getDimensionPixelSize(R.dimen.library_rail_width), (48 * density).toInt(),
+                Gravity.START or Gravity.BOTTOM,
+            ).apply { leftMargin = (48 * density).toInt(); bottomMargin = (16 * density).toInt() })
+            gravity = Gravity.START or Gravity.CENTER_VERTICAL
+            textSize = 13f
+            setBackgroundResource(R.drawable.bg_tab)
+            setPaddingRelative((12 * density).toInt(), 0, (8 * density).toInt(), 0)
+        }
         // Toutes les destinations doivent recevoir le format vertical, même si leur
         // contenu arrive après le premier chargement réseau et qu'elles étaient cachées.
         allDestinations().forEach { (id, _) ->
@@ -606,6 +630,11 @@ class MainActivity : ThemedActivity() {
             findViewById<View>(viewId).visibility =
                 if (kind == "home" || kind in discoveredKinds) View.VISIBLE else View.GONE
             findViewById<View>(viewId).isSelected = selectedKind == kind
+        }
+        if (usesRail()) {
+            val last = destinations().lastOrNull()?.first ?: R.id.tabHome
+            findViewById<View>(last).nextFocusDownId = R.id.settings
+            findViewById<View>(R.id.settings).nextFocusUpId = last
         }
         if (!usesRail()) {
             findViewById<View>(R.id.categoryNavigation).visibility = View.GONE
@@ -1209,73 +1238,17 @@ class MainActivity : ThemedActivity() {
     }
 
     private fun openSearch() {
-        val input = EditText(this).apply {
-            hint = "Titre, série, artiste ou album"
-            setSingleLine(true)
-            imeOptions = EditorInfo.IME_ACTION_SEARCH
-            filters = arrayOf(android.text.InputFilter.LengthFilter(MAX_SEARCH_CHARACTERS))
-            setText(searchQuery)
-            setSelection(text.length)
+        val scope = selectedKind.takeIf { it in setOf("movie", "series", "clip", "photo", "audio") } ?: "all"
+        LibraryFilterDialog.showSearch(this, currentQuery().copy(destination = scope, searchScope = scope),
+            facets, searchQuery) { draft, text ->
+            searchScope = scope
+            searchQuery = text
+            LibraryPreferences.saveQuery(this, draft.copy(destination = selectedKind, search = ""))
+            selectedCollection = null
+            updateSearchButton()
+            grid.scrollToPosition(0)
+            loadItems()
         }
-        val density = resources.displayMetrics.density
-        val padding = (20 * density).toInt()
-        val panel = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(padding, 0, padding, 0)
-            addView(input, LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-            ))
-        }
-        val scopes = listOf(
-            "all" to "Tous les médias",
-            "movie" to "Films",
-            "series" to "Séries",
-            "clip" to "Vidéos",
-            "photo" to "Photos",
-            "audio" to "Musique",
-        )
-        val scopeGroup = RadioGroup(this).apply {
-            orientation = RadioGroup.VERTICAL
-            setPadding(0, (12 * density).toInt(), 0, 0)
-        }
-        scopes.forEach { (value, label) ->
-            scopeGroup.addView(RadioButton(this).apply {
-                id = View.generateViewId()
-                text = label
-                tag = value
-                isChecked = value == searchScope
-                minHeight = (44 * density).toInt()
-            })
-        }
-        panel.addView(scopeGroup)
-        val dialog = AlertDialog.Builder(this)
-            .setTitle("Rechercher")
-            .setView(ScrollView(this).apply { addView(panel) })
-            .setPositiveButton("Rechercher") { _, _ ->
-                searchQuery = input.text.toString().trim()
-                searchScope = scopeGroup.findViewById<RadioButton>(scopeGroup.checkedRadioButtonId)
-                    ?.tag as? String ?: "all"
-                updateSearchButton()
-                selectedCollection = null
-                loadItems()
-            }
-            .setNegativeButton("Annuler", null)
-            .create()
-        input.setOnEditorActionListener { _, action, _ ->
-            if (action == EditorInfo.IME_ACTION_SEARCH) {
-                dialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
-                true
-            } else false
-        }
-        if (searchQuery.isNotBlank()) dialog.setButton(AlertDialog.BUTTON_NEUTRAL, "Effacer") { _, _ ->
-            clearSearch()
-        }
-        dialog.setOnShowListener { input.requestFocus() }
-        dialog.show()
-        dialog.window?.setSoftInputMode(
-            android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE,
-        )
     }
 
     private fun clearSearch(updateContent: Boolean = true) {
@@ -1291,7 +1264,7 @@ class MainActivity : ThemedActivity() {
         findViewById<ImageButton>(R.id.search).apply {
             setImageResource(R.drawable.ic_search)
             contentDescription = if (searchQuery.isBlank()) {
-                "Rechercher dans tous les médias"
+                "Rechercher dans ${searchScopeLabel(selectedKind)}"
             } else {
                 "Modifier la recherche $searchQuery (${searchScopeLabel()})"
             }
@@ -1408,7 +1381,7 @@ class MainActivity : ThemedActivity() {
         val home = findViewById<Button>(R.id.tabHome)
         val search = findViewById<ImageButton>(R.id.search)
         val sort = findViewById<Button>(R.id.sortFilter)
-        val settings = findViewById<ImageButton>(R.id.settings)
+        val settings = findViewById<View>(R.id.settings)
         val show = selectedKind == "photo" && searchQuery.isBlank() &&
             allItems.any { it.kind == "photo" }
         control.visibility = if (show) View.VISIBLE else View.GONE
@@ -1433,8 +1406,9 @@ class MainActivity : ThemedActivity() {
         sort.nextFocusLeftId = R.id.search
         sort.nextFocusRightId = R.id.settings
         sort.nextFocusDownId = R.id.tabHome
-        settings.nextFocusDownId = R.id.tabHome
-        settings.nextFocusLeftId = if (sort.visibility == View.VISIBLE) R.id.sortFilter else R.id.search
+        settings.nextFocusDownId = if (usesRail()) R.id.settings else R.id.tabHome
+        settings.nextFocusLeftId = if (usesRail()) R.id.settings else R.id.search
+        settings.nextFocusUpId = if (usesRail()) destinations().lastOrNull()?.first ?: R.id.tabHome else R.id.search
     }
 
     private fun openPhotoFolders() {
@@ -1474,7 +1448,7 @@ class MainActivity : ThemedActivity() {
         }
     }
 
-    private fun searchScopeLabel(): String = when (searchScope) {
+    private fun searchScopeLabel(scope: String = searchScope): String = when (scope) {
         "movie" -> "films"
         "series" -> "séries"
         "clip" -> "vidéos"
@@ -1490,7 +1464,8 @@ class MainActivity : ThemedActivity() {
         val query = currentQuery()
         val options = buildList {
             add("Titre" to "title"); add("Ajouts récents" to "added")
-            if (selectedKind == "movie" || searchQuery.isNotBlank()) { add("Année" to "year"); add("Durée" to "duration") }
+            if (selectedKind in setOf("movie", "series") || searchQuery.isNotBlank()) add("Date de sortie" to "year")
+            if (selectedKind == "movie" || searchQuery.isNotBlank()) add("Durée" to "duration")
             if (selectedKind == "photo" && searchQuery.isBlank()) add("Prise de vue" to "captured")
         }
         CompactChoiceMenu.show(this, anchor, "Trier par",

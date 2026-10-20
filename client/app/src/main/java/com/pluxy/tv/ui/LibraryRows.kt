@@ -36,6 +36,7 @@ sealed class LibRow {
         val inProgressCount: Int = 0,
         val latestPlayed: Double = 0.0,
         val year: Int? = null,
+        val releaseDate: String? = null,
     ) : LibRow() {
         override val stableKey: String = "series:$key"
     }

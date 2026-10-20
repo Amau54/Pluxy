@@ -5,6 +5,19 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class LibraryBrowseCatalogTest {
+    @Test fun `watched films stay after all unwatched pages and dates sort within each group`() {
+        val catalog = LibraryBrowseCatalog("dates", listOf(
+            entry("seen", metadata = BrowseMetadata(2025), watch = WatchState(watched = true)),
+            entry("unknown", metadata = BrowseMetadata()),
+            entry("early", metadata = BrowseMetadata(2024, releaseDate = "2024-01-02")),
+            entry("late", metadata = BrowseMetadata(2024, releaseDate = "2024-12-02")),
+        ))
+        val descending = query("kind" to "movie", "sort" to "year", "descending" to "true")
+        val first = catalog.page(2, 0, null, descending)
+        val rest = catalog.page(2, first.nextOffset!!, first.revision, descending)
+        assertEquals(listOf("late", "early", "unknown", "seen"), (first.items + rest.items).map { it.media.id })
+        assertEquals(listOf("early", "late", "unknown", "seen"), ids(catalog, descending.copy(descending = false)))
+    }
     @Test fun `cropped videos keep their source resolution in filters`() {
         assertEquals("4k", mediaResolution(3836, 1604))
         assertEquals("1080p", mediaResolution(1916, 804))

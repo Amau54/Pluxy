@@ -138,12 +138,12 @@ class LibraryBrowserChrome(
         }
         mode.text = if (television) "Affichage" else displayName
         mode.contentDescription = if (television) "Affichage de la bibliothèque, $displayName" else displayName
-        mode.visibility = if (television || searchText.isBlank()) View.VISIBLE else View.GONE
-        filters.visibility = if (video && view != "collections" && collectionName == null) View.VISIBLE else View.GONE
+        mode.visibility = if (!television && searchText.isBlank()) View.VISIBLE else View.GONE
+        filters.visibility = View.GONE
         collection.visibility = if (view == "collections" || collectionName != null) View.VISIBLE else View.GONE
         collection.text = if (collectionName != null) "Gérer" else "Créer"
         sort.visibility = if (view != "collections" && collectionName == null) View.VISIBLE else View.GONE
-        sort.text = when (query.sort) { "added" -> "Ajouts"; "year" -> "Année"; "duration" -> "Durée"; "captured" -> "Date"; else -> "Titre" } +
+        sort.text = when (query.sort) { "added" -> "Ajouts"; "year" -> "Sortie"; "duration" -> "Durée"; "captured" -> "Date"; else -> "Titre" } +
             if (query.descending ?: (query.sort != "title")) " ↓" else " ↑"
         val active = activeFilters(query)
         filters.text = if (active.isEmpty()) "Filtres" else "Filtres (${active.size})"
@@ -157,7 +157,7 @@ class LibraryBrowserChrome(
             }, ViewGroup.LayoutParams(-2, -2))
         }
         if (active.size > 3) chips.addView(button("+ ${active.size - 3} filtres") { onFilters() }, ViewGroup.LayoutParams(-2, -2))
-        chips.visibility = if (active.isEmpty() || view == "collections" || collectionName != null) View.GONE else View.VISIBLE
+        chips.visibility = View.GONE
         count.text = when {
             collectionName != null -> "$collectionName · $total ${if (total == 1) "élément" else "éléments"}"
             searchText.isNotBlank() -> "« $searchText » · $total ${if (total == 1) "résultat" else "résultats"}"

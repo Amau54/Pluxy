@@ -1,3 +1,11 @@
+## Windows 1.8.28 · Android 1.7.36
+
+- TV : paramètres en bas du rail gauche, sous Musique. Présentation, densité et thème sont regroupés dans Paramètres → Affichage.
+- Recherche limitée à la rubrique ouverte, avec les filtres dans le même panneau. Suppression des boutons Affichage et Filtres au-dessus du catalogue TV.
+- Tri des films et séries par date de sortie, avec repli sur l’année connue. Les dates inconnues restent à la fin du tri.
+- Films déjà vus placés après les autres, même avec plusieurs pages ; rangée Déjà vus à la fin du mode Découvrir.
+- Bannière du lanceur Android TV recentrée pour afficher le logo et le nom Pluxy complet.
+
 ## Windows 1.8.27 · Android 1.7.35
 
 - TV : passage de l’intro ou du générique avec un seul appui sur OK pendant la lecture, sans ouvrir les commandes. Texte blanc discret en bas à droite, sans fond ; aucune proposition pour une intro de moins de huit secondes.

@@ -67,6 +67,7 @@ data class MediaEntry(
             put("id", id)
             put("title", title)
             putNullable("metadata_title", videoMetadata?.takeIf { metadataMatched }?.optStringOrNull("title"))
+            putNullable("release_date", videoMetadata?.optStringOrNull("release_date"))
             put("path", "")
             put("container", container)
             put("size", size)

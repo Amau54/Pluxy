@@ -233,6 +233,22 @@ class SettingsActivity : ThemedActivity() {
     }
 
     private fun renderAppearance() {
+        val destination = intent.getStringExtra("library_destination") ?: PluxyApplication.libraryTab(this)
+        if (destination in setOf("movie", "series", "clip", "photo", "audio")) {
+            val folders = destination in setOf("photo", "audio")
+            val query = LibraryPreferences.query(this, destination)
+            val choices = if (folders) listOf("Dossiers" to "folders", "Albums" to "albums") +
+                if (destination == "photo") listOf("Chronologie" to "timeline") else emptyList()
+                else listOf("Bibliothèque" to "library", "Découvrir" to "discover", "Collections" to "collections")
+            val selected = if (folders) query.photoView else LibraryPreferences.view(this, destination)
+            rowButton("Présentation", choices.firstOrNull { it.second == selected }?.first.orEmpty(), "", showHint = false)
+                .setOnClickListener { anchor -> CompactChoiceMenu.show(this, anchor, "Présentation",
+                    choices.map { CompactChoiceMenu.Choice(it.first, it.second) }, selected, onSelect = { value ->
+                        if (folders) LibraryPreferences.saveQuery(this, query.copy(photoView = value))
+                        else LibraryPreferences.saveView(this, destination, value)
+                        render()
+                    }) }
+        }
         val appearance = AppearancePreferences.theme(this)
         rowButton("Thème", appearance.label, appearance.description, showHint = false)
             .setOnClickListener { anchor -> pickAppearanceTheme(anchor, appearance) }

@@ -579,6 +579,7 @@ class PluxyHttpServer(
         put("year", entry.year ?: JSONObject.NULL)
         put("genres", JSONArray(entry.metadata.genres))
         put("metadata_title", entry.metadata.title ?: JSONObject.NULL)
+        put("release_date", entry.metadata.releaseDate ?: JSONObject.NULL)
     }
 
     private fun clientSettings(): JSONObject = JSONObject().apply {

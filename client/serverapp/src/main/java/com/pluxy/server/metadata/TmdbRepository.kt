@@ -65,6 +65,7 @@ class TmdbRepository(
     private fun factsFromJson(json: JSONObject?): BrowseMetadata = BrowseMetadata(
         year = json?.optInt("year", 0)?.takeIf { it > 0 }, genres = metadataGenres(json),
         title = json?.takeIf { it.optBoolean("matched", false) }?.optStringOrNull("title"),
+        releaseDate = json?.optStringOrNull("release_date"),
     )
 
     @Synchronized
@@ -282,6 +283,7 @@ class TmdbRepository(
             put("title", title.ifBlank { originalTitle.ifBlank { "Média" } })
             putNullable("original_title", originalTitle.takeIf { it.isNotBlank() })
             putNullable("year", year)
+            putNullable("release_date", date.takeIf { Regex("\\d{4}-\\d{2}-\\d{2}").matches(it) })
             putNullable("overview", details.optString("overview").takeIf { it.isNotBlank() })
             putNullable("tagline", details.optString("tagline").takeIf { it.isNotBlank() })
             put("genres", JSONArray().apply {

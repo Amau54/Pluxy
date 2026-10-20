@@ -37,6 +37,7 @@ def public_item(item: MediaItem, meta: MovieMetadata | None, watch: dict) -> Med
         pub.year, pub.poster_url = meta.year or item.year, meta.poster_url
         pub.has_metadata, pub.genres = meta.matched, list(meta.genres)
         pub.metadata_title = meta.title if meta.matched else None
+        pub.release_date = meta.release_date
         pub.episode_still_url = meta.episode_still_url if item.kind == "series" else None
     if pub.kind in {"movie", "series", "clip", "photo", "audio"}:
         pub.thumbnail_url = f"/api/library/items/{item.id}/thumbnail?v=2"
@@ -168,12 +169,15 @@ class Catalogue:
                 def key(row):
                     item = row.item
                     return {"title": row.title, "added": item.added_at,
-                            "year": item.year or 0, "duration": item.duration}[query.sort]
+                            "year": item.release_date or (f"{item.year:04d}-01-01" if item.year else ""),
+                            "duration": item.duration}[query.sort]
                 # id tranche les égalités : les frontières des pages sont stables.
                 candidates.sort(key=lambda row: (row.title, row.item.id))
                 candidates.sort(key=key, reverse=query.descending)
                 if query.sort in {"year", "duration"}:
-                    candidates.sort(key=lambda row: key(row) == 0)
+                    candidates.sort(key=lambda row: not key(row))
+                if query.kind == "movie":
+                    candidates.sort(key=lambda row: row.item.watched)
                 values = tuple(row.item for row in candidates)
                 if query.grouped:
                     groups = {}

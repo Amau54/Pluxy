@@ -2,7 +2,7 @@ package com.pluxy.tv.ui
 
 enum class SettingsCategory(val key: String, val label: String) {
     PLAYBACK("playback", "Lecture"),
-    APPEARANCE("appearance", "Apparence"),
+    APPEARANCE("appearance", "Affichage"),
     LIBRARY("library", "Bibliothèque"),
     CONNECTION("connection", "Connexion"),
     PROFILES("profiles", "Profils"),

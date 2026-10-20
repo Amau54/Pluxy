@@ -99,6 +99,7 @@ class MediaItem(BaseModel):
     # Renseignés depuis le cache de métadonnées s'il existe (affichage grille).
     year: Optional[int] = None
     metadata_title: Optional[str] = None
+    release_date: Optional[str] = None
     genres: List[str] = Field(default_factory=list)
     poster_url: Optional[str] = None
     thumbnail_url: Optional[str] = None
@@ -111,7 +112,7 @@ class MediaItem(BaseModel):
     embedded_title: Optional[str] = None
     has_metadata: bool = False
     # État de visionnage, fusionné À LA VOLÉE depuis le suivi de lecture (persistant).
-    watched: bool = False             # vu (lecture > 95 %)
+    watched: bool = False             # vu (lecture >= 90 %)
     in_progress: bool = False         # commencé mais pas terminé
     progress: float = 0.0             # fraction de reprise 0..1
     last_played_at: float = 0.0       # epoch s, pour l'accueil « Reprendre »
@@ -142,6 +143,7 @@ class MovieMetadata(BaseModel):
     title: str
     original_title: Optional[str] = None
     year: Optional[int] = None
+    release_date: Optional[str] = None
     overview: Optional[str] = None
     tagline: Optional[str] = None
     genres: List[str] = Field(default_factory=list)

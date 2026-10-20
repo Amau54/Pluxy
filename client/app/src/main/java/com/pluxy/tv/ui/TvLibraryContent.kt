@@ -70,9 +70,11 @@ object TvLibraryContent {
                         LibRow.QuickPlayRow(it, resumeSubtitle(it))
                     }))
                     if (movies.isNotEmpty()) {
-                        add(HomeShelf("movies:recent", "Ajoutés récemment", movies.sortedByDescending { it.addedAt }
+                        add(HomeShelf("movies:recent", "Ajoutés récemment", movies.filter { !it.watched }.sortedByDescending { it.addedAt }
                             .take(12).map { LibRow.MediaRow(it) }))
-                        add(HomeShelf("movies:all", "À découvrir", movies.take(24).map { LibRow.MediaRow(it) }))
+                        add(HomeShelf("movies:all", "À découvrir", movies.filter { !it.watched }.take(24).map { LibRow.MediaRow(it) }))
+                        val watched = movies.filter { it.watched }
+                        if (watched.isNotEmpty()) add(HomeShelf("movies:watched", "Déjà vus", watched.take(24).map { LibRow.MediaRow(it) }))
                     }
                 })
             }
@@ -181,6 +183,7 @@ object TvLibraryContent {
             inProgressCount = values.count { it.inProgress && !it.watched },
             latestPlayed = values.maxOfOrNull { it.lastPlayedAt } ?: 0.0,
             year = values.firstNotNullOfOrNull { it.year },
+            releaseDate = values.mapNotNull { it.releaseDate }.minOrNull(),
         ) }
 
     private fun searchRows(items: List<MediaItem>, query: Query): List<LibRow> = buildList {
@@ -258,23 +261,29 @@ object TvLibraryContent {
 
     internal fun sortMedia(items: List<MediaItem>, query: Query): List<MediaItem> {
         val sorted = when (query.sort) {
-            "year" -> items.sortedByDescending { it.year ?: 0 }
+            "year" -> items.sortedByDescending { releaseKey(it.releaseDate, it.year) }
             "duration" -> items.sortedByDescending { it.duration }
             "captured" -> items.sortedByDescending { LibraryOrganizer.captureTime(it) ?: -1.0 }
             "title" -> LibraryOrganizer.sortedBySearchKey(items, LibraryOrganizer::displayTitle)
             else -> items.sortedByDescending { it.addedAt }
         }
-        return if (query.descending?.let { it != (query.sort != "title") } == true) sorted.reversed() else sorted
+        var ordered = if (query.descending?.let { it != (query.sort != "title") } == true) sorted.reversed() else sorted
+        if (query.sort == "year") ordered = ordered.sortedBy { releaseKey(it.releaseDate, it.year).isBlank() }
+        return if (query.destination == "movie") ordered.sortedBy { it.watched } else ordered
     }
 
     private fun sortSeries(items: List<LibRow.SeriesRow>, query: Query): List<LibRow.SeriesRow> {
         val sorted = when (query.sort) {
             "added" -> items.sortedByDescending { it.latestAdded }
-            "year" -> items.sortedByDescending { it.year ?: 0 }
+            "year" -> items.sortedByDescending { releaseKey(it.releaseDate, it.year) }
             else -> LibraryOrganizer.sortedBySearchKey(items) { it.name }
         }
-        return if (query.descending?.let { it != (query.sort != "title") } == true) sorted.reversed() else sorted
+        val ordered = if (query.descending?.let { it != (query.sort != "title") } == true) sorted.reversed() else sorted
+        return if (query.sort == "year") ordered.sortedBy { releaseKey(it.releaseDate, it.year).isBlank() } else ordered
     }
+
+    private fun releaseKey(date: String?, year: Int?): String = date?.takeIf { it.isNotBlank() }
+        ?: year?.let { "%04d-01-01".format(java.util.Locale.ROOT, it) }.orEmpty()
 
     private fun distinctShelves(shelves: List<HomeShelf>): List<HomeShelf> {
         val seen = mutableSetOf<String>()

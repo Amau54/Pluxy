@@ -4,9 +4,11 @@ import com.pluxy.server.WatchState
 import java.text.Normalizer
 import java.util.Locale
 
-internal data class BrowseMetadata(val year: Int? = null, val genres: List<String> = emptyList(), val title: String? = null)
+internal data class BrowseMetadata(val year: Int? = null, val genres: List<String> = emptyList(), val title: String? = null,
+    val releaseDate: String? = null)
 internal data class BrowseEntry(val media: MediaEntry, val metadata: BrowseMetadata, val watch: WatchState, val groupCount: Int = 1, val seasonCount: Int = 0) {
     val year: Int? get() = metadata.year ?: media.parsedYear
+    val releaseDate: String get() = metadata.releaseDate ?: year?.let { "%04d-01-01".format(Locale.ROOT, it) }.orEmpty()
     val resolution: String? = if (media.kind in setOf("movie", "series", "clip")) mediaResolution(media.width, media.height) else null
     val sortTitle: String = normalizeLibraryText(metadata.title?.takeIf(String::isNotBlank) ?: media.title)
     val searchText: String = normalizeLibraryText(listOfNotNull(media.title, metadata.title, media.seriesName, media.artist, media.album, media.folder).joinToString(" "))
@@ -151,9 +153,13 @@ internal class LibraryBrowseCatalog(val revision: String, entries: List<BrowseEn
     }
 
     private fun comparator(query: LibraryQuery): Comparator<BrowseEntry> = Comparator { left, right ->
+        if (query.kind == "movie" && left.watch.watched != right.watch.watched)
+            return@Comparator left.watch.watched.compareTo(right.watch.watched)
+        if (query.sort == "year" && left.releaseDate.isBlank() != right.releaseDate.isBlank())
+            return@Comparator left.releaseDate.isBlank().compareTo(right.releaseDate.isBlank())
         val primary = when (query.sort) {
             "added" -> left.media.addedAtMs.compareTo(right.media.addedAtMs)
-            "year" -> (left.year ?: 0).compareTo(right.year ?: 0)
+            "year" -> left.releaseDate.compareTo(right.releaseDate)
             "duration" -> left.media.durationSeconds.compareTo(right.media.durationSeconds)
             else -> left.sortTitle.compareTo(right.sortTitle)
         }.let { if (query.descending) -it else it }

@@ -8,6 +8,19 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TvLibraryContentTest {
+    @Test fun `release dates sort movies and series with unknown dates last and watched movies at the end`() {
+        val films = listOf(media("older").copy(year = 2020), media("later").copy(year = 2024, releaseDate = "2024-12-01"),
+            media("earlier").copy(year = 2024, releaseDate = "2024-01-20"), media("unknown"),
+            media("watched").copy(year = 2025, watched = true))
+        val query = TvLibraryContent.Query("movie", sort = "year")
+        assertEquals(listOf("later", "earlier", "older", "unknown", "watched"),
+            TvLibraryContent.sortMedia(films, query).map { it.id })
+        assertEquals(listOf("older", "earlier", "later", "unknown", "watched"),
+            TvLibraryContent.sortMedia(films, query.copy(descending = false)).map { it.id })
+        val series = films.take(4).map { it.copy(kind = "series", seriesName = it.id, seriesKey = it.id) }
+        assertEquals(listOf("later", "earlier", "older", "unknown"),
+            TvLibraryContent.rows(series, query.copy(destination = "series")).filterIsInstance<LibRow.SeriesRow>().map { it.key })
+    }
     @Test fun `premiere lettre suit le titre affiche sans accent`() {
         val items = listOf(media("a").copy(title = "Alpha", metadataTitle = "Évasion"),
             media("b").copy(title = "Été"), media("c").copy(title = "Alpha"))

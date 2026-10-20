@@ -360,7 +360,7 @@ def populate(state):
 
 
 @pytest.mark.parametrize("filters, expected", [
-    ({"kind": "movie"}, ["b", "c", "a", "d"]),
+    ({"kind": "movie"}, ["b", "c", "d", "a"]),
     ({"q": "ete paris"}, ["a"]),
     ({"q": "ete", "kind": "audio"}, ["g"]),
     ({"watched": "watched"}, ["a"]),
@@ -374,7 +374,7 @@ def populate(state):
     ({"resolution": "sd"}, ["e"]),
     ({"hdr_only": True}, ["b"]),
     ({"kind": "movie", "sort": "added", "descending": True}, ["d", "c", "b", "a"]),
-    ({"kind": "movie", "sort": "duration"}, ["c", "a", "b", "d"]),
+    ({"kind": "movie", "sort": "duration"}, ["c", "b", "d", "a"]),
 ])
 def test_combined_query_filters(tmp_path, monkeypatch, filters, expected):
     from pluxy.catalogue import Catalogue, Query
@@ -457,7 +457,7 @@ def test_alphabetical_pages_use_displayed_title_and_ignore_accents(tmp_path, mon
     catalogue = Catalogue(state.library, state.metadata, state.watch)
     first, total, revision = catalogue.page(Query(kind="movie", title_prefix="E"), 0, 1)
     last = catalogue.page(Query(kind="movie", title_prefix="E"), 1, 1, revision)[0]
-    assert total == 2 and [item.id for item in first + last] == ["a", "b"]
+    assert total == 2 and [item.id for item in first + last] == ["b", "a"]
     assert catalogue.page(Query(kind="movie", title_prefix="A"), 0, 100)[1] == 0
 
 
@@ -483,3 +483,23 @@ def test_http_query_paging_facets_and_validation(tmp_path, monkeypatch):
             state.watch.set("c", 20_000, 100_000)
             assert (await client.get("/api/library/items/page", params={"revision": first.json()["revision"]})).status_code == 409
     asyncio.run(exercise())
+
+
+def test_release_dates_and_watched_tail_stay_stable_across_pages(tmp_path, monkeypatch):
+    from pluxy.catalogue import Catalogue, Query
+    from pluxy.models import MovieMetadata
+
+    state, _root, _calls = make_state(tmp_path, monkeypatch)
+    populate(state)
+    state.watch.set("a", 0, 1000)
+    state.watch.set("c", 950, 1000)
+    state.metadata._save("a", MovieMetadata(title="early", year=2024, release_date="2024-01-02", matched=True))
+    state.metadata._save("b", MovieMetadata(title="late", year=2024, release_date="2024-12-02", matched=True))
+    catalogue = Catalogue(state.library, state.metadata, state.watch)
+    query = Query(kind="movie", sort="year", descending=True)
+    first, total, revision = catalogue.page(query, 0, 2)
+    last = catalogue.page(query, 2, 2, revision)[0]
+    assert total == 4
+    assert [item.id for item in first + last] == ["b", "a", "d", "c"]
+    ascending = catalogue.page(Query(kind="movie", sort="year", descending=False), 0, 100)[0]
+    assert [item.id for item in ascending] == ["a", "b", "d", "c"]

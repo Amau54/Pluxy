@@ -4,6 +4,8 @@ import android.content.Context
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
+import android.widget.EditText
+import android.view.inputmethod.EditorInfo
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.widget.SwitchCompat
 import com.pluxy.tv.R
@@ -12,12 +14,29 @@ import com.pluxy.tv.api.LibraryFacets
 /** Choix groupés, applicables d'un seul geste ; annuler laisse la bibliothèque intacte. */
 object LibraryFilterDialog {
     fun show(context: Context, original: TvLibraryContent.Query, facets: LibraryFacets, apply: (TvLibraryContent.Query) -> Unit) {
+        panel(context, original, facets, null) { query, _ -> apply(query) }
+    }
+    fun showSearch(context: Context, original: TvLibraryContent.Query, facets: LibraryFacets, search: String,
+        apply: (TvLibraryContent.Query, String) -> Unit) = panel(context, original, facets, search, apply)
+
+    private fun panel(context: Context, original: TvLibraryContent.Query, facets: LibraryFacets, search: String?,
+        apply: (TvLibraryContent.Query, String) -> Unit) {
         var draft = original
         val density = context.resources.displayMetrics.density
         val rows = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             setPadding((20 * density).toInt(), 0, (20 * density).toInt(), 0)
         }
+        val input = search?.let { text -> EditText(context).apply {
+            tag = "library-search-input"
+            hint = if (original.destination == "audio") "Titre, artiste ou album" else "Rechercher un titre"
+            setSingleLine(true)
+            imeOptions = EditorInfo.IME_ACTION_SEARCH
+            filters = arrayOf(android.text.InputFilter.LengthFilter(120))
+            setText(text)
+            setSelection(text.length)
+            rows.addView(this, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = (12 * density).toInt() })
+        } }
         fun choose(label: String, choices: List<Pair<String, String>>, selected: String, update: (String) -> Unit) {
             AlertDialog.Builder(context).setTitle(label)
                 .setSingleChoiceItems(choices.map { it.first }.toTypedArray(), choices.indexOfFirst { it.second == selected }) { dialog, index ->
@@ -87,10 +106,15 @@ object LibraryFilterDialog {
                 setOnCheckedChangeListener { _, checked -> draft = draft.copy(hdrOnly = checked) }
             })
         }
-        AlertDialog.Builder(context).setTitle("Filtres")
+        val label = when (original.destination) { "movie" -> "les films"; "series" -> "les séries"; "clip" -> "les vidéos";
+            "photo" -> "les photos"; "audio" -> "la musique"; else -> "la bibliothèque" }
+        val dialog = AlertDialog.Builder(context).setTitle(if (input != null) "Rechercher dans $label" else "Filtres")
             .setView(ScrollView(context).apply { addView(rows) })
-            .setPositiveButton("Appliquer") { _, _ -> apply(draft) }
-            .setNeutralButton("Réinitialiser") { _, _ -> apply(original.copy(watchedFilter = "all", genres = emptySet(), year = null, durationMaxMinutes = null, resolution = "all", hdrOnly = false, titlePrefix = "")) }
+            .setPositiveButton(if (input != null) "Rechercher" else "Appliquer") { _, _ -> apply(draft, input?.text?.toString()?.trim().orEmpty()) }
+            .setNeutralButton("Réinitialiser") { _, _ -> apply(original.copy(watchedFilter = "all", genres = emptySet(), year = null, durationMaxMinutes = null, resolution = "all", hdrOnly = false, titlePrefix = ""), "") }
             .setNegativeButton("Annuler", null).show()
+        input?.setOnEditorActionListener { _, action, _ ->
+            if (action == EditorInfo.IME_ACTION_SEARCH) { dialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick(); true } else false
+        }
     }
 }

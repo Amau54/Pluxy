@@ -1,4 +1,4 @@
-#define AppVersion "1.8.27"
+#define AppVersion "1.8.28"
 [Setup]
 AppId={{42602BFC-1295-4EA4-B419-808A2A4D09C0}
 AppName=Pluxy

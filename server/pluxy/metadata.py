@@ -95,7 +95,7 @@ class MetadataProvider:
     def _summary(meta: dict | MovieMetadata) -> MovieMetadata:
         value = meta.model_dump() if isinstance(meta, MovieMetadata) else meta
         return MovieMetadata.model_validate({key: value[key] for key in
-                                            ("title", "year", "poster_url", "episode_still_url", "matched", "genres", "source")
+                                            ("title", "year", "release_date", "poster_url", "episode_still_url", "matched", "genres", "source")
                                             if key in value})
 
     def snapshot(self, item_ids: frozenset[str] | None = None) -> tuple[str, dict[str, MovieMetadata]]:
@@ -416,6 +416,7 @@ class MetadataProvider:
             title=j.get("name") or name,
             original_title=j.get("original_name"),
             year=int(fa[:4]) if fa[:4].isdigit() else None,
+            release_date=fa if re.fullmatch(r"\d{4}-\d{2}-\d{2}", fa) else None,
             overview=j.get("overview") or None,
             tagline=j.get("tagline") or None,
             genres=[g["name"] for g in j.get("genres", [])],
@@ -500,6 +501,7 @@ class MetadataProvider:
             title=j.get("title") or title,
             original_title=j.get("original_title"),
             year=int(rd[:4]) if rd[:4].isdigit() else year,
+            release_date=rd if re.fullmatch(r"\d{4}-\d{2}-\d{2}", rd) else None,
             overview=j.get("overview") or None,
             tagline=j.get("tagline") or None,
             genres=[g["name"] for g in j.get("genres", [])],
