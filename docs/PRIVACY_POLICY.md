@@ -1,6 +1,6 @@
 # Confidentialité
 
-Mise à jour : 8 octobre 2026
+Mise à jour : 19 octobre 2026
 
 Cette politique concerne Pluxy (`com.pluxy.tv`), qui réunit les modes Lecteur et
 Serveur, l’ancienne application Pluxy Serveur (`com.pluxy.server`) et le serveur PC.
@@ -10,7 +10,7 @@ Le projet est maintenu par **Amau54**.
 
 Pluxy lit et partage les fichiers que vous choisissez sur votre réseau domestique.
 Il fonctionne sans compte et sans publicité. Il n'intègre aucune télémétrie propre
-à Pluxy ni aucun suivi publicitaire. Le SDK Google Cast traite ses propres données
+à Pluxy ni aucun suivi publicitaire. Les SDK Google Cast et ML Kit traitent leurs propres données
 techniques, décrites plus bas.
 
 Pluxy ne fournit aucun film, photo ou morceau. Vous choisissez les dossiers partagés
@@ -68,6 +68,14 @@ indique ne pas les partager avec des tiers. Le SDK ne permet pas à Pluxy ni à
 l'utilisateur de désactiver cette collecte ou de supprimer ces données. L'utilisation
 de Cast reste facultative ; DLNA et le lecteur Pluxy n'en dépendent pas.
 
+**Reconnaissance des génériques.** Sur Android, le modèle de reconnaissance de texte
+ML Kit est inclus dans l’application. Les images analysées et le texte reconnu restent
+sur l’appareil ; ils ne sont pas envoyés à Google. Le SDK collecte des informations
+techniques sur l’appareil, l’application, ses performances et un identifiant propre
+à l’installation, selon sa [déclaration officielle](https://developers.google.com/ml-kit/android-data-disclosure).
+Sur Windows, la reconnaissance utilise le moteur OCR local du système. Les repères
+et empreintes audio sont conservés dans le cache du serveur.
+
 **TMDB.** Si vous fournissez une clé, le serveur envoie en HTTPS à The Movie Database
 le titre et l'année disponible d'un film ou d'une série pour récupérer ses informations
 et affiches. Les photos et morceaux ne sont pas envoyés à TMDB. Le téléchargement
@@ -105,7 +113,7 @@ fichiers choisis par la personne qui gère le serveur domestique.
 ## Contact
 
 Pour une question, utilisez les [Issues du projet](https://github.com/Amau54/Pluxy/issues)
-si vous avez accès au dépôt. Celui-ci est actuellement privé. Un contact public et
+si vous avez accès au dépôt. Celui-ci est public. Un contact public et
 une copie de cette politique accessible sans connexion doivent être ajoutés avant
 une distribution publique sur Google Play.
 

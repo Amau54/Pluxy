@@ -11,8 +11,8 @@ class SegmentSignalsTest {
     }
     @Test fun `the same intro is found after different cold opens`() {
         val intro = signals(99, 40)
-        assertEquals(30 to 69, SegmentSignals.repeatedIntro(signals(1, 30) + intro + signals(2, 80), signals(3, 12) + intro + signals(4, 100)))
-        assertEquals(12 to 51, SegmentSignals.repeatedIntro(signals(3, 12) + intro + signals(4, 100), signals(1, 30) + intro + signals(2, 80)))
+        assertEquals(30.0 to 69.0, SegmentSignals.repeatedIntro(signals(1, 30) + intro + signals(2, 80), signals(3, 12) + intro + signals(4, 100), step = 1.0, span = 0.0))
+        assertEquals(12.0 to 51.0, SegmentSignals.repeatedIntro(signals(3, 12) + intro + signals(4, 100), signals(1, 30) + intro + signals(2, 80), step = 1.0, span = 0.0))
     }
     @Test fun `silence duplicates and unrelated episodes are never marked`() {
         assertNull(SegmentSignals.repeatedIntro(IntArray(200) { -1 }, IntArray(200) { -1 }))
@@ -21,7 +21,7 @@ class SegmentSignalsTest {
         assertNull(SegmentSignals.repeatedIntro(duplicate, duplicate))
         assertNull(SegmentSignals.repeatedIntro(signals(1, 150), signals(2, 150)))
         assertNull(SegmentSignals.repeatedIntro(signals(1, 30) + signals(99, 40), signals(2, 12) + signals(99, 40) + signals(3, 100)))
-        assertArrayEquals(intArrayOf(-1, -1), SegmentSignals.fingerprints(ShortArray(16000)))
+        assertArrayEquals(IntArray(4) { -1 }, SegmentSignals.fingerprints(ShortArray(16000)))
     }
     @Test fun `ordinary subtitles are rejected and the post credit scene remains`() {
         fun frame(rows: Set<Int>) = IntArray(128 * 72) { if (it / 128 in rows && it % 128 in 32..95) 230 else 0 }

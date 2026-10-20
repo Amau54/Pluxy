@@ -4,6 +4,13 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class SkipSegmentsTest {
+    @Test fun `paired markers stop before the narrative end marker`() {
+        val result = SkipSegments.detected(listOf(MediaChapter(237405, 339405, "openCreditStart"),
+            MediaChapter(339405, 500000, "openCreditEnd")), 3200000)
+        assertEquals(1, result.size)
+        assertEquals(339405L, result.single().endMs)
+        assertNull(SkipSegments.active(result, 340000))
+    }
     @Test fun `precise episode chapters take priority over a season template`() {
         val chapter = SkipSegment("intro", 120000, 180000)
         val season = SkipSegment("intro", 0, 60000)

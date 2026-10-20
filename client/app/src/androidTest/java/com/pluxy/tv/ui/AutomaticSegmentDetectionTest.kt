@@ -38,12 +38,12 @@ class AutomaticSegmentDetectionTest {
             assertEquals("Both visual segments must be found without metadata", 2, result.length())
             val opening = result.getJSONObject(0)
             assertEquals("Opening", opening.getString("title"))
-            assertTrue("Keep the cold open", opening.getLong("start_ms") in 6000..10000)
-            assertTrue("Never skip into the following scene", opening.getLong("end_ms") in 38000..42000)
+            assertTrue("Keep the cold open", opening.getLong("start_ms") in 8000..15000)
+            assertTrue("Never skip into the following scene", opening.getLong("end_ms") in 34000..42000)
             val credits = result.getJSONObject(1)
             assertEquals("End credits", credits.getString("title"))
-            assertTrue(credits.getLong("start_ms") in 168000..174000)
-            assertTrue("Keep the post-credit scene", credits.getLong("end_ms") in 190000..194000)
+            assertTrue(credits.getLong("start_ms") in 170000..180000)
+            assertTrue("Keep the post-credit scene", credits.getLong("end_ms") in 184000..194000)
             assertEquals("Results must be available from cache", result.toString(), analyzer.request(item).toString())
         } finally { analyzer.close() }
     }

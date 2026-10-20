@@ -32,6 +32,14 @@ Google Cast est une marque de Google LLC. Pluxy est indépendant de Google.
 OkHttp assure une partie des échanges réseau des applications Android. Il est
 distribué sous [licence Apache 2.0](https://github.com/square/okhttp/blob/master/LICENSE.txt).
 
+## Reconnaissance de texte
+
+Le serveur Android utilise le modèle latin intégré de Google ML Kit pour lire les
+crédits des génériques. Son utilisation relève des
+[conditions de ML Kit](https://developers.google.com/ml-kit/terms).
+Les images et le texte sont traités sur l’appareil. Les données techniques collectées
+par ce SDK sont décrites dans la [politique de confidentialité](PRIVACY_POLICY.md).
+
 ## The Movie Database
 
 L'API et les images TMDB sont utilisées lorsque les métadonnées TMDB sont activées.

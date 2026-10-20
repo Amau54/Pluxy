@@ -36,12 +36,13 @@ namespace Pluxy {
                 var row=Native.Object(value);
                 string title=Regex.Replace(Native.Text(row,"title").Normalize(NormalizationForm.FormD),"\\p{M}","").ToLowerInvariant();
                 title=Regex.Replace(Regex.Replace(title,"[^a-z0-9]+"," ").Trim(),"^\\d+ ","");
-                string kind=new[]{"intro","introduction","opening","opening credits","generique debut","generique de debut"}.Contains(title)?"intro":
-                    new[]{"credits","end credits","closing credits","ending","outro","generique fin","generique de fin"}.Contains(title)?"credits":null;
+                string compact=title.Replace(" ","");
+                string kind=new[]{"intro","introduction","opening","openingcredits","generiquedebut","generiquededebut","opencreditstart","openingcreditstart","openingcreditsstart","introstart"}.Contains(compact)?"intro":
+                    new[]{"credits","endcredits","closingcredits","ending","outro","generiquefin","generiquedefin","endcreditstart","endcreditsstart","creditsstart"}.Contains(compact)?"credits":null;
                 double a=Native.Number(row,"start_ms",-1),b=Native.Number(row,"end_ms",-1);
                 if(kind==null || double.IsNaN(a) || double.IsInfinity(a) || double.IsNaN(b) || double.IsInfinity(b) || a<0 || b<=a || b>duration) continue;
                 long start=(long)a,end=(long)b;
-                if(kind=="intro" && (start>600000 || end>duration/2 || end-start>240000)) continue;
+                if(kind=="intro" && (start>900000 || end>duration/2 || end-start>240000)) continue;
                 if(kind=="credits" && (start<duration/2 || end-start>1200000)) continue;
                 result.Add(new SkipSegment {kind=kind,startMs=start,endMs=end});
             }

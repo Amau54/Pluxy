@@ -101,6 +101,9 @@ namespace Pluxy {
                 new Dictionary<string,object>{{"title","Générique de fin"},{"start_ms",900000},{"end_ms",950000}},
                 new Dictionary<string,object>{{"title","Post credits"},{"start_ms",950000},{"end_ms",1000000}}};
             var detected=SkipSegments.Detect(chapters,1000000);
+            var paired=SkipSegments.Detect(new object[]{new Dictionary<string,object>{{"title","openCreditStart"},{"start_ms",237405},{"end_ms",339405}},
+                new Dictionary<string,object>{{"title","openCreditEnd"},{"start_ms",339405},{"end_ms",500000}}},3200000);
+            Check(paired.Count==1 && paired[0].endMs==339405 && SkipSegments.Active(paired,340000)==null,"Les marqueurs de début et fin ne débordent pas sur la scène suivante");
             Check(detected.Count==2 && SkipSegments.Active(detected,5000)==null && SkipSegments.Active(detected,10000).endMs==40000 && SkipSegments.Active(detected,900000).endMs==950000 && SkipSegments.Active(detected,950000)==null,"Les chapitres identifiés conservent la scène avant l'intro et celle après le générique");
             Check(SkipSegments.Detect(new object[]{new Dictionary<string,object>{{"title","Chapter 1"},{"start_ms",0},{"end_ms",40000}},new Dictionary<string,object>{{"title","Intro"},{"start_ms",0},{"end_ms",900000}}},1000000).Count==0,"Aucune scène n'est devinée à partir de chapitres ordinaires ou de durées incohérentes");
             var merged=SkipSegments.Merge(detected,new SkipMarkers {introStartMs=15000,introEndMs=50000}.Segments(1000000));

@@ -27,13 +27,15 @@ object SkipSegments {
         val title = Normalizer.normalize(chapter.title, Normalizer.Form.NFD).replace(Regex("\\p{M}"), "")
             .lowercase(java.util.Locale.ROOT).replace(Regex("[^a-z0-9]+"), " ").trim()
             .replace(Regex("^\\d+ "), "")
-        val kind = when (title) {
-            "intro", "introduction", "opening", "opening credits", "generique debut", "generique de debut" -> "intro"
-            "credits", "end credits", "closing credits", "ending", "outro", "generique fin", "generique de fin" -> "credits"
+        val kind = when (title.replace(" ", "")) {
+            "intro", "introduction", "opening", "openingcredits", "generiquedebut", "generiquededebut",
+            "opencreditstart", "openingcreditstart", "openingcreditsstart", "introstart" -> "intro"
+            "credits", "endcredits", "closingcredits", "ending", "outro", "generiquefin", "generiquedefin",
+            "endcreditstart", "endcreditsstart", "creditsstart" -> "credits"
             else -> return@mapNotNull null
         }
         if (chapter.startMs < 0 || chapter.endMs <= chapter.startMs || chapter.endMs > durationMs) return@mapNotNull null
-        if (kind == "intro" && (chapter.startMs > 600_000 || chapter.endMs > durationMs / 2 || chapter.endMs - chapter.startMs > 240_000)) return@mapNotNull null
+        if (kind == "intro" && (chapter.startMs > 900_000 || chapter.endMs > durationMs / 2 || chapter.endMs - chapter.startMs > 240_000)) return@mapNotNull null
         if (kind == "credits" && (chapter.startMs < durationMs / 2 || chapter.endMs - chapter.startMs > 1_200_000)) return@mapNotNull null
         SkipSegment(kind, chapter.startMs, chapter.endMs)
     }

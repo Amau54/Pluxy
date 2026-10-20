@@ -4,6 +4,8 @@ import json
 import math
 import subprocess
 import threading
+import re
+import unicodedata
 from pathlib import Path
 
 from .tools import NO_WINDOW
@@ -11,6 +13,27 @@ from .tools import NO_WINDOW
 _cache = OrderedDict()
 _lock = threading.Lock()
 _workers = threading.BoundedSemaphore(2)
+
+
+def skip_chapters(chapters, duration: float) -> list[dict]:
+    """Recognise both interval titles and paired start/end chapter markers."""
+    result = []
+    for row in chapters[:300]:
+        title = ''.join(c for c in unicodedata.normalize('NFD', row.get('title', '')) if not unicodedata.combining(c)).lower()
+        title = re.sub(r'^\d+', '', re.sub('[^a-z0-9]', '', title))
+        kind = ('Opening' if title in {'intro', 'introduction', 'opening', 'openingcredits', 'generiquedebut', 'generiquededebut',
+                                      'opencreditstart', 'openingcreditstart', 'openingcreditsstart', 'introstart'} else
+                'End credits' if title in {'credits', 'endcredits', 'closingcredits', 'ending', 'outro', 'generiquefin', 'generiquedefin',
+                                          'endcreditstart', 'endcreditsstart', 'creditsstart'} else None)
+        start, end = row['start_ms'], row['end_ms']
+        if not kind or start < 0 or end <= start or end > round(duration * 1000):
+            continue
+        if kind == 'Opening' and (start > 900000 or end > duration * 500 or end - start > 240000):
+            continue
+        if kind == 'End credits' and (start < duration * 500 or end - start > 1200000):
+            continue
+        result.append({'start_ms': start, 'end_ms': end, 'title': kind})
+    return result
 
 
 def parse_chapters(data):

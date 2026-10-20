@@ -2,6 +2,7 @@ from array import array
 from types import SimpleNamespace
 import random
 
+from pluxy.audio_signals import AudioMatch
 from pluxy.segments import SegmentAnalyzer, credit_frame, credit_interval, fingerprints, repeated_intro
 
 
@@ -14,10 +15,10 @@ def test_intro_matching_keeps_each_episodes_cold_open():
     intro = signals(99, 40)
     first = signals(1, 30) + intro + signals(2, 80)
     second = signals(3, 12) + intro + signals(4, 100)
-    assert repeated_intro(first, second) == (30, 69)
-    assert repeated_intro(second, first) == (12, 51)
+    assert repeated_intro(first, second, step=1, span=0) == (30, 69)
+    assert repeated_intro(second, first, step=1, span=0) == (12, 51)
     noisy = [value ^ (1 << (i % 31)) for i, value in enumerate(intro)]
-    assert repeated_intro(first, signals(5, 20) + noisy + signals(6, 80)) == (30, 69)
+    assert repeated_intro(first, signals(5, 20) + noisy + signals(6, 80), step=1, span=0) == (30, 69)
 
 
 def test_silence_static_music_duplicate_and_unrelated_episodes_are_rejected():
@@ -27,7 +28,7 @@ def test_silence_static_music_duplicate_and_unrelated_episodes_are_rejected():
     assert repeated_intro(duplicate, duplicate) is None
     assert repeated_intro(signals(1, 150), signals(2, 150)) is None
     assert repeated_intro(signals(1, 30) + signals(99, 40), signals(2, 12) + signals(99, 40) + signals(3, 100)) is None
-    assert fingerprints(array("h", [0] * 16000).tobytes()) == [-1, -1]
+    assert fingerprints(array("h", [0] * 16000).tobytes()) == [-1] * 4
 
 
 def text_frame(rows):
@@ -81,12 +82,13 @@ def test_intro_is_available_while_credits_are_still_being_analyzed(tmp_path, mon
         monkeypatch.setattr(analyzer, "revision", lambda _: "season")
         monkeypatch.setattr(analyzer, "peers", lambda _: [item])
         monkeypatch.setattr(analyzer, "audio", lambda _: [1, 2])
-        monkeypatch.setattr("pluxy.segments.repeated_intro", lambda *_: (30, 69))
+        monkeypatch.setattr("pluxy.segments.match_audio", lambda *_: AudioMatch(30, 69, 12, 0, 1))
+        monkeypatch.setattr(analyzer, "visual_intro", lambda *_: (30, 69))
         def credits(*args, **kwargs):
             assert analyzer.cached(item)["complete"] is False
             assert analyzer.request(item) == [opening]
-            return b""
-        monkeypatch.setattr(analyzer, "extract", credits)
+            return None
+        monkeypatch.setattr(analyzer, "credits", credits)
         analyzer.pending.add(item.id)
         analyzer.analyze(item)
         assert analyzer.cached(item)["complete"] is True

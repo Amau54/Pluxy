@@ -75,6 +75,7 @@ def test_movie_analysis_publishes_visual_intro_before_end_credit_scan(tmp_path, 
             assert analyzer.request(item) == [{"start_ms": 6000, "end_ms": 38000, "title": "Opening"}]
             return b""
         monkeypatch.setattr(analyzer, "extract", extract)
+        monkeypatch.setattr(analyzer, "credits", lambda item: extract(item, 6000, 600, video=True) and None)
         analyzer.pending.add(item.id)
         analyzer.analyze(item)
         assert analyzer.cached(item)["complete"] is True

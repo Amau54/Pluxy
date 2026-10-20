@@ -58,7 +58,7 @@ $defaults = Get-Content -LiteralPath (Join-Path $payload 'server\config.default.
 $defaults.server.media_dirs = @()
 [IO.File]::WriteAllText((Join-Path $payload 'server\config.default.json'), ($defaults | ConvertTo-Json -Depth 20), (New-Object Text.UTF8Encoding($false)))
 $source = Join-Path $repo 'server\pluxy'
-Get-ChildItem -LiteralPath $source -File -Recurse | Where-Object { $_.Extension -in @('.py','.html','.js','.css','.png','.ico','.svg') -and $_.FullName -notmatch '[\\/]__pycache__[\\/]' } | ForEach-Object {
+Get-ChildItem -LiteralPath $source -File -Recurse | Where-Object { $_.Extension -in @('.py','.ps1','.html','.js','.css','.png','.ico','.svg') -and $_.FullName -notmatch '[\\/]__pycache__[\\/]' } | ForEach-Object {
     $relative = $_.FullName.Substring($source.Length + 1)
     $target = Join-Path $payload "server\pluxy\$relative"
     New-Item -ItemType Directory -Force -Path (Split-Path $target) | Out-Null

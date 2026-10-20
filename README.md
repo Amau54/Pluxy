@@ -6,7 +6,7 @@
 
 Vos films, séries, photos et musique sur la TV.
 
-**Android 1.7.32 · Windows 1.8.24**
+**Android 1.7.33 · Windows 1.8.25**
 
 [Application Android](https://github.com/Amau54/Pluxy/releases/download/dev-latest/Pluxy-debug.apk)
 · [Application PC](https://github.com/Amau54/Pluxy/releases/download/pc-latest/Pluxy-Setup.exe)
@@ -76,18 +76,18 @@ Le profil Général est utilisé par défaut. Dans Réglages → Options, vous p
 
 La détection des intros et génériques fonctionne localement, sans clé API ni repère
 à saisir. Les chapitres nommés sont utilisés en priorité. Pour les séries, le serveur
-compare aussi le son des épisodes d’une même saison. Sans intro commune, il examine
-le début du film ou de l’épisode : plusieurs cartons de texte distincts sur fond
-sombre, encadrés de noir, peuvent être reconnus comme générique d’ouverture. Un logo
-isolé ou quelques sous-titres ne suffisent pas. Le générique de fin est recherché
-séparément pour conserver une éventuelle scène après les crédits.
+compare le son de plusieurs épisodes d’une même saison et vérifie les images communes.
+Les intros courtes nécessitent l’accord de deux épisodes de référence. Les films
+peuvent aussi être analysés par reconnaissance locale du texte des crédits, y compris
+sur un fond animé. Les limites restent conservatrices pour préserver le récit et les
+scènes après le générique.
 
 L’analyse se fait en arrière-plan à la demande du lecteur, puis reste en cache.
+Une analyse interrompue est réessayée ; les passages déjà reconnus restent disponibles.
 Au premier visionnage, elle peut ne pas être terminée au moment de l’intro.
-Elle n’est pas exhaustive : les génériques animés, sur des images du récit ou dans
-un format que le serveur ne peut pas décoder peuvent rester non reconnus.
-La détection visuelle du serveur Android nécessite Android 8.1 ou plus récent et un
-décodeur logiciel compatible. Aucun temps de passage fixe n’est appliqué à tous les films.
+Certains génériques restent non reconnus. La reconnaissance de texte nécessite
+Windows avec son moteur OCR disponible, ou Android 8.1 avec un décodeur logiciel
+compatible. Aucun temps de passage fixe n’est appliqué à tous les films.
 L’épisode suivant démarre après 5 secondes, avec un décompte sans panneau sur la vidéo.
 Vous pouvez choisir **Lire maintenant**, **Rester ici**, ou désactiver l’enchaînement dans les réglages.
 Les images propres aux épisodes sont récupérées sur TMDB par saison ; les captures
