@@ -3,6 +3,7 @@ package com.pluxy.tv.ui
 import android.app.Dialog
 import android.content.Intent
 import android.graphics.Bitmap
+import android.os.SystemClock
 import android.view.KeyEvent
 import android.view.View
 import android.widget.Button
@@ -115,6 +116,71 @@ class PlaybackEndErgonomicsTest {
         val item = nextItem ?: field(activity, "item") as MediaItem
         PlayerActivity::class.java.getDeclaredMethod("showNextEpisodeDialog", MediaItem::class.java)
             .apply { isAccessible = true }.invoke(activity, item)
+    }
+    private fun seekBeforeEnd(activity: PlayerActivity, remainingMs: Long) {
+        instrumentation.runOnMainSync {
+            val player = field(activity, "player") as Player
+            PlayerActivity::class.java.getDeclaredMethod("goToAbsolute", Long::class.javaPrimitiveType)
+                .apply { isAccessible = true }.invoke(activity, player.duration - remainingMs)
+        }
+        await("Seek before the end must finish") {
+            (field(activity, "player") as Player).playbackState == Player.STATE_READY &&
+                field(activity, "pendingSeekTargetMs") == null
+        }
+    }
+    @Test fun countdownAppearsBeforeEndAndPauseDoesNotCutTheEpisodeOrAddAnotherFiveSeconds() = withPlayer { activity ->
+        val next = nextItem
+        assumeTrue("Requires a second episode", next != null)
+        val currentId = (field(activity, "item") as MediaItem).id
+        seekBeforeEnd(activity, 6_000)
+        instrumentation.runOnMainSync {
+            assertNull(field(activity, "nextEpisodeDialog"))
+            (field(activity, "player") as Player).play()
+        }
+        await("Prompt must appear while the last five seconds are still playing") {
+            (field(activity, "nextEpisodeDialog") as? Dialog)?.isShowing == true
+        }
+        instrumentation.runOnMainSync {
+            val player = field(activity, "player") as Player
+            assertEquals(Player.STATE_READY, player.playbackState)
+            assertTrue(player.duration - player.currentPosition in 1..5_000)
+            player.pause()
+        }
+        capture("tv-next-before-end.png")
+        Thread.sleep(5_500)
+        var remaining = 0L
+        instrumentation.runOnMainSync {
+            assertEquals(currentId, (field(activity, "item") as MediaItem).id)
+            assertTrue((field(activity, "nextEpisodeDialog") as Dialog).isShowing)
+            val player = field(activity, "player") as Player
+            remaining = player.duration - player.currentPosition
+            player.play()
+        }
+        val resumedAt = SystemClock.elapsedRealtime()
+        await("The next episode must start at the media end") {
+            (field(activity, "item") as MediaItem).id == next!!.id
+        }
+        assertTrue("No additional five-second wait after the end", SystemClock.elapsedRealtime() - resumedAt < remaining + 2_500)
+    }
+    @Test fun seekingBackDismissesTheEarlyPromptAndAutoplayOffDoesNotExitEarly() = withPlayer { activity ->
+        assumeTrue("Requires a second episode", nextItem != null)
+        seekBeforeEnd(activity, 4_500)
+        instrumentation.runOnMainSync { (field(activity, "player") as Player).play() }
+        await("Prompt must appear") { (field(activity, "nextEpisodeDialog") as? Dialog)?.isShowing == true }
+        seekBeforeEnd(activity, 12_000)
+        instrumentation.runOnMainSync {
+            assertNull(field(activity, "nextEpisodeDialog"))
+            (field(activity, "player") as Player).pause()
+            PluxyApplication.setAutoPlayNextEpisode(context, false)
+        }
+        seekBeforeEnd(activity, 4_500)
+        instrumentation.runOnMainSync { (field(activity, "player") as Player).play() }
+        Thread.sleep(1_000)
+        instrumentation.runOnMainSync {
+            assertNull(field(activity, "nextEpisodeDialog"))
+            assertFalse(activity.isFinishing)
+            assertEquals(Player.STATE_READY, (field(activity, "player") as Player).playbackState)
+        }
     }
     @Test fun nextEpisodeHasOnlyCancelAndOkReturnsImmediatelyToLibrary() = withPlayer { activity ->
         instrumentation.runOnMainSync {

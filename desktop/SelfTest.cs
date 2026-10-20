@@ -148,6 +148,8 @@ namespace Pluxy {
             VerifyMainWindowFullscreen();
             await UpdateTests.Run(Check);
             VerifySkipSegments();
+            Check(!PlayerWindow.IsNextEpisodeWindow(54.99,60) && PlayerWindow.IsNextEpisodeWindow(55,60) && PlayerWindow.IsNextEpisodeWindow(59.9,60),"Le décompte de l’épisode suivant est proposé pendant les cinq dernières secondes");
+            Check(!PlayerWindow.IsNextEpisodeWindow(0,0) && !PlayerWindow.IsNextEpisodeWindow(0,-1) && !PlayerWindow.IsNextEpisodeWindow(-1,60),"Une durée inconnue ou une position invalide ne déclenche pas l’épisode suivant");
             var skipFile=Argument(args,"--test-skip");
             if(skipFile!=null) using(var player=new MpvSession()) {
                 await player.Start(skipFile,IntPtr.Zero,"compatible",0,true);

@@ -1,3 +1,8 @@
+## Windows 1.8.32 · Android 1.7.40
+
+- Séries : le décompte de l’épisode suivant apparaît pendant les cinq dernières secondes du média, puis la lecture enchaîne à sa fin, sans ajouter cinq secondes d’attente.
+- Le décompte suit la position de lecture : une pause ou une attente réseau ne coupe pas les dernières images. Revenir en arrière ferme la proposition ; la désactivation de la lecture automatique conserve l’épisode jusqu’à sa fin.
+
 ## Windows 1.8.31 · Android 1.7.39
 
 - Lecteur : « Passer l’intro » et « Passer le générique » plus grands et plus lisibles sur TV, avec une police renforcée et une ombre douce, toujours sans fond.

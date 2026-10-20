@@ -85,6 +85,10 @@ namespace Pluxy {
         private Button nextPlay;
         private readonly System.Diagnostics.Stopwatch nextClock=new System.Diagnostics.Stopwatch();
         private bool nextHandled;
+        private bool nextFollowsPlayback;
+        internal static bool IsNextEpisodeWindow(double position,double duration) {
+            return duration>0 && position>=0 && duration-position>=0 && duration-position<=NextEpisodeDelaySeconds;
+        }
         public PlayerWindow(LibraryClient api,string id,string title,string url,string audio,double start,object[] subtitles=null)
             : this(api,id,title,url,audio,start,subtitles,null) { }
         public PlayerWindow(LibraryClient api,string id,string title,string url,string audio,double start,object[] subtitles,object[] queue,IDictionary<string,object> media=null) {
@@ -298,11 +302,15 @@ namespace Pluxy {
                 int episodeIndex=episodes.FindIndex(e=>Native.Text(Native.Object(e),"id")==id);
                 nextButton.Enabled=episodeIndex>=0 && episodeIndex+1<episodes.Count;
                 bool ended=Convert.ToBoolean(await mpv.Command("get_property","eof-reached"));
-                if(ended && nextButton.Enabled && !nextHandled) ShowNextPrompt(episodeIndex+1);
+                bool approaching=autoplay && !wasPaused && !buffering && !dragging && seekDirection==0 && IsNextEpisodeWindow(position,duration);
+                if((ended || approaching) && nextButton.Enabled && !nextHandled) ShowNextPrompt(episodeIndex+1,!ended);
                 if(nextPrompt.Visible && autoplay) {
-                    int remaining=Math.Max(0,NextEpisodeDelaySeconds-(int)nextClock.Elapsed.TotalSeconds);
+                    if(nextFollowsPlayback && !ended && !IsNextEpisodeWindow(position,duration)) {
+                        CancelNextPrompt(); nextHandled=false;
+                    }
+                    int remaining=nextFollowsPlayback ? (int)Math.Ceiling(Math.Max(0,duration-position)) : Math.Max(0,NextEpisodeDelaySeconds-(int)nextClock.Elapsed.TotalSeconds);
                     nextCountdown.Text="Lecture dans "+remaining+" s";
-                    if(remaining==0 && (ContainsFocus || nextPrompt.ContainsFocus)) { await NextEpisode(); return; }
+                    if(nextPrompt.Visible && (nextFollowsPlayback?ended:remaining==0) && (ContainsFocus || nextPrompt.ContainsFocus)) { await NextEpisode(); return; }
                 }
                 if(!dragging && duration>0) timeline.Value=(int)Math.Max(0,Math.Min(10000,position/duration*10000));
                 time.Text=Clock(position)+" / "+Clock(duration); pause.Text=Convert.ToBoolean(paused)?"▶":"Ⅱ";
@@ -446,7 +454,8 @@ namespace Pluxy {
             menu.Items.Add(skip);
             menu.Show(optionsButton,new Point(0,0),ToolStripDropDownDirection.AboveRight);
         }
-        private void ShowNextPrompt(int index) {
+        private void ShowNextPrompt(int index,bool followsPlayback=false) {
+            nextFollowsPlayback=followsPlayback;
             nextHandled=true; var episode=Native.Object(episodes[index]);
             string title=MediaPresentation.EpisodeTitle(episode);
             string code=MediaPresentation.EpisodeCode(episode);

@@ -5,7 +5,6 @@ import com.pluxy.tv.ui.CompactChoiceMenu
 import com.pluxy.tv.ui.LibraryOrganizer
 import android.content.Context
 import android.app.Dialog
-import android.animation.ObjectAnimator
 import android.content.Intent
 import android.content.res.Configuration
 import android.graphics.Color
@@ -28,7 +27,6 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
-import android.view.animation.LinearInterpolator
 import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
@@ -259,8 +257,11 @@ class PlayerActivity : ThemedActivity() {
                 updateMediaSessionPlaybackState()
                 maybeRecoverQuality()
                 updateSkipSegment()
+                offerNextEpisode()
             }
-            handler.postDelayed(this, 1_000)
+            val nearEnd = p != null && item.kind == "series" && skipDurationMs > 0 &&
+                skipDurationMs - absolutePositionMs() in 0..6_000L
+            handler.postDelayed(this, if (nearEnd) 250 else 1_000)
         }
     }
 
@@ -2300,7 +2301,7 @@ class PlayerActivity : ThemedActivity() {
                 Player.STATE_ENDED -> {
                     setLoadingVisible(false)
                     handler.removeCallbacks(hideControlsRunnable)
-                    showControls(focusPlayPause = true)
+                    if (nextEpisodeDialog?.isShowing != true) showControls(focusPlayPause = true)
                     handler.removeCallbacks(bufferWatchdog)
                     setStatus("Lecture terminée")
                     offerNextEpisode()
@@ -2328,6 +2329,10 @@ class PlayerActivity : ThemedActivity() {
             reason: Int,
         ) {
             if (reason == Player.DISCONTINUITY_REASON_SEEK) {
+                if (nextEpisodeDialog != null) {
+                    nextEpisodeDialog?.dismiss()
+                    nextEpisodeHandled = false
+                }
                 markSeekTarget(PlaybackSeekPolicy.absolutePosition(streamPositionOffsetMs, newPosition.positionMs))
                 lastSeekAtMs = SystemClock.elapsedRealtime()
                 playStartedAtMs = 0L
@@ -2501,10 +2506,17 @@ class PlayerActivity : ThemedActivity() {
         }
     }
 
+    private fun approachingEpisodeEnd(): Boolean = player?.isPlaying == true &&
+        episodeEndRemainingMs(skipDurationMs, absolutePositionMs()) != null &&
+        !isSeeking && !timelineScrubbing && pendingSeekTargetMs == null && !playerChoiceMenuShowing
+
     private fun offerNextEpisode() {
         if (nextEpisodeHandled || item.kind != "series" || isFinishing) return
+        val enabled = PluxyApplication.autoPlayNextEpisode(this)
+        val ended = player?.playbackState == Player.STATE_ENDED
+        if (!ended && (!enabled || !approachingEpisodeEnd())) return
         nextEpisodeHandled = true
-        if (!PluxyApplication.autoPlayNextEpisode(this)) { finish(); return }
+        if (!enabled) { finish(); return }
         val ownerApi = api
         val finishedItem = item
         nextEpisodeJob?.cancel()
@@ -2528,8 +2540,12 @@ class PlayerActivity : ThemedActivity() {
                 }
                 EpisodeQueue.next(finishedItem, fetchedLibrary)
             }
-            if (api !== ownerApi || item.id != finishedItem.id ||
-                player?.playbackState != Player.STATE_ENDED) return@launch
+            if (api !== ownerApi || item.id != finishedItem.id) return@launch
+            if (!PluxyApplication.autoPlayNextEpisode(this@PlayerActivity) ||
+                (player?.playbackState != Player.STATE_ENDED && !approachingEpisodeEnd())) {
+                nextEpisodeHandled = false
+                return@launch
+            }
             if (
                 next == null || isFinishing || isDestroyed ||
                 !lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
@@ -2558,10 +2574,8 @@ class PlayerActivity : ThemedActivity() {
         val countdown = dialog.findViewById<TextView>(R.id.nextEpisodeCountdown)
         countdown.text = getString(R.string.player_next_countdown, NEXT_EPISODE_DELAY_SECONDS)
         val progress = dialog.findViewById<ProgressBar>(R.id.nextEpisodeProgress)
-        val progressAnimation = ObjectAnimator.ofInt(progress, "progress", progress.max, 0).apply {
-            duration = NEXT_EPISODE_DELAY_SECONDS * 1_000L
-            interpolator = LinearInterpolator()
-        }
+        val followsPlayback = approachingEpisodeEnd()
+        val countdownDuration = NEXT_EPISODE_DELAY_SECONDS * 1_000L
         nextEpisodeDialog = dialog
         dialog.setOnShowListener {
             val cancel = dialog.findViewById<Button>(R.id.nextEpisodeStay)
@@ -2581,26 +2595,34 @@ class PlayerActivity : ThemedActivity() {
                 } else false
             }
             run {
-                val deadline = SystemClock.elapsedRealtime() + NEXT_EPISODE_DELAY_SECONDS * 1_000L
-                progressAnimation.start()
+                val deadline = SystemClock.elapsedRealtime() + countdownDuration
                 val tick = object : Runnable {
                     override fun run() {
                         if (!dialog.isShowing || !activityStarted) return
-                        val seconds = episodeCountdownSeconds(deadline, SystemClock.elapsedRealtime())
-                        if (seconds <= 0) playNextEpisode(next)
-                        else {
-                            countdown.text = getString(R.string.player_next_countdown, seconds)
-                            handler.postDelayed(this, 1_000L)
+                        val ended = player?.playbackState == Player.STATE_ENDED
+                        val remaining = if (followsPlayback) {
+                            if (ended) 0L else episodeEndRemainingMs(skipDurationMs, absolutePositionMs())
+                        } else (deadline - SystemClock.elapsedRealtime()).coerceAtLeast(0L)
+                        if (remaining == null) {
+                            dialog.dismiss()
+                            nextEpisodeHandled = false
+                            return
                         }
+                        if ((followsPlayback && ended) || (!followsPlayback && remaining == 0L)) {
+                            playNextEpisode(next)
+                            return
+                        }
+                        countdown.text = getString(R.string.player_next_countdown, episodeCountdownSeconds(remaining, 0L))
+                        progress.progress = (progress.max * remaining / countdownDuration).toInt().coerceIn(0, progress.max)
+                        handler.postDelayed(this, 100L)
                     }
                 }
                 nextEpisodeTick = tick
-                handler.postDelayed(tick, 1_000L)
+                tick.run()
             }
         }
         dialog.setOnCancelListener { finish() }
         dialog.setOnDismissListener {
-            progressAnimation.cancel()
             nextEpisodeTick?.let { handler.removeCallbacks(it) }
             nextEpisodeTick = null
             if (nextEpisodeDialog === dialog) nextEpisodeDialog = null
