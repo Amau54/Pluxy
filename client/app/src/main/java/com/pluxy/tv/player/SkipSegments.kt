@@ -23,6 +23,8 @@ data class SkipMarkers(val introStartMs: Long = 0, val introEndMs: Long? = null,
 }
 
 object SkipSegments {
+    fun offer(segment: SkipSegment?): Boolean = segment != null &&
+        (segment.kind != "intro" || segment.endMs - segment.startMs >= 8_000L)
     fun detected(chapters: List<MediaChapter>, durationMs: Long): List<SkipSegment> = chapters.take(300).mapNotNull { chapter ->
         val title = Normalizer.normalize(chapter.title, Normalizer.Form.NFD).replace(Regex("\\p{M}"), "")
             .lowercase(java.util.Locale.ROOT).replace(Regex("[^a-z0-9]+"), " ").trim()

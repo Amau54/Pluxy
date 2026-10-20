@@ -15,7 +15,7 @@ using Microsoft.Web.WebView2.WinForms;
 [assembly: System.Reflection.AssemblyDescription("Lecteur et serveur multimédia Pluxy")]
 [assembly: System.Reflection.AssemblyCompany("Pluxy")]
 [assembly: System.Reflection.AssemblyProduct("Pluxy")]
-[assembly: System.Reflection.AssemblyVersion("1.8.26.0")]
+[assembly: System.Reflection.AssemblyVersion("1.8.27.0")]
 
 namespace Pluxy {
     internal static class Program {
@@ -50,6 +50,7 @@ namespace Pluxy {
         private readonly System.Windows.Forms.Timer updateMonitor=new System.Windows.Forms.Timer { Interval=60000 };
         private bool checkingUpdate;
         private DateTime nextUpdateCheck=DateTime.MinValue, nextUpdateOffer=DateTime.MinValue;
+        private bool launchUpdateOffered;
         private UpdateRelease pendingUpdate;
         private UpdateSession updates;
         private string serverOperation;
@@ -157,6 +158,7 @@ namespace Pluxy {
         private void Quit() { quitting=true; Close(); }
         private async void ShowUpdater(UpdateRelease known=null) {
             if(quitting) return;
+            launchUpdateOffered=true;
             Restore(); nextUpdateOffer=DateTime.UtcNow.AddHours(24);
             prefs.updateOfferAfter=nextUpdateOffer.Ticks; prefs.Save();
             if(updates==null) updates=new UpdateSession(async path=> {
@@ -177,7 +179,12 @@ namespace Pluxy {
                 catch(Exception) { nextUpdateCheck=DateTime.UtcNow.AddHours(1); }
                 finally { checkingUpdate=false; }
             }
-            if(!quitting && pendingUpdate!=null && pendingUpdate.available && DateTime.UtcNow>=nextUpdateOffer && DateTime.UtcNow.Ticks>=prefs.updateOfferAfter && Visible && ContainsFocus && players.Count==0 && !busy) ShowUpdater(pendingUpdate);
+            if(!quitting && pendingUpdate!=null && pendingUpdate.available &&
+                (!launchUpdateOffered || (DateTime.UtcNow>=nextUpdateOffer && DateTime.UtcNow.Ticks>=prefs.updateOfferAfter)) &&
+                Visible && ContainsFocus && players.Count==0 && !busy) {
+                launchUpdateOffered=true;
+                ShowUpdater(pendingUpdate);
+            }
         }
         private void ChooseMode() {
             if(busy) return; if(fullscreen) ToggleFullscreen(); choosing=true; Restore();

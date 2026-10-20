@@ -162,6 +162,7 @@ class PlayerActivity : ThemedActivity() {
     private var decisionToneMapped = false
     private var prepareJob: Job? = null
     private var nextEpisodeHandled = false
+    private var skipRemoteGesture = false
     private var nextEpisodeDialog: Dialog? = null
     private var nextEpisodeJob: Job? = null
     private var nextEpisodePrefetchJob: Job? = null
@@ -531,6 +532,20 @@ class PlayerActivity : ThemedActivity() {
             return super.dispatchKeyEvent(event)
         }
         val key = event.toPlaybackRemoteKey()
+        if (key == TvPlaybackKeyRouter.Key.CENTER && skipRemoteGesture) {
+            if (event.action == KeyEvent.ACTION_UP) skipRemoteGesture = false
+            return true
+        }
+        // Commit on DOWN and consume the whole gesture, including after the hint disappears.
+        if (key == TvPlaybackKeyRouter.Key.CENTER && !playerChoiceMenuShowing &&
+            (controlsOverlay.visibility != View.VISIBLE || findViewById<View>(R.id.skipSegment).hasFocus()) &&
+            findViewById<View>(R.id.skipSegment).visibility == View.VISIBLE) {
+            if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+                skipRemoteGesture = true
+                findViewById<View>(R.id.skipSegment).performClick()
+            }
+            return true
+        }
         val phase = when (event.action) {
             KeyEvent.ACTION_DOWN -> TvPlaybackKeyRouter.Phase.DOWN
             KeyEvent.ACTION_UP -> TvPlaybackKeyRouter.Phase.UP
@@ -1409,7 +1424,11 @@ class PlayerActivity : ThemedActivity() {
             Toast.makeText(this, label, Toast.LENGTH_SHORT).show()
             return
         }
-        val visible = activeSkipSegment != null
+        val visible = SkipSegments.offer(activeSkipSegment)
+        val bottom = ((if (controlsOverlay.visibility == View.VISIBLE) 100 else 22) * resources.displayMetrics.density).toInt()
+        (button.layoutParams as FrameLayout.LayoutParams).apply {
+            if (bottomMargin != bottom) { bottomMargin = bottom; button.layoutParams = this }
+        }
         if (!visible && button.hasFocus()) {
             if (controlsOverlay.visibility == View.VISIBLE) playPauseButton.requestFocus() else playerView.requestFocus()
         }
@@ -2482,6 +2501,7 @@ class PlayerActivity : ThemedActivity() {
     private fun offerNextEpisode() {
         if (nextEpisodeHandled || item.kind != "series" || isFinishing) return
         nextEpisodeHandled = true
+        if (!PluxyApplication.autoPlayNextEpisode(this)) { finish(); return }
         val ownerApi = api
         val finishedItem = item
         nextEpisodeJob?.cancel()
@@ -2521,7 +2541,6 @@ class PlayerActivity : ThemedActivity() {
     private fun showNextEpisodeDialog(next: PluxyItem) {
         setStatus("")
         nextEpisodeDialog?.dismiss()
-        val automatic = PluxyApplication.autoPlayNextEpisode(this)
         val dialog = Dialog(this)
         dialog.setContentView(R.layout.dialog_next_episode)
         dialog.setCanceledOnTouchOutside(false)
@@ -2529,29 +2548,31 @@ class PlayerActivity : ThemedActivity() {
         dialog.findViewById<TextView>(R.id.nextEpisodeCode).text =
             listOfNotNull(next.seriesName, episodeCode(next)).joinToString(" · ")
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            dialog.findViewById<View>(R.id.nextEpisodePlay).defaultFocusHighlightEnabled = false
             dialog.findViewById<View>(R.id.nextEpisodeStay).defaultFocusHighlightEnabled = false
         }
         val artwork = dialog.findViewById<ImageView>(R.id.nextEpisodeArtwork)
         com.pluxy.tv.ui.EpisodeArtwork.load(artwork, next, api.baseUrl)
         val countdown = dialog.findViewById<TextView>(R.id.nextEpisodeCountdown)
-        countdown.text = if (automatic) getString(R.string.player_next_countdown, NEXT_EPISODE_DELAY_SECONDS)
-            else getString(R.string.player_next_manual)
+        countdown.text = getString(R.string.player_next_countdown, NEXT_EPISODE_DELAY_SECONDS)
         nextEpisodeDialog = dialog
         dialog.setOnShowListener {
-            dialog.findViewById<Button>(R.id.nextEpisodePlay).apply {
-                isFocusableInTouchMode = resources.configuration.uiMode and
-                    Configuration.UI_MODE_TYPE_MASK == Configuration.UI_MODE_TYPE_TELEVISION
+            val cancel = dialog.findViewById<Button>(R.id.nextEpisodeStay)
+            cancel.apply {
+                isFocusableInTouchMode = true
                 setOnClickListener {
-                    playNextEpisode(next)
+                    dialog.dismiss()
+                    finish()
                 }
-                requestFocus()
+                requestFocusFromTouch()
             }
-            dialog.findViewById<Button>(R.id.nextEpisodeStay).setOnClickListener {
-                dialog.dismiss()
-                setStatus("Lecture terminée")
+            dialog.setOnKeyListener { _, keyCode, event ->
+                if (keyCode in listOf(KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER,
+                        KeyEvent.KEYCODE_NUMPAD_ENTER, KeyEvent.KEYCODE_BUTTON_A)) {
+                    if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) cancel.performClick()
+                    true
+                } else false
             }
-            if (automatic) {
+            run {
                 val deadline = SystemClock.elapsedRealtime() + NEXT_EPISODE_DELAY_SECONDS * 1_000L
                 val tick = object : Runnable {
                     override fun run() {
@@ -2568,6 +2589,7 @@ class PlayerActivity : ThemedActivity() {
                 handler.postDelayed(tick, 1_000L)
             }
         }
+        dialog.setOnCancelListener { finish() }
         dialog.setOnDismissListener {
             nextEpisodeTick?.let { handler.removeCallbacks(it) }
             nextEpisodeTick = null
@@ -2579,7 +2601,7 @@ class PlayerActivity : ThemedActivity() {
             val density = resources.displayMetrics.density
             val displayWidth = resources.displayMetrics.widthPixels
             val edge = resources.getDimensionPixelSize(R.dimen.media_viewer_screen_pad)
-            setLayout(minOf((440 * density).toInt(), displayWidth - edge * 2), ViewGroup.LayoutParams.WRAP_CONTENT)
+            setLayout(minOf((460 * density).toInt(), displayWidth - edge * 2), ViewGroup.LayoutParams.WRAP_CONTENT)
             setGravity(Gravity.BOTTOM or Gravity.END)
             attributes = attributes.apply {
                 x = edge

@@ -1,0 +1,149 @@
+package com.pluxy.tv.ui
+
+import android.app.Dialog
+import android.content.Intent
+import android.graphics.Bitmap
+import android.view.KeyEvent
+import android.view.View
+import android.widget.Button
+import androidx.media3.common.Player
+import androidx.test.platform.app.InstrumentationRegistry
+import com.pluxy.tv.PluxyApplication
+import com.pluxy.tv.R
+import com.pluxy.tv.api.MediaItem
+import com.pluxy.tv.player.MediaChapter
+import com.pluxy.tv.player.PlayerActivity
+import com.squareup.moshi.Moshi
+import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
+import org.junit.Assert.*
+import org.junit.Assume.assumeTrue
+import org.junit.Test
+import java.io.File
+import java.net.URL
+
+class PlaybackEndErgonomicsTest {
+    private var nextItem: MediaItem? = null
+    private val instrumentation = InstrumentationRegistry.getInstrumentation()
+    private val context get() = instrumentation.targetContext
+    private fun field(activity: PlayerActivity, name: String): Any? =
+        PlayerActivity::class.java.getDeclaredField(name).apply { isAccessible = true }.get(activity)
+    private fun call(activity: PlayerActivity, name: String) =
+        PlayerActivity::class.java.getDeclaredMethod(name).apply { isAccessible = true }.invoke(activity)
+    private fun await(message: String, predicate: () -> Boolean) {
+        val deadline = System.currentTimeMillis() + 25_000
+        while (System.currentTimeMillis() < deadline) {
+            var ready = false
+            instrumentation.runOnMainSync { ready = predicate() }
+            if (ready) return
+            Thread.sleep(100)
+        }
+        fail(message)
+    }
+    private fun capture(name: String) {
+        instrumentation.waitForIdleSync()
+        Thread.sleep(250)
+        instrumentation.uiAutomation.takeScreenshot()?.let { image ->
+            File(context.getExternalFilesDir(null), name).outputStream().use {
+                image.compress(Bitmap.CompressFormat.PNG, 100, it)
+            }
+            image.recycle()
+        }
+    }
+    private fun withPlayer(test: (PlayerActivity) -> Unit) {
+        val args = InstrumentationRegistry.getArguments()
+        val server = args.getString("auto_skip_test_url").orEmpty()
+        val id = args.getString("auto_skip_test_item").orEmpty()
+        assumeTrue("Requires isolated chapter fixture", server.isNotBlank() && id.isNotBlank())
+        val json = URL("$server/api/library/items/$id").openConnection().apply {
+            connectTimeout = 10_000; readTimeout = 10_000
+        }.getInputStream().bufferedReader().use { it.readText() }
+        args.getString("auto_skip_next_item")?.let { next ->
+            val data = URL("$server/api/library/items/$next").openConnection().apply {
+                connectTimeout = 10_000; readTimeout = 10_000
+            }.getInputStream().bufferedReader().use { it.readText() }
+            nextItem = Moshi.Builder().add(KotlinJsonAdapterFactory()).build().adapter(MediaItem::class.java).fromJson(data)
+        }
+        val before = PluxyApplication.autoSkipSegments(context)
+        val autoplay = PluxyApplication.autoPlayNextEpisode(context)
+        PluxyApplication.setServer(context, server, "Test ergonomie")
+        PluxyApplication.setPlaybackStrategy(context, "direct")
+        PluxyApplication.setAutoSkipSegments(context, false)
+        PluxyApplication.setAutoPlayNextEpisode(context, true)
+        val activity = instrumentation.startActivitySync(Intent(context, PlayerActivity::class.java)
+            .putExtra(PlayerActivity.EXTRA_ITEM, json).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) as PlayerActivity
+        try {
+            await("Player must be ready") { (field(activity, "player") as? Player)?.isPlaying == true }
+            instrumentation.runOnMainSync {
+                PlayerActivity::class.java.getDeclaredField("resumeHandled").apply { isAccessible = true }.set(activity, true)
+                (field(activity, "resumeDialog") as? Dialog)?.dismiss()
+                (field(activity, "player") as Player).pause()
+            }
+            test(activity)
+        } finally {
+            instrumentation.runOnMainSync { activity.finish() }
+            PluxyApplication.setAutoSkipSegments(context, before)
+            PluxyApplication.setAutoPlayNextEpisode(context, autoplay)
+        }
+    }
+    @Test fun shortIntroIsHiddenAndOneOkImmediatelySkipsLongIntroWithoutPausing() = withPlayer { activity ->
+        val seek = PlayerActivity::class.java.getDeclaredMethod("goToAbsolute", Long::class.javaPrimitiveType)
+            .apply { isAccessible = true }
+        instrumentation.runOnMainSync { seek.invoke(activity, 3_500L) }
+        await("Seek must finish") { (field(activity, "player") as Player).let {
+            it.playbackState == Player.STATE_READY && it.currentPosition >= 3_400
+        } }
+        instrumentation.runOnMainSync {
+            call(activity, "updateSkipSegment")
+            assertEquals(View.GONE, activity.findViewById<View>(R.id.skipSegment).visibility)
+            PlayerActivity::class.java.getDeclaredField("skipChapters").apply { isAccessible = true }
+                .set(activity, listOf(MediaChapter(0, 10_000, "Opening")))
+            call(activity, "hideControls")
+            call(activity, "updateSkipSegment")
+            val button = activity.findViewById<Button>(R.id.skipSegment)
+            assertEquals(View.VISIBLE, button.visibility)
+            assertNull(button.background)
+        }
+        capture("tv-skip-minimal.png")
+        instrumentation.runOnMainSync {
+            activity.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_CENTER))
+            activity.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DPAD_CENTER))
+        }
+        await("One OK must seek straight to the intro end") { (field(activity, "player") as Player).currentPosition >= 9_900 }
+        instrumentation.runOnMainSync { assertFalse((field(activity, "player") as Player).playWhenReady) }
+    }
+    private fun showNext(activity: PlayerActivity) {
+        val item = nextItem ?: field(activity, "item") as MediaItem
+        PlayerActivity::class.java.getDeclaredMethod("showNextEpisodeDialog", MediaItem::class.java)
+            .apply { isAccessible = true }.invoke(activity, item)
+    }
+    @Test fun nextEpisodeHasOnlyCancelAndOkReturnsImmediatelyToLibrary() = withPlayer { activity ->
+        instrumentation.runOnMainSync {
+            showNext(activity)
+        }
+        await("Cancel must receive focus when the prompt attaches") {
+            (field(activity, "nextEpisodeDialog") as? Dialog)?.findViewById<View>(R.id.nextEpisodeStay)?.hasFocus() == true
+        }
+        instrumentation.runOnMainSync {
+            val dialog = field(activity, "nextEpisodeDialog") as Dialog
+            val cancel = dialog.findViewById<Button>(R.id.nextEpisodeStay)
+            assertTrue(cancel.hasFocus())
+            assertEquals("Annuler", cancel.text.toString())
+        }
+        capture("tv-next-episode.png")
+        instrumentation.runOnMainSync {
+            val dialog = field(activity, "nextEpisodeDialog") as Dialog
+            dialog.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_CENTER))
+            assertTrue(activity.isFinishing)
+            assertFalse(dialog.isShowing)
+        }
+    }
+    @Test fun noActionStartsNextEpisodeAfterFiveSeconds() = withPlayer { activity ->
+        instrumentation.runOnMainSync { showNext(activity) }
+        Thread.sleep(3_000)
+        instrumentation.runOnMainSync { assertTrue((field(activity, "nextEpisodeDialog") as Dialog).isShowing) }
+        await("Countdown must start playback and close its prompt") {
+            field(activity, "nextEpisodeDialog") == null && (field(activity, "player") as? Player)?.playWhenReady == true &&
+                (nextItem == null || (field(activity, "item") as MediaItem).id == nextItem!!.id)
+        }
+    }
+}

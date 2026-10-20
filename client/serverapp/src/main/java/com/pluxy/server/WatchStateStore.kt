@@ -32,7 +32,12 @@ internal class WatchStateStore(
     val revision: Long get() = publication.get()
 
     @Synchronized
-    fun get(id: String): WatchRecord = records.getOrPut(id) { load(id) }
+    fun get(id: String): WatchRecord = records.getOrPut(id) {
+        val record = load(id)
+        val state = record.state
+        if (state.durationMs > 0 && state.positionMs.toDouble() / state.durationMs >= 0.90)
+            record.copy(state = state.copy(watched = true, positionMs = 0)) else record
+    }
 
     @Synchronized
     fun update(id: String, position: Long, duration: Long, sessionId: String?, sequence: Long?): WatchRecord {
@@ -47,7 +52,7 @@ internal class WatchStateStore(
         val safePosition = position.coerceAtLeast(0).let {
             if (safeDuration > 0) it.coerceAtMost(safeDuration) else it
         }
-        val watched = safeDuration > 0 && safePosition.toDouble() / safeDuration > 0.95
+        val watched = safeDuration > 0 && safePosition.toDouble() / safeDuration >= 0.90
         val next = WatchRecord(
             state = WatchState(if (watched) 0 else safePosition, safeDuration, watched, now()),
             sessionId = sessionId ?: old.sessionId,

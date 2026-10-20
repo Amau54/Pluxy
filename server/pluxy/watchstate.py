@@ -57,6 +57,9 @@ class WatchStore:
                             "watched": bool(value.get("watched", False)),
                             "last_played_at": self._timestamp(value.get("last_played_at", 0)),
                         }
+                        record = clean[item_id]
+                        if record["duration_ms"] > 0 and record["position_ms"] / record["duration_ms"] >= 0.90:
+                            record.update(watched=True, position_ms=0)
                         sessions = value.get("_sessions", {})
                         if isinstance(sessions, dict):
                             clean[item_id]["_sessions"] = {
@@ -117,8 +120,8 @@ class WatchStore:
                 while len(sessions) > MAX_PROGRESS_SESSIONS:
                     sessions.pop(next(iter(sessions)))
                 active = session_id
-            # Au-delà de ~95 %, on considère le film "vu" -> reprise à 0.
-            watched = duration_ms > 0 and position_ms / duration_ms > 0.95
+            # À partir de 90 %, la lecture est considérée comme vue.
+            watched = duration_ms > 0 and position_ms / duration_ms >= 0.90
             candidate = dict(self._data)
             candidate[item_id] = {
                 "position_ms": 0 if watched else max(0, position_ms),

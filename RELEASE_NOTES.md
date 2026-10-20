@@ -1,3 +1,10 @@
+## Windows 1.8.27 · Android 1.7.35
+
+- TV : passage de l’intro ou du générique avec un seul appui sur OK pendant la lecture, sans ouvrir les commandes. Texte blanc discret en bas à droite, sans fond ; aucune proposition pour une intro de moins de huit secondes.
+- Épisode suivant : image agrandie, panneau sombre et décompte de cinq secondes. L’unique action Annuler ramène directement à la bibliothèque ; le réglage de lecture automatique reste respecté.
+- Un média est considéré comme vu dès 90 % de lecture sur les deux serveurs, y compris dans l’historique existant.
+- Windows : une mise à jour disponible est proposée au lancement même si une proposition précédente avait été fermée.
+
 ## Windows 1.8.26 · Android 1.7.34
 
 - Préparation automatique des intros et génériques après l’ajout des films et épisodes à la bibliothèque, avant toute demande du lecteur.

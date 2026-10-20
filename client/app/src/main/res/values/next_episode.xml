@@ -1,7 +1,7 @@
 <resources>
     <string name="player_next_episode">Épisode suivant</string>
     <string name="player_next_now">Lire maintenant</string>
-    <string name="player_next_stay">Rester ici</string>
+    <string name="player_next_stay">Annuler</string>
     <string name="player_next_countdown">Lecture dans %1$d s</string>
     <string name="player_next_manual">Prêt quand vous le souhaitez</string>
 </resources>

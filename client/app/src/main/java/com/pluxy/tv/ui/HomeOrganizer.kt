@@ -16,7 +16,7 @@ object HomeOrganizer {
             ?: episodes.minWithOrNull(EPISODE_ORDER)
 
     fun continueWatching(items: List<MediaItem>): List<MediaItem> = items.asSequence()
-        .filter { it.kind in VIDEO_KINDS && it.inProgress && !it.watched && it.progress in 0.02..0.95 }
+        .filter { it.kind in VIDEO_KINDS && it.inProgress && !it.watched && it.progress >= 0.02 && it.progress < 0.90 }
         .sortedWith(
             compareByDescending<MediaItem> { it.lastPlayedAt }
                 .thenByDescending { it.addedAt },

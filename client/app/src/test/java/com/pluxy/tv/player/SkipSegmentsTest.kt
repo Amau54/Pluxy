@@ -4,6 +4,12 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class SkipSegmentsTest {
+    @Test fun `short intros are not offered but eight seconds and credits are`() {
+        assertFalse(SkipSegments.offer(null))
+        assertFalse(SkipSegments.offer(SkipSegment("intro", 1000, 8999)))
+        assertTrue(SkipSegments.offer(SkipSegment("intro", 1000, 9000)))
+        assertTrue(SkipSegments.offer(SkipSegment("credits", 90000, 95000)))
+    }
     @Test fun `paired markers stop before the narrative end marker`() {
         val result = SkipSegments.detected(listOf(MediaChapter(237405, 339405, "openCreditStart"),
             MediaChapter(339405, 500000, "openCreditEnd")), 3200000)

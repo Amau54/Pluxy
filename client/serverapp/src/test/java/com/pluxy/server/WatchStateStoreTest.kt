@@ -7,6 +7,17 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
 class WatchStateStoreTest {
+    @Test fun `ninety percent is watched including exact boundary and persists`() {
+        val store = store()
+        assertFalse(store.update("a", 899, 1000, null, null).state.watched)
+        assertTrue(store.update("a", 900, 1000, null, null).state.watched)
+        assertEquals(0L, store().get("a").state.positionMs)
+        assertTrue(store().get("a").state.watched)
+        assertFalse(store.update("unknown", 900, 0, null, null).state.watched)
+        records["legacy"] = WatchRecord(WatchState(920, 1000, false, 10))
+        assertTrue(store().get("legacy").state.watched)
+        assertEquals(0L, store().get("legacy").state.positionMs)
+    }
     private val records = mutableMapOf<String, WatchRecord>()
     private fun store(persist: (String, WatchRecord) -> Unit = { id, record -> records[id] = record }) =
         WatchStateStore({ records[it] ?: WatchRecord() }, persist) { 42L }

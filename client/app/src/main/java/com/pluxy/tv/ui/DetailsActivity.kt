@@ -149,7 +149,7 @@ class DetailsActivity : ThemedActivity() {
     private fun renderPlaybackActions() {
         val durationMs = (item.duration * 1_000).toLong().coerceAtLeast(0)
         val resumable = resumePositionMs >= 10_000L &&
-            (durationMs <= 0L || resumePositionMs < durationMs * 0.95)
+            (durationMs <= 0L || resumePositionMs < durationMs * 0.90)
         primaryStartsFromBeginning = progressWatched && !resumable
         primaryAutoResume = resumable
         findViewById<Button>(R.id.play).text = when {

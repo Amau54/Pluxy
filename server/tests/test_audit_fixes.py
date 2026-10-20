@@ -301,6 +301,24 @@ def test_watch_store_records_last_played_timestamp(tmp_path):
     assert WatchStore(tmp_path).get("film")["last_played_at"] >= before
 
 
+def test_watch_store_ninety_percent_boundary_and_persistence(tmp_path):
+    from pluxy.watchstate import WatchStore
+
+    store = WatchStore(tmp_path)
+    store.set("episode", 899, 1000)
+    assert not store.get("episode")["watched"]
+    store.set("episode", 900, 1000)
+    assert WatchStore(tmp_path).get("episode")["watched"]
+    assert store.get("episode")["position_ms"] == 0
+    store.set("unknown", 900, 0)
+    assert not store.get("unknown")["watched"]
+    import json
+
+    store.path.write_text(json.dumps({"legacy": {"position_ms": 920, "duration_ms": 1000}}), encoding="utf-8")
+    assert WatchStore(tmp_path).get("legacy")["watched"]
+    assert WatchStore(tmp_path).get("legacy")["position_ms"] == 0
+
+
 def test_preflight_reports_unadaptable_format_without_ffmpeg():
     from pluxy.config import PluxyConfig
     from pluxy.decision import decide
