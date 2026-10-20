@@ -79,24 +79,34 @@ def make_analyzer(tmp_path, count=7):
         path = tmp_path / f'movie-{index}.mkv'
         path.write_bytes(b'media fixture')
         items.append(SimpleNamespace(id=str(index), path=str(path), kind='movie', duration=7200, added_at=index))
-    library = SimpleNamespace(all=lambda: items, is_scanning=False)
+    library = SimpleNamespace(all=lambda: items, get=lambda key: next((item for item in items if item.id == key), None), is_scanning=False)
     analyzer = SegmentAnalyzer(SimpleNamespace(ffmpeg=SimpleNamespace(ffmpeg_path='unused')), library, tmp_path)
+    analyzer.budget.resources.constrained = lambda: False
+    analyzer.playback_delay = 0
     return analyzer, items, library
 
 
-def test_entire_library_is_prepared_before_any_playback_request_and_reused(tmp_path, monkeypatch):
+def test_all_intros_are_prepared_and_only_the_playing_movies_credits_are_analyzed(tmp_path, monkeypatch):
     analyzer, items, library = make_analyzer(tmp_path)
-    calls = []
+    calls, credits = [], []
     monkeypatch.setattr(analyzer, 'text_opening', lambda item: calls.append(item.id) or (13, 36))
-    monkeypatch.setattr(analyzer, 'credits', lambda _: (6800, 6900))
+    monkeypatch.setattr(analyzer, 'credits', lambda item: credits.append(item.id) or (6800, 6900))
     try:
         analyzer.prepare()  # No chapter request: seven files must exceed the old four-task limit.
-        wait_for(lambda: all((analyzer.cached(item) or {}).get('complete') for item in items))
+        wait_for(lambda: all((analyzer.cached(item) or {}).get('intro_done') for item in items))
         assert calls == [str(index) for index in reversed(range(7))]
+        assert len(analyzer.request(items[0])) == 1
+        assert credits == []
+        analyzer.playback_started(items[0].id)
+        wait_for(lambda: (analyzer.cached(items[0]) or {}).get('complete'))
+        analyzer.playback_touch(items[0].id)
+        assert credits == ['0']
         assert len(analyzer.request(items[0])) == 2
+        analyzer.playback_finished(items[0].id)
     finally:
         analyzer.close()
     restored = SegmentAnalyzer(analyzer.cfg, library, tmp_path)
+    restored.budget.resources.constrained = lambda: False
     try:
         monkeypatch.setattr(restored, 'text_opening', lambda _: calls.append('unexpected'))
         restored.prepare()
@@ -120,7 +130,7 @@ def test_playback_interrupts_other_preparation_and_keeps_completed_intro(tmp_pat
         raise AnalysisUnavailable('Interrupted for playback')
     monkeypatch.setattr(analyzer, 'credits', credits)
     try:
-        analyzer.prepare()
+        analyzer.playback_started(items[0].id)
         assert entered.wait(3)
         analyzer.playback_started()
         assert killed.wait(3)
@@ -130,13 +140,14 @@ def test_playback_interrupts_other_preparation_and_keeps_completed_intro(tmp_pat
         assert cache['attempts'] == 0 and 'last_error' not in cache
         assert len(cache['segments']) == 1
         analyzer.playback_finished()
-        assert analyzer._background_busy()  # Grace period also covers HLS request gaps.
+        analyzer.playback_finished(items[0].id)
         monkeypatch.setattr(analyzer, 'credits', lambda _: (6800, 6900))
         cache['retry_after'] = 0
         analyzer.write(items[0], cache)
         with analyzer.lock:
             analyzer.playback_until = 0
-        analyzer.prepare()
+            analyzer.active_media.clear()
+        analyzer.playback_started(items[0].id)
         wait_for(lambda: (analyzer.cached(items[0]) or {}).get('complete'))
         assert len(analyzer.request(items[0])) == 2
     finally:
@@ -161,7 +172,15 @@ def test_foreground_request_runs_ahead_of_the_remaining_backlog(tmp_path, monkey
         assert entered.wait(3)
         analyzer.request(items[0])
         release.set()
-        wait_for(lambda: all((analyzer.cached(item) or {}).get('complete') for item in items))
+        wait_for(lambda: (analyzer.cached(items[0]) or {}).get('intro_done'))
+        # Foreground work now interrupts the other preparation, even during a
+        # resource pause. Its completed intro survives and its credits retry.
+        wait_for(lambda: bool(analyzer.cached(items[-1])))
+        interrupted = analyzer.cached(items[-1])
+        interrupted['retry_after'] = 0
+        analyzer.write(items[-1], interrupted)
+        analyzer.prepare()
+        wait_for(lambda: all((analyzer.cached(item) or {}).get('intro_done') for item in items))
         assert calls[:2] == ['6', '0']
         assert len(calls) == len(set(calls)) == 7
     finally:
@@ -169,14 +188,82 @@ def test_foreground_request_runs_ahead_of_the_remaining_backlog(tmp_path, monkey
         analyzer.close()
 
 
+def test_playback_during_intro_analysis_continues_with_credits_without_restarting(tmp_path, monkeypatch):
+    analyzer, items, _ = make_analyzer(tmp_path, 2)
+    entered, release = threading.Event(), threading.Event()
+    calls, credits = [], []
+    def opening(item):
+        calls.append(item.id)
+        entered.set()
+        assert release.wait(3)
+        return (13, 36)
+    monkeypatch.setattr(analyzer, 'text_opening', opening)
+    monkeypatch.setattr(analyzer, 'credits', lambda item: credits.append(item.id) or (6800, 6900))
+    try:
+        analyzer.prepare()
+        assert entered.wait(3)
+        analyzer.playback_started(items[-1].id)
+        analyzer.request(items[-1])  # A client polling chapters must not cancel its own analysis.
+        release.set()
+        wait_for(lambda: (analyzer.cached(items[-1]) or {}).get('complete'))
+        assert calls == ['1']
+        assert credits == ['1']
+        assert analyzer._ready_at(items[0]) > time.time()
+        analyzer.playback_finished(items[-1].id)
+        assert analyzer._active(items[-1].id)  # Range-request gaps retain ownership.
+    finally:
+        release.set()
+        analyzer.close()
+
+
+def test_foreground_request_unblocks_a_preparation_waiting_for_resources(tmp_path, monkeypatch):
+    analyzer, items, _ = make_analyzer(tmp_path, 2)
+    waiting = threading.Event()
+    def busy():
+        waiting.set()
+        return True
+    monkeypatch.setattr(analyzer.budget.resources, 'constrained', busy)
+    monkeypatch.setattr(analyzer, 'text_opening', lambda _: (13, 36))
+    try:
+        analyzer.request(items[1], background=True)
+        assert waiting.wait(3)
+        analyzer.request(items[0])
+        wait_for(lambda: (analyzer.cached(items[0]) or {}).get('intro_done'))
+        assert not analyzer.cached(items[1])
+    finally:
+        analyzer.close()
+
+
+def test_credit_analysis_leaves_startup_time_and_range_requests_do_not_reset_it(tmp_path, monkeypatch):
+    analyzer, items, _ = make_analyzer(tmp_path, 1)
+    now = [100.0]
+    monkeypatch.setattr('pluxy.segments.time.time', lambda: now[0])
+    analyzer.preparation.start_worker = False
+    analyzer.playback_delay = 12
+    try:
+        analyzer.write(items[0], {'peers': analyzer.revision(items[0]), 'intro_done': True, 'complete': False, 'segments': []})
+        analyzer.playback_started(items[0].id)
+        assert analyzer._ready_at(items[0]) == 112
+        assert analyzer.request(items[0]) == []
+        assert not analyzer.pending
+        analyzer.playback_finished(items[0].id)
+        now[0] = 108
+        analyzer.playback_started(items[0].id)
+        assert analyzer._ready_at(items[0]) == 112
+        now[0] = 113
+        assert analyzer._ready_at(items[0]) == 0
+    finally:
+        analyzer.close()
+
+
 @pytest.mark.parametrize('path', ['/stream/direct/abc', '/stream/remux/abc', '/stream/convert/abc/main', '/stream/hls/abc/main/index.m3u8'])
 def test_transfer_activity_is_kept_until_body_end_and_cleared_on_disconnect(path):
     from pluxy.main import PreparationActivityMiddleware
     events = []
-    analyzer = SimpleNamespace(playback_started=lambda: events.append('start'), playback_finished=lambda: events.append('end'))
+    analyzer = SimpleNamespace(playback_started=lambda key: events.append(('start', key)), playback_finished=lambda key: events.append(('end', key)))
     async def app(scope, receive, send):
         events.append('body')
-        assert events == ['start', 'body']
+        assert events == [('start', 'abc'), 'body']
         raise asyncio.CancelledError()
     middleware = PreparationActivityMiddleware(app)
     scope = {'type': 'http', 'method': 'GET', 'path': path,
@@ -187,7 +274,7 @@ def test_transfer_activity_is_kept_until_body_end_and_cleared_on_disconnect(path
         except asyncio.CancelledError:
             pass
     asyncio.run(run())
-    assert events == ['start', 'body', 'end']
+    assert events == [('start', 'abc'), 'body', ('end', 'abc')]
 
 
 @pytest.mark.parametrize('playing', [False, True])

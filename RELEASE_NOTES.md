@@ -1,3 +1,9 @@
+## Windows 1.8.29
+
+- Analyse des intros et génériques : priorité basse, décodage et filtres sur un seul thread, processus d’analyse limités à un cœur et pauses entre les traitements. La préparation attend lorsque le PC fonctionne sur batterie ou que le processeur est très sollicité.
+- Les intros sont préparées d’abord dans la bibliothèque. Les génériques sont recherchés pendant la lecture du média concerné, avec le même budget réduit ; les autres médias restent en attente.
+- Réutilisation des résultats déjà calculés, y compris l’intro quand le générique reste à analyser. Les requêtes successives du lecteur et les changements de position conservent le travail en cours.
+
 ## Android 1.7.38
 
 - Épisode suivant : image au format 16:9, typographie allégée et alignements harmonisés. Décompte discret avec une fine ligne de progression, toujours sans fond de panneau.

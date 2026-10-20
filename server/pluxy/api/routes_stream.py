@@ -267,6 +267,9 @@ def set_progress(item_id: str, body: ProgressBody, request: Request) -> dict:
         reader_watch(st, request).set(item_id, body.position_ms, body.duration_ms, body.session_id, body.sequence)
     except OSError as error:
         raise HTTPException(503, "Impossible de sauvegarder la progression") from error
+    analyzer = getattr(st, 'segments', None)
+    if analyzer and 0 < body.position_ms < body.duration_ms:
+        analyzer.playback_touch(item_id)
     return reader_watch(st, request).get(item_id)
 
 

@@ -18,7 +18,7 @@ _ROOTS = {size: tuple(cmath.exp(-2j * math.pi * i / size) for i in range(size //
 _BANDS = tuple((round((100 + i * 100) * SIZE / RATE), round((200 + i * 100) * SIZE / RATE)) for i in range(32))
 
 
-def fingerprints(raw: bytes) -> list[int]:
+def fingerprints(raw: bytes, *, checkpoint=None) -> list[int]:
     samples = array("h", raw[:len(raw) - len(raw) % 2])
     history = deque()
     totals = [0.0] * 32
@@ -26,6 +26,8 @@ def fingerprints(raw: bytes) -> list[int]:
     total_power = 0.0
     result = []
     for index, offset in enumerate(range(0, len(samples) - SIZE + 1, SIZE)):
+        if checkpoint and index % 32 == 0:
+            checkpoint()
         values = [complex(samples[offset + i] * _HANN[i]) for i in _REVERSE]
         for size, roots in _ROOTS.items():
             half = size // 2
@@ -65,13 +67,15 @@ class AudioMatch:
     coverage: float
 
 
-def match(left: list[int], right: list[int], step: float = STEP, span: float = SPAN) -> AudioMatch | None:
+def match(left: list[int], right: list[int], step: float = STEP, span: float = SPAN, *, checkpoint=None) -> AudioMatch | None:
     if not left or not right:
         return None
     # Vote for temporal alignments first, then validate sustained sequences. Small
     # local errors cannot reset an otherwise convincing match to one second.
     votes = Counter()
     for i in range(0, len(left), 3):
+        if checkpoint and i % 48 == 0:
+            checkpoint()
         value = left[i]
         if value < 0:
             continue

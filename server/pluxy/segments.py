@@ -23,6 +23,7 @@ from .audio_signals import fingerprints as spectral_fingerprints, match as match
 from .chapters import read_chapters, skip_chapters
 from .credit_text import CreditText, summarize, opening_text_interval
 from .preparation import PreparationQueue
+from .analysis_budget import AnalysisBudget
 
 RATE = 8000
 
@@ -105,16 +106,27 @@ class SegmentAnalyzer:
         self.ocr_cache = {}
         self.playing = 0
         self.playback_until = 0.0
+        self.active_media = {}
+        self.playback_ready = {}
+        self.playback_delay = 12
+        self.analysis_for_playback = False
         self.background_item = None
         self.preempted = threading.Event()
+        self.budget = AnalysisBudget(self.closed, self._stopped, lambda: self.background_item is not None)
         self.preparation = PreparationQueue(self._ready_at, lambda item: self.request(item, background=True), self._background_busy)
 
     def _background_busy(self):
         with self.lock:
-            return bool(self.closed.is_set() or self.pending or self.playing or time.time() < self.playback_until
-                        or getattr(self.library, 'is_scanning', False))
+            return bool(self.closed.is_set() or self.pending or (self.playback_active() and not any(self._active(key) for key in list(self.active_media)))
+                        or getattr(self.library, 'is_scanning', False)) or self.budget.resources.constrained()
+
+    def _active(self, item_id):
+        count, until = self.active_media.get(item_id, (0, 0))
+        return count > 0 or time.time() < until
 
     def _ready_at(self, item):
+        if self.playback_active() and not self._active(item.id):
+            return time.time() + 30
         try:
             self.key(item)
             revision = self.revision(item)
@@ -122,8 +134,10 @@ class SegmentAnalyzer:
             return None
         cache = self.cached(item)
         if cache and cache.get('peers') == revision:
-            if 'segments' in cache and cache.get('complete', True):
+            if 'segments' in cache and (cache.get('complete', True) or (cache.get('intro_done') and not self._active(item.id))):
                 return None
+            if cache.get('intro_done') and self.playback_ready.get(item.id, 0) > time.time():
+                return self.playback_ready[item.id]
             return cache.get('retry_after', 0)
         return 0
 
@@ -133,42 +147,68 @@ class SegmentAnalyzer:
         items.sort(key=lambda item: getattr(item, 'added_at', 0), reverse=True)
         self.preparation.update(items)
 
-    def playback_started(self):
+    def playback_started(self, item_id=None):
         with self.lock:
             self.playing += 1
-            if self.background_item is not None:
+            if item_id:
+                if not self._active(item_id):
+                    self.playback_ready.pop(item_id, None)
+                count, _ = self.active_media.get(item_id, (0, 0))
+                self.active_media[item_id] = (count + 1, time.time() + 60)
+            if self.background_item is not None and self.background_item != item_id:
                 self.preempted.set()
                 if self.process is not None:
                     try:
                         self.process.kill()
                     except OSError:
                         pass
+        if item_id:
+            self.playback_touch(item_id)
+
+    def playback_touch(self, item_id):
+        with self.lock:
+            self.active_media = {key: value for key, value in self.active_media.items() if value[0] > 0 or value[1] > time.time()}
+            self.playback_ready = {key: due for key, due in self.playback_ready.items() if key in self.active_media}
+            count, _ = self.active_media.get(item_id, (0, 0))
+            self.active_media[item_id] = (count, time.time() + 60)
+            self.playback_ready.setdefault(item_id, time.time() + self.playback_delay)
+        item = self.library.get(item_id)
+        if item and item.kind in {'movie', 'series'}:
+            self.preparation.prioritize(item)
 
     def playback_active(self):
-        with self.lock:
-            return self.playing > 0 or time.time() < self.playback_until
+        return self.playing > 0 or time.time() < self.playback_until or any(self._active(key) for key in list(self.active_media))
 
     def _stopped(self):
-        return self.closed.is_set() or self.preempted.is_set()
+        return (self.closed.is_set() or self.preempted.is_set()
+                or (self.analysis_for_playback and not self._active(self.background_item)))
 
     def _run_analysis(self, item, background):
         with self.lock:
             self.background_item = item.id if background else None
+            self.analysis_for_playback = background and self._active(item.id)
             self.preempted.clear()
-            if background and (self.playing or time.time() < self.playback_until):
+            if background and self.playback_active() and not self._active(item.id):
                 self.preempted.set()
         try:
-            self.analyze(item)
+            with self.budget.resources.background_thread():
+                if self.budget.checkpoint():
+                    self.analyze(item, intro_only=not self._active(item.id) or time.time() < self.playback_ready.get(item.id, 0))
         finally:
             with self.lock:
+                self.pending.discard(item.id)
                 self.background_item = None
+                self.analysis_for_playback = False
                 self.preempted.clear()
             self.preparation.wake.set()
 
-    def playback_finished(self):
+    def playback_finished(self, item_id=None):
         with self.lock:
             self.playing = max(0, self.playing - 1)
             self.playback_until = time.time() + 60
+            if item_id:
+                count, _ = self.active_media.get(item_id, (0, 0))
+                self.active_media[item_id] = (max(0, count - 1), time.time() + 60)
         self.preparation.wake.set()
 
     def peers(self, item):
@@ -212,7 +252,6 @@ class SegmentAnalyzer:
         if not background:
             with self.lock:
                 if self.background_item == item.id:
-                    self.background_item = None
                     self.preempted.clear()
         try:
             self.key(item)
@@ -221,22 +260,34 @@ class SegmentAnalyzer:
             return []
         cached = self.cached(item)
         known = cached.get("segments", []) if cached and cached.get("peers") == revision else []
-        if cached is not None and "segments" in cached and cached.get("peers") == revision and cached.get("complete", True):
+        if cached is not None and "segments" in cached and cached.get("peers") == revision and (
+                cached.get("complete", True) or (cached.get('intro_done') and not self._active(item.id))):
             return known
         if cached and cached.get('peers') == revision and cached.get("retry_after", 0) > time.time():
+            return known
+        if self.playback_active() and not self._active(item.id):
+            return known
+        if cached and cached.get('intro_done') and self._active(item.id) and time.time() < self.playback_ready.get(item.id, 0):
             return known
         if item.kind not in {"movie", "series", "clip", "video"} or not math.isfinite(item.duration) or item.duration < 180 or self.closed.is_set():
             return known
         with self.lock:
             if not self.closed.is_set() and item.id not in self.pending and len(self.pending) < 4:
+                if not background and self.background_item is not None:
+                    self.preempted.set()
+                    if self.process is not None:
+                        try:
+                            self.process.kill()
+                        except OSError:
+                            pass
                 self.pending.add(item.id)
                 self.pool.submit(self._run_analysis, item, background)
         return known
 
     def extract(self, item, start: float, seconds: float, video: bool = False, dense: bool = False) -> bytes:
-        if self._stopped():
+        if not self.budget.checkpoint():
             raise AnalysisUnavailable('Preparation interrupted')
-        args = [self.cfg.ffmpeg.ffmpeg_path, "-v", "error", "-threads", "2"]
+        args = [self.cfg.ffmpeg.ffmpeg_path, "-v", "error", "-threads", "1", "-filter_threads", "1"]
         if video and not dense:
             args += ["-skip_frame", "nokey"]
         args += ["-ss", str(start), "-i", item.path,
@@ -246,6 +297,8 @@ class SegmentAnalyzer:
         args += ["pipe:1"]
         priority = getattr(subprocess, "BELOW_NORMAL_PRIORITY_CLASS", 0)
         with subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, creationflags=NO_WINDOW | priority) as process:
+            self.budget.resources.limit_child(process)
+            started = time.monotonic()
             with self.lock:
                 self.process = process
                 if self._stopped():
@@ -263,6 +316,7 @@ class SegmentAnalyzer:
                 process.communicate()
                 raise AnalysisUnavailable("Extraction timed out") from None
             finally:
+                self.budget.rest_after(time.monotonic() - started)
                 with self.lock:
                     self.process = None
 
@@ -271,14 +325,14 @@ class SegmentAnalyzer:
         if cached and isinstance(cached.get("audio"), list) and cached["audio"]:
             return cached["audio"]
         key = self.key(item)
-        values = spectral_fingerprints(self.extract(item, 0, min(900, item.duration * .5)))
+        values = spectral_fingerprints(self.extract(item, 0, min(900, item.duration * .5)), checkpoint=self._checkpoint)
         if self.closed.is_set() or self.key(item) != key:
             return []
         self.write(item, {**(cached or {}), "audio": values})
         return values
 
     def frame(self, item, seconds: float) -> bytes:
-        raw = self.command([self.cfg.ffmpeg.ffmpeg_path, '-v', 'error', '-threads', '2', '-ss', str(max(0, seconds)),
+        raw = self.command([self.cfg.ffmpeg.ffmpeg_path, '-v', 'error', '-threads', '1', '-filter_threads', '1', '-ss', str(max(0, seconds)),
                             '-i', item.path, '-an', '-sn', '-frames:v', '1', '-vf', 'scale=128:72',
                             '-pix_fmt', 'gray', '-f', 'rawvideo', 'pipe:1'], 12, 9216)
         if len(raw) != 9216:
@@ -347,14 +401,16 @@ class SegmentAnalyzer:
 
     def keyframe(self, item, seconds: float) -> tuple[float, bytes] | None:
         """Seek directly to one indexed keyframe, without reading minutes of remux packets."""
-        if self._stopped():
+        if not self.budget.checkpoint():
             raise AnalysisUnavailable('Preparation interrupted')
-        args = [self.cfg.ffmpeg.ffmpeg_path, '-hide_banner', '-v', 'info', '-threads', '2', '-copyts', '-start_at_zero',
+        args = [self.cfg.ffmpeg.ffmpeg_path, '-hide_banner', '-v', 'info', '-threads', '1', '-filter_threads', '1', '-copyts', '-start_at_zero',
                 '-ss', str(max(0, seconds)), '-noaccurate_seek', '-skip_frame', 'nokey', '-i', item.path,
                 '-map', '0:v:0', '-an', '-sn', '-frames:v', '1', '-vf', 'showinfo,scale=128:72',
                 '-pix_fmt', 'gray', '-f', 'rawvideo', 'pipe:1']
         priority = getattr(subprocess, 'BELOW_NORMAL_PRIORITY_CLASS', 0)
         with subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, creationflags=NO_WINDOW | priority) as process:
+            self.budget.resources.limit_child(process)
+            started = time.monotonic()
             with self.lock:
                 self.process = process
                 if self._stopped():
@@ -374,14 +430,21 @@ class SegmentAnalyzer:
                 process.communicate()
                 raise AnalysisUnavailable('Keyframe timed out') from None
             finally:
+                self.budget.rest_after(time.monotonic() - started)
                 with self.lock:
                     self.process = None
 
+    def _checkpoint(self):
+        if not self.budget.checkpoint():
+            raise AnalysisUnavailable('Preparation interrupted')
+
     def command(self, args, timeout: float, limit: int) -> bytes:
-        if self._stopped():
+        if not self.budget.checkpoint():
             raise AnalysisUnavailable('Preparation interrupted')
         priority = getattr(subprocess, 'BELOW_NORMAL_PRIORITY_CLASS', 0)
         with subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, creationflags=NO_WINDOW | priority) as process:
+            self.budget.resources.limit_child(process)
+            started = time.monotonic()
             with self.lock:
                 self.process = process
                 if self._stopped():
@@ -396,6 +459,7 @@ class SegmentAnalyzer:
                 process.communicate()
                 raise AnalysisUnavailable('Local text recognition timed out') from None
             finally:
+                self.budget.rest_after(time.monotonic() - started)
                 with self.lock:
                     self.process = None
 
@@ -407,7 +471,7 @@ class SegmentAnalyzer:
             return self.ocr_cache[cache_key]
         path = self.directory / ('ocr-' + uuid.uuid4().hex + '.png')
         try:
-            raw = self.command([self.cfg.ffmpeg.ffmpeg_path, '-v', 'error', '-threads', '2', '-ss', str(max(0, seconds)), '-i', item.path,
+            raw = self.command([self.cfg.ffmpeg.ffmpeg_path, '-v', 'error', '-threads', '1', '-filter_threads', '1', '-ss', str(max(0, seconds)), '-i', item.path,
                 '-an', '-sn', '-frames:v', '1', '-vf', 'scale=2560:1440:force_original_aspect_ratio=decrease',
                 '-pix_fmt', 'rgb24', '-c:v', 'png', '-f', 'image2pipe', 'pipe:1'], 12, 16 * 1024 * 1024)
             if not raw and seconds > item.duration - 15:
@@ -565,7 +629,7 @@ class SegmentAnalyzer:
             return self.text_credits(item)
         return lower, upper
 
-    def analyze(self, item) -> None:
+    def analyze(self, item, *, intro_only=False) -> None:
         data = None
         try:
             if self._stopped():
@@ -603,7 +667,7 @@ class SegmentAnalyzer:
                         data['audio'] = own
                         candidates = []
                         for peer in peers:
-                            candidate = match_audio(own, self.audio(peer))
+                            candidate = match_audio(own, self.audio(peer), checkpoint=self._checkpoint)
                             if candidate:
                                 candidates.append((peer, candidate))
                         for peer, candidate in candidates:
@@ -627,7 +691,7 @@ class SegmentAnalyzer:
                 except (OSError, ValueError, AnalysisUnavailable, subprocess.SubprocessError) as error:
                     if not self.preempted.is_set():
                         data['last_error'] = type(error).__name__
-            if not data.get('credits_done') and not self._stopped():
+            if not intro_only and not data.get('credits_done') and not self._stopped():
                 try:
                     add('End credits', self.credits(item))
                     data['credits_done'] = True
@@ -638,13 +702,11 @@ class SegmentAnalyzer:
             if data['complete']:
                 data.pop('last_error', None)
             data['attempts'] = previous.get('attempts', 0) + (0 if self.preempted.is_set() else 1)
-            data['retry_after'] = 0 if data['complete'] else time.time() + (5 if self.preempted.is_set() else min(900, 15 * 2 ** min(data['attempts'], 6)))
+            data['retry_after'] = 0 if data['complete'] or (intro_only and data.get('intro_done')) else time.time() + (5 if self.preempted.is_set() else min(900, 15 * 2 ** min(data['attempts'], 6)))
             publish()
         except (OSError, ValueError, OverflowError, subprocess.SubprocessError):
             pass
         finally:
-            with self.lock:
-                self.pending.discard(item.id)
             self.preparation.wake.set()
 
     def close(self) -> None:

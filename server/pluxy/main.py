@@ -37,11 +37,12 @@ class PreparationActivityMiddleware:
                  and scope.get('path', '').startswith(('/stream/direct/', '/stream/remux/', '/stream/convert/', '/stream/hls/')))
         if not media or not callable(getattr(analyzer, 'playback_started', None)):
             return await self.app(scope, receive, send)
-        analyzer.playback_started()
+        item_id = scope.get('path', '').split('/')[3]
+        analyzer.playback_started(item_id)
         try:
             await self.app(scope, receive, send)
         finally:
-            analyzer.playback_finished()
+            analyzer.playback_finished(item_id)
 
 
 class RequestBodyLimitMiddleware:

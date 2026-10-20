@@ -82,7 +82,7 @@ def test_intro_is_available_while_credits_are_still_being_analyzed(tmp_path, mon
         monkeypatch.setattr(analyzer, "revision", lambda _: "season")
         monkeypatch.setattr(analyzer, "peers", lambda _: [item])
         monkeypatch.setattr(analyzer, "audio", lambda _: [1, 2])
-        monkeypatch.setattr("pluxy.segments.match_audio", lambda *_: AudioMatch(30, 69, 12, 0, 1))
+        monkeypatch.setattr("pluxy.segments.match_audio", lambda *_, **__: AudioMatch(30, 69, 12, 0, 1))
         monkeypatch.setattr(analyzer, "visual_intro", lambda *_: (30, 69))
         def credits(*args, **kwargs):
             assert analyzer.cached(item)["complete"] is False

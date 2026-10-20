@@ -55,6 +55,18 @@ class PreparationQueue:
                 with self.lock:
                     self.due[key] = self.clock() + 60
 
+    def prioritize(self, item):
+        with self.lock:
+            if self.closed.is_set():
+                return
+            self.items[item.id] = item
+            self.items.move_to_end(item.id, last=False)
+            self.due.pop(item.id, None)
+            if self.thread is None and self.start_worker:
+                self.thread = threading.Thread(target=self._run, name='pluxy-preparation', daemon=True)
+                self.thread.start()
+        self.wake.set()
+
     def _run(self):
         while not self.closed.is_set():
             self.wake.wait(30)

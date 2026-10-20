@@ -6,7 +6,7 @@
 
 Vos films, séries, photos et musique sur la TV.
 
-**Android 1.7.38 · Windows 1.8.28**
+**Android 1.7.38 · Windows 1.8.29**
 
 [Application Android](https://github.com/Amau54/Pluxy/releases/download/dev-latest/Pluxy-debug.apk)
 · [Application PC](https://github.com/Amau54/Pluxy/releases/download/pc-latest/Pluxy-Setup.exe)
@@ -82,12 +82,14 @@ peuvent aussi être analysés par reconnaissance locale du texte des crédits, y
 sur un fond animé. Les limites restent conservatrices pour préserver le récit et les
 scènes après le générique.
 
-Le serveur prépare les repères en arrière-plan après le scan de la bibliothèque,
-en donnant la priorité aux nouveaux films et épisodes. Il recherche aussi les nouveaux
-fichiers environ toutes les deux minutes lorsqu’aucune lecture n’est en cours.
-Un seul média est analysé à la fois. Les lectures passent en premier ; les autres
-préparations interrompues reprennent ensuite, sans refaire les passages déjà reconnus.
-Les résultats restent en cache et sont réutilisés au redémarrage.
+Sur PC, le serveur prépare d’abord les intros après le scan de la bibliothèque,
+en donnant la priorité aux nouveaux films et épisodes. Il recherche le générique du
+média regardé pendant sa lecture ; les analyses des autres médias restent en attente.
+Un seul média est analysé à la fois, à priorité basse, avec un cœur au maximum pour les
+processus d’analyse et des pauses entre les traitements. La préparation est différée
+sur batterie ou lorsque le processeur est très sollicité. Les résultats restent en
+cache au redémarrage et les étapes déjà terminées ne sont pas recalculées.
+Les nouveaux fichiers sont recherchés environ toutes les deux minutes hors lecture.
 Si vous lancez un fichier immédiatement après son ajout, l’analyse peut encore être
 en cours. Une fois les repères prêts, le lecteur les utilise dès le premier visionnage.
 Certains génériques restent non reconnus. La reconnaissance de texte nécessite
