@@ -5,6 +5,7 @@ import com.pluxy.tv.ui.CompactChoiceMenu
 import com.pluxy.tv.ui.LibraryOrganizer
 import android.content.Context
 import android.app.Dialog
+import android.animation.ObjectAnimator
 import android.content.Intent
 import android.content.res.Configuration
 import android.graphics.Color
@@ -27,6 +28,7 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
+import android.view.animation.LinearInterpolator
 import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
@@ -34,6 +36,7 @@ import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.PopupWindow
+import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.TextView
 import com.pluxy.tv.ui.InAppNotice as Toast
@@ -2554,6 +2557,11 @@ class PlayerActivity : ThemedActivity() {
         com.pluxy.tv.ui.EpisodeArtwork.load(artwork, next, api.baseUrl)
         val countdown = dialog.findViewById<TextView>(R.id.nextEpisodeCountdown)
         countdown.text = getString(R.string.player_next_countdown, NEXT_EPISODE_DELAY_SECONDS)
+        val progress = dialog.findViewById<ProgressBar>(R.id.nextEpisodeProgress)
+        val progressAnimation = ObjectAnimator.ofInt(progress, "progress", progress.max, 0).apply {
+            duration = NEXT_EPISODE_DELAY_SECONDS * 1_000L
+            interpolator = LinearInterpolator()
+        }
         nextEpisodeDialog = dialog
         dialog.setOnShowListener {
             val cancel = dialog.findViewById<Button>(R.id.nextEpisodeStay)
@@ -2574,6 +2582,7 @@ class PlayerActivity : ThemedActivity() {
             }
             run {
                 val deadline = SystemClock.elapsedRealtime() + NEXT_EPISODE_DELAY_SECONDS * 1_000L
+                progressAnimation.start()
                 val tick = object : Runnable {
                     override fun run() {
                         if (!dialog.isShowing || !activityStarted) return
@@ -2591,6 +2600,7 @@ class PlayerActivity : ThemedActivity() {
         }
         dialog.setOnCancelListener { finish() }
         dialog.setOnDismissListener {
+            progressAnimation.cancel()
             nextEpisodeTick?.let { handler.removeCallbacks(it) }
             nextEpisodeTick = null
             if (nextEpisodeDialog === dialog) nextEpisodeDialog = null
@@ -2601,7 +2611,12 @@ class PlayerActivity : ThemedActivity() {
             val density = resources.displayMetrics.density
             val displayWidth = resources.displayMetrics.widthPixels
             val edge = resources.getDimensionPixelSize(R.dimen.media_viewer_screen_pad)
-            setLayout(minOf((460 * density).toInt(), displayWidth - edge * 2), ViewGroup.LayoutParams.WRAP_CONTENT)
+            val dialogWidth = minOf((400 * density).toInt(), displayWidth - edge * 2)
+            val content = artwork.parent as ViewGroup
+            artwork.layoutParams = artwork.layoutParams.apply {
+                height = ((dialogWidth - content.paddingLeft - content.paddingRight) * 9 / 16).coerceAtLeast(1)
+            }
+            setLayout(dialogWidth, ViewGroup.LayoutParams.WRAP_CONTENT)
             setGravity(Gravity.BOTTOM or Gravity.END)
             attributes = attributes.apply {
                 x = edge

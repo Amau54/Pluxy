@@ -1,39 +1,45 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent" android:layout_height="wrap_content"
-    android:orientation="vertical" android:padding="20dp"
-    android:background="@null">
-    <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
-        android:text="@string/player_next_episode" android:fontFamily="sans-serif-light"
-        android:textColor="#C8FFFFFF" android:textSize="13sp" android:letterSpacing="0.08"
-        android:shadowColor="#B3000000" android:shadowRadius="3" android:shadowDy="1" />
+    android:orientation="vertical" android:padding="16dp" android:background="@null">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="horizontal" android:gravity="center_vertical">
+        <TextView android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content"
+            android:text="@string/player_next_episode" android:fontFamily="sans-serif-medium"
+            android:textColor="#CCFFFFFF" android:textSize="12sp" android:letterSpacing="0.02"
+            android:shadowColor="#B3000000" android:shadowRadius="3" android:shadowDy="1" />
+        <TextView android:id="@+id/nextEpisodeCountdown" android:layout_width="wrap_content"
+            android:layout_height="wrap_content" android:layout_marginStart="16dp"
+            android:fontFamily="sans-serif" android:textSize="12sp" android:textColor="#DDFFFFFF"
+            android:fontFeatureSettings="tnum" android:accessibilityLiveRegion="none"
+            android:shadowColor="#B3000000" android:shadowRadius="3" android:shadowDy="1" />
+    </LinearLayout>
     <ImageView android:id="@+id/nextEpisodeArtwork"
-        android:layout_width="match_parent" android:layout_height="180dp" android:layout_marginTop="12dp"
-        android:background="@drawable/bg_details_artwork" android:clipToOutline="true"
+        android:layout_width="match_parent" android:layout_height="207dp" android:layout_marginTop="10dp"
+        android:background="@drawable/bg_next_episode_artwork" android:clipToOutline="true"
         android:scaleType="centerCrop" android:contentDescription="@null" android:importantForAccessibility="no" />
+    <ProgressBar android:id="@+id/nextEpisodeProgress" style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent" android:layout_height="2dp" android:layout_marginTop="8dp"
+        android:minHeight="2dp" android:maxHeight="2dp" android:max="5000" android:progress="5000"
+        android:indeterminate="false" android:progressDrawable="@drawable/next_episode_progress"
+        android:focusable="false" android:importantForAccessibility="no" />
     <TextView android:id="@+id/nextEpisodeTitle" android:layout_width="match_parent"
-        android:layout_height="wrap_content" android:layout_marginTop="14dp"
-        android:fontFamily="sans-serif-medium" android:textColor="#F2FFFFFF" android:textSize="20sp"
-        android:maxLines="2" android:ellipsize="end"
+        android:layout_height="wrap_content" android:layout_marginTop="12dp"
+        android:fontFamily="sans-serif" android:textColor="#F5FFFFFF" android:textSize="22sp"
+        android:includeFontPadding="false" android:maxLines="2" android:ellipsize="end"
         android:shadowColor="#B3000000" android:shadowRadius="3" android:shadowDy="1" />
     <TextView android:id="@+id/nextEpisodeCode" android:layout_width="match_parent"
-        android:layout_height="wrap_content" android:layout_marginTop="4dp"
-        android:fontFamily="sans-serif-light" android:textColor="#BFFFFFFF" android:textSize="12sp"
-        android:maxLines="1" android:ellipsize="end"
+        android:layout_height="wrap_content" android:layout_marginTop="6dp"
+        android:fontFamily="sans-serif" android:textColor="#BFFFFFFF" android:textSize="12sp"
+        android:includeFontPadding="false" android:maxLines="1" android:ellipsize="end"
         android:shadowColor="#B3000000" android:shadowRadius="3" android:shadowDy="1" />
-    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
-        android:layout_marginTop="12dp" android:orientation="horizontal" android:gravity="center_vertical">
-        <TextView android:id="@+id/nextEpisodeCountdown" android:layout_width="0dp"
-            android:layout_weight="1" android:layout_height="wrap_content"
-            android:fontFamily="sans-serif-light" android:textSize="15sp" android:textColor="#DDFFFFFF"
-            android:accessibilityLiveRegion="none"
-            android:shadowColor="#B3000000" android:shadowRadius="3" android:shadowDy="1" />
-        <Button android:id="@+id/nextEpisodeStay" style="@style/PlayerDeck.Action"
-            android:layout_width="wrap_content" android:background="@null" android:backgroundTint="@null"
-            android:fontFamily="sans-serif-medium" android:textColor="@color/player_skip_text"
-            android:shadowColor="#B3000000" android:shadowRadius="3" android:shadowDy="1"
-            android:defaultFocusHighlightEnabled="false" android:text="@string/player_next_stay"
-            android:nextFocusLeft="@id/nextEpisodeStay" android:nextFocusRight="@id/nextEpisodeStay"
-            android:nextFocusUp="@id/nextEpisodeStay" android:nextFocusDown="@id/nextEpisodeStay" />
-    </LinearLayout>
+    <Button android:id="@+id/nextEpisodeStay" style="@style/PlayerDeck.Action"
+        android:layout_width="wrap_content" android:layout_gravity="end" android:layout_marginTop="4dp"
+        android:minWidth="72dp" android:minHeight="48dp" android:paddingHorizontal="0dp"
+        android:gravity="end|center_vertical" android:background="@null" android:backgroundTint="@null"
+        android:fontFamily="sans-serif-medium" android:textSize="14sp" android:textColor="@color/player_skip_text"
+        android:shadowColor="#B3000000" android:shadowRadius="3" android:shadowDy="1"
+        android:defaultFocusHighlightEnabled="false" android:text="@string/player_next_stay"
+        android:nextFocusLeft="@id/nextEpisodeStay" android:nextFocusRight="@id/nextEpisodeStay"
+        android:nextFocusUp="@id/nextEpisodeStay" android:nextFocusDown="@id/nextEpisodeStay" />
 </LinearLayout>

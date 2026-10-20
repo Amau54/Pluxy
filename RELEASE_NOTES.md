@@ -1,3 +1,8 @@
+## Android 1.7.38
+
+- Épisode suivant : image au format 16:9, typographie allégée et alignements harmonisés. Décompte discret avec une fine ligne de progression, toujours sans fond de panneau.
+- Conservation du lancement après cinq secondes et de l’annulation immédiate avec OK sur la télécommande.
+
 ## Android 1.7.37
 
 - Épisode suivant : suppression du fond et du contour du panneau. L’image et les textes se superposent directement à la vidéo ; une ombre légère garde le texte lisible.
