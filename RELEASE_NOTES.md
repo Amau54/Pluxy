@@ -1,3 +1,11 @@
+## Windows 1.8.31 · Android 1.7.39
+
+- Lecteur : « Passer l’intro » et « Passer le générique » plus grands et plus lisibles sur TV, avec une police renforcée et une ombre douce, toujours sans fond.
+- TV : Haut depuis la première rangée de l’accueil rejoint la recherche, sans retour inattendu sur Accueil dans le rail gauche.
+- Android : une mise à jour disponible est proposée à la prochaine ouverture de l’application même si une proposition a été fermée auparavant. Les changements d’écran et rotations ne multiplient pas les propositions.
+- Windows : vérification immédiate à la réouverture depuis la zone de notification, avec proposition au premier lancement et sans répétition dans la même session.
+- Le style général du catalogue reste celui de la version 1.7.37. La retouche Google TV reste limitée au panneau de fin de lecture.
+
 ## Windows 1.8.30
 
 - Option serveur « Ranger les médias vus dans Vu », désactivée par défaut et disponible uniquement avec un seul profil. Un second profil suspend le rangement.

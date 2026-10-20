@@ -14,6 +14,9 @@ namespace Pluxy {
             protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,CancellationToken cancel) { cancel.ThrowIfCancellationRequested(); return Task.FromResult(make()); }
         }
         internal static async Task Run(Action<bool,string> check) {
+            var now=DateTime.UtcNow;
+            check(UpdateChecker.MayOffer(false,now,now.AddDays(1),now.AddDays(1).Ticks),"Une mise à jour est proposée au premier lancement malgré une proposition fermée la veille");
+            check(!UpdateChecker.MayOffer(true,now,now.AddDays(1),now.AddDays(1).Ticks),"La même mise à jour ne se répète pas pendant une session déjà avertie");
             await VerifyIntegratedSession(check);
             var bytes=File.ReadAllBytes(typeof(UpdateTests).Assembly.Location);
             string hash; using(var sha=SHA256.Create()) hash=BitConverter.ToString(sha.ComputeHash(bytes)).Replace("-","").ToLowerInvariant();

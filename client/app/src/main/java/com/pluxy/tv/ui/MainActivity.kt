@@ -312,6 +312,12 @@ class MainActivity : ThemedActivity() {
                 }
             }
             if (focused != null && isInGrid(focused)) {
+                val shelfPosition = grid.findContainingItemView(focused)?.let(grid::getChildAdapterPosition)
+                if (event.keyCode == KeyEvent.KEYCODE_DPAD_UP && grid.adapter === homeAdapter && shelfPosition == 0 &&
+                    focusAboveLibrary(focused)) {
+                    consumedNavigationKeys.add(event.keyCode)
+                    return true
+                }
                 if (event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT || event.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
                     if (moveHorizontally(focused, event.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT)) {
                         consumedNavigationKeys.add(event.keyCode)
@@ -333,13 +339,33 @@ class MainActivity : ThemedActivity() {
                 if (event.keyCode == KeyEvent.KEYCODE_DPAD_UP && !grid.canScrollVertically(-1) &&
                     FocusFinder.getInstance().findNextFocus(grid, focused, View.FOCUS_UP) == null
                 ) {
-                    if (::browserChrome.isInitialized && browserChrome.focusCommands()) return true
+                    if (focusAboveLibrary(focused)) {
+                        consumedNavigationKeys.add(event.keyCode)
+                        return true
+                    }
                     selectedTabView().requestFocus()
                     return true
                 }
             }
         }
         return super.dispatchKeyEvent(event)
+    }
+
+    private fun focusAboveLibrary(focused: View): Boolean {
+        if (::browserChrome.isInitialized && browserChrome.focusCommands()) return true
+        val origin = android.graphics.Rect()
+        if (!focused.getGlobalVisibleRect(origin)) return false
+        val candidates = listOf(R.id.search, R.id.settings, R.id.photoFolders).map { findViewById<View>(it) }
+            .filter { view ->
+                val bounds = android.graphics.Rect()
+                view.isShown && view.isEnabled && view.isFocusable && view.getGlobalVisibleRect(bounds) && bounds.centerY() < origin.top
+            }
+        val target = candidates.minByOrNull { view ->
+            val bounds = android.graphics.Rect()
+            view.getGlobalVisibleRect(bounds)
+            kotlin.math.abs(bounds.centerX() - origin.centerX())
+        }
+        return target?.requestFocusFromTouch() == true
     }
 
     private fun moveHorizontally(focused: View, right: Boolean): Boolean {

@@ -16,6 +16,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.async
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -29,7 +32,8 @@ object AppUpdates {
     internal const val BASE = "https://github.com/Amau54/Pluxy/releases/download/dev-latest/"
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var foreground = WeakReference<Activity>(null)
-    private var checking = false
+    private var checking: Deferred<UpdateRelease>? = null
+    private val offers = UpdateOfferPolicy()
     private var latest: UpdateRelease? = null
     private var nextCheck = 0L
     private val http = OkHttpClient.Builder().connectTimeout(10, TimeUnit.SECONDS).readTimeout(30, TimeUnit.SECONDS)
@@ -43,34 +47,41 @@ object AppUpdates {
 
     fun register(application: Application, eligible: Set<Class<out Activity>>) {
         application.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
+            private var started = 0
             override fun onActivityResumed(activity: Activity) {
                 foreground = WeakReference(activity)
                 if (activity.javaClass !in eligible) return
                 scope.launch {
-                    val now = System.currentTimeMillis()
-                    if (now >= nextCheck && !checking) {
-                        checking = true
-                        try { latest = check(application); nextCheck = now + TimeUnit.HOURS.toMillis(8) }
-                        catch (_: Exception) { nextCheck = now + TimeUnit.HOURS.toMillis(1) }
-                        finally { checking = false }
+                    if (System.currentTimeMillis() >= nextCheck || checking != null) {
+                        val work = checking ?: scope.async { check(application) }.also { checking = it }
+                        try { latest = work.await(); nextCheck = System.currentTimeMillis() + TimeUnit.HOURS.toMillis(8) }
+                        catch (error: CancellationException) { throw error }
+                        catch (_: Exception) { nextCheck = System.currentTimeMillis() + TimeUnit.MINUTES.toMillis(1) }
+                        finally { if (checking === work) checking = null }
                     }
                     val release = latest ?: return@launch
                     if (release.code <= installedCode(application) || foreground.get() !== activity || activity.isFinishing || activity.isDestroyed) return@launch
                     val prefs = application.getSharedPreferences("pluxy_updates", Context.MODE_PRIVATE)
-                    if (now < prefs.getLong("offer_after", 0L)) return@launch
-                    prefs.edit().putLong("offer_after", now + TimeUnit.HOURS.toMillis(24)).apply()
+                    if (!offers.mayOffer(System.currentTimeMillis(), prefs.getLong("offer_after", 0L))) return@launch
                     open(activity)
                 }
             }
             override fun onActivityPaused(activity: Activity) { if (foreground.get() === activity) foreground.clear() }
             override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) = Unit
-            override fun onActivityStarted(activity: Activity) = Unit
-            override fun onActivityStopped(activity: Activity) = Unit
+            override fun onActivityStarted(activity: Activity) { started++ }
+            override fun onActivityStopped(activity: Activity) {
+                started = (started - 1).coerceAtLeast(0)
+                if (started == 0 && !activity.isChangingConfigurations) {
+                    offers.beginSession()
+                    nextCheck = 0L
+                }
+            }
             override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
             override fun onActivityDestroyed(activity: Activity) = Unit
         })
     }
     fun open(context: Context) {
+        offers.markOffered()
         context.getSharedPreferences("pluxy_updates", Context.MODE_PRIVATE).edit()
             .putLong("offer_after", System.currentTimeMillis() + TimeUnit.HOURS.toMillis(24)).apply()
         context.startActivity(Intent(context, UpdateActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))

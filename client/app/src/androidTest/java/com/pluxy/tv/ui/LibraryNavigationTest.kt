@@ -10,6 +10,7 @@ import android.view.ViewGroup
 import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.Button
 import android.widget.TextView
+import androidx.recyclerview.widget.RecyclerView
 import androidx.test.platform.app.InstrumentationRegistry
 import com.pluxy.tv.PluxyApplication
 import com.pluxy.tv.R
@@ -132,6 +133,36 @@ class LibraryNavigationTest {
                 query.searchScope == "all" && query.watchedFilter == "unwatched" &&
                     query.search == "Film" && activity.findViewById<View>(R.id.empty).visibility == View.GONE
             }
+        } finally { instrumentation.runOnMainSync { activity.finish() } }
+    }
+
+    @Test fun upFromTheFirstResumeShelfAlwaysReachesTheToolbarInsteadOfHome() {
+        val server = InstrumentationRegistry.getArguments().getString("library_test_url").orEmpty()
+        assumeTrue("Requires isolated catalogue fixture", server.isNotBlank())
+        PluxyApplication.setServer(context, server, "Test navigation")
+        PluxyApplication.setLibraryTab(context, "home")
+        LibraryPreferences.saveQuery(context, TvLibraryContent.Query("home"))
+        val activity = instrumentation.startActivitySync(Intent(context, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) as MainActivity
+        val grid = activity.findViewById<RecyclerView>(R.id.grid)
+        try {
+            await("The first home shelf must be Continue watching") {
+                (grid.adapter as? HomeShelfAdapter)?.currentList?.firstOrNull()?.id == "continue" &&
+                    grid.findViewHolderForAdapterPosition(0)?.itemView?.findViewById<RecyclerView>(R.id.shelfCards)?.childCount?.let { it > 0 } == true
+            }
+            repeat(3) {
+                instrumentation.runOnMainSync {
+                    val cards = grid.findViewHolderForAdapterPosition(0)!!.itemView.findViewById<RecyclerView>(R.id.shelfCards)
+                    val card = cards.getChildAt(0)
+                    assertTrue(card.requestFocusFromTouch())
+                }
+                instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_UP)
+                await("Up must reach Search, including repeated trips from the first shelf") {
+                    activity.findViewById<View>(R.id.search).hasFocus()
+                }
+                instrumentation.runOnMainSync { assertFalse(activity.findViewById<View>(R.id.tabHome).hasFocus()) }
+            }
+            capture("tv-home-up-search.png")
         } finally { instrumentation.runOnMainSync { activity.finish() } }
     }
 

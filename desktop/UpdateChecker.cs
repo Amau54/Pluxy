@@ -29,6 +29,9 @@ namespace Pluxy {
                 throw new IOException("Les informations de mise à jour sont invalides.");
             return new UpdateRelease {version=version,sha256=hash,size=size,available=Normalize(version)>Normalize(installed)};
         }
+        internal static bool MayOffer(bool offeredThisSession,DateTime now,DateTime nextOffer,long savedOfferTicks) {
+            return !offeredThisSession || (now>=nextOffer && now.Ticks>=savedOfferTicks);
+        }
         internal static bool Trusted(Uri uri) { return uri.Scheme=="https" && uri.IsDefaultPort && (uri.Host=="github.com" || uri.Host=="release-assets.githubusercontent.com" || uri.Host=="objects.githubusercontent.com"); }
         private static HttpClient Client(HttpMessageHandler handler) {
             var http=new HttpClient(handler ?? new HttpClientHandler { AllowAutoRedirect=false }) { Timeout=Timeout.InfiniteTimeSpan };

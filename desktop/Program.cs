@@ -15,7 +15,7 @@ using Microsoft.Web.WebView2.WinForms;
 [assembly: System.Reflection.AssemblyDescription("Lecteur et serveur multimédia Pluxy")]
 [assembly: System.Reflection.AssemblyCompany("Pluxy")]
 [assembly: System.Reflection.AssemblyProduct("Pluxy")]
-[assembly: System.Reflection.AssemblyVersion("1.8.30.0")]
+[assembly: System.Reflection.AssemblyVersion("1.8.31.0")]
 
 namespace Pluxy {
     internal static class Program {
@@ -51,6 +51,7 @@ namespace Pluxy {
         private bool checkingUpdate;
         private DateTime nextUpdateCheck=DateTime.MinValue, nextUpdateOffer=DateTime.MinValue;
         private bool launchUpdateOffered;
+        private bool updateChecksReady;
         private UpdateRelease pendingUpdate;
         private UpdateSession updates;
         private string serverOperation;
@@ -70,6 +71,7 @@ namespace Pluxy {
             Controls.Add(browser);
             if(screenshot!=null) { StartPosition=FormStartPosition.Manual; Location=new Point(-30000,-30000); }
             Shown+=async(s,e)=>await Initialize();
+            Activated+=async(s,e)=> { if(updateChecksReady) await CheckAutomaticUpdate(); };
             FormClosing+=async(s,e)=> {
                 if(e.CloseReason==CloseReason.WindowsShutDown || e.CloseReason==CloseReason.TaskManagerClosing || e.CloseReason==CloseReason.ApplicationExitCall) quitting=true;
                 if(!quitting && prefs.mode=="server" && tray!=null) {
@@ -148,19 +150,27 @@ namespace Pluxy {
                 updateMonitor.Tick+=async(s,e)=>await CheckAutomaticUpdate(); updateMonitor.Start();
                 showSignal=Task.Run(()=> { while(!quitting) { signal.WaitOne(); if(!quitting && IsHandleCreated) BeginInvoke((Action)Restore); } });
                 browser.Source=new Uri(Origin+"index.html");
+                updateChecksReady=true;
                 if(background) Hide();
                 await Task.Delay(3000); await CheckAutomaticUpdate();
             } catch(WebView2RuntimeNotFoundException) {
                 MessageBox.Show("Le composant d'affichage Microsoft manque. Relancez l'installateur Pluxy : il le préparera automatiquement.","Pluxy",MessageBoxButtons.OK,MessageBoxIcon.Information); quitting=true; Close();
             } catch(Exception error) { Native.Log(error); MessageBox.Show("Impossible d'ouvrir Pluxy. Relancez l'installateur pour réparer l'application.","Pluxy",MessageBoxButtons.OK,MessageBoxIcon.Error); quitting=true; Close(); }
         }
-        private void Restore() { Show(); if(WindowState==FormWindowState.Minimized) WindowState=FormWindowState.Normal; Activate(); }
+        private void Restore() { Restore(true); }
+        private void Restore(bool checkUpdates) {
+            if(checkUpdates) { launchUpdateOffered=false; nextUpdateCheck=DateTime.MinValue; }
+            Show(); if(WindowState==FormWindowState.Minimized) WindowState=FormWindowState.Normal; Activate();
+            if(checkUpdates && updateChecksReady && IsHandleCreated && !quitting)
+                BeginInvoke((Action)(async()=>await CheckAutomaticUpdate()));
+        }
         private void Quit() { quitting=true; Close(); }
         private async void ShowUpdater(UpdateRelease known=null) {
             if(quitting) return;
             launchUpdateOffered=true;
-            Restore(); nextUpdateOffer=DateTime.UtcNow.AddHours(24);
+            nextUpdateOffer=DateTime.UtcNow.AddHours(24);
             prefs.updateOfferAfter=nextUpdateOffer.Ticks; prefs.Save();
+            Restore(false);
             if(updates==null) updates=new UpdateSession(async path=> {
                 if(busy) throw new IOException("Attendez la fin de l’opération du serveur avant d’installer.");
                 var installLog=Path.Combine(Native.Data,"Updates","install-"+DateTime.UtcNow.ToString("yyyyMMdd-HHmmss")+".log");
@@ -180,7 +190,8 @@ namespace Pluxy {
                 finally { checkingUpdate=false; }
             }
             if(!quitting && pendingUpdate!=null && pendingUpdate.available &&
-                (!launchUpdateOffered || (DateTime.UtcNow>=nextUpdateOffer && DateTime.UtcNow.Ticks>=prefs.updateOfferAfter)) &&
+                UpdateChecker.MayOffer(launchUpdateOffered,DateTime.UtcNow,nextUpdateOffer,prefs.updateOfferAfter) &&
+                (updates==null || !updates.Visible) &&
                 Visible && ContainsFocus && players.Count==0 && !busy) {
                 launchUpdateOffered=true;
                 ShowUpdater(pendingUpdate);
