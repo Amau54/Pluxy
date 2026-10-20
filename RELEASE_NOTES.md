@@ -1,3 +1,7 @@
+## Android 1.7.37
+
+- Épisode suivant : suppression du fond et du contour du panneau. L’image et les textes se superposent directement à la vidéo ; une ombre légère garde le texte lisible.
+
 ## Windows 1.8.28 · Android 1.7.36
 
 - TV : paramètres en bas du rail gauche, sous Musique. Présentation, densité et thème sont regroupés dans Paramètres → Affichage.
