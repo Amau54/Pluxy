@@ -11,7 +11,10 @@ import org.junit.Test
 import java.io.File
 
 class AutomaticSegmentDetectionTest {
-    @Test fun movieWithoutChaptersIsAnalyzedByTheAndroidServer() {
+    @Test fun movieWithoutChaptersIsAnalyzedByTheAndroidServer() = verify(false)
+    @Test fun libraryIsPreparedBeforeTheFirstPlaybackRequestAndSurvivesRestart() = verify(true)
+
+    private fun verify(anticipate: Boolean) {
         val path = InstrumentationRegistry.getArguments().getString("opening_fixture_path").orEmpty()
         assumeTrue("Requires the isolated 210-second movie without chapters", path.isNotBlank())
         val source = File(path)
@@ -28,13 +31,16 @@ class AutomaticSegmentDetectionTest {
             videoCodec = "h264", audioCodec = null, audioChannels = null, isHdr = false, kind = "movie", seriesName = null,
             seriesKey = null, season = null, episode = null, artist = null, album = null, folder = null, subtitles = emptyList())
         val analyzer = AutomaticSegments(context, MediaLibrary(context) { _, _, _ -> })
+        val items = if (anticipate) (0..6).map { item.copy(id = "${item.id}-$it", addedAtMs = it.toLong()) } else listOf(item)
         try {
-            val deadline = System.currentTimeMillis() + 150_000
-            var result = analyzer.request(item)
-            while (result.length() < 2 && System.currentTimeMillis() < deadline) {
+            val deadline = System.currentTimeMillis() + if (anticipate) 300_000 else 150_000
+            if (anticipate) analyzer.prepare(items)
+            while (!items.all { analyzer.prepared(it) } && System.currentTimeMillis() < deadline) {
+                if (!anticipate) analyzer.request(item)
                 Thread.sleep(250)
-                result = analyzer.request(item)
             }
+            assertTrue("All seven files must be ready without any chapter request", items.all { analyzer.prepared(it) })
+            val result = analyzer.request(items.first())
             assertEquals("Both visual segments must be found without metadata", 2, result.length())
             val opening = result.getJSONObject(0)
             assertEquals("Opening", opening.getString("title"))
@@ -44,7 +50,10 @@ class AutomaticSegmentDetectionTest {
             assertEquals("End credits", credits.getString("title"))
             assertTrue(credits.getLong("start_ms") in 170000..180000)
             assertTrue("Keep the post-credit scene", credits.getLong("end_ms") in 184000..194000)
-            assertEquals("Results must be available from cache", result.toString(), analyzer.request(item).toString())
+            assertEquals("Results must be available from cache", result.toString(), analyzer.request(items.first()).toString())
         } finally { analyzer.close() }
+        val restored = AutomaticSegments(context, MediaLibrary(context) { _, _, _ -> })
+        try { assertTrue("A server restart must reuse prepared results", restored.prepared(items.first())) }
+        finally { restored.close() }
     }
 }

@@ -91,7 +91,18 @@ class PluxyHttpServer(
             isDaemon = true
             start()
         }
+        prepareSegments()
     }
+
+    fun prepareSegments() {
+        val analyzer = synchronized(this) {
+            if (!running) return
+            segments ?: com.pluxy.server.library.AutomaticSegments(context, library).also { segments = it }
+        }
+        analyzer.prepare()
+    }
+
+    fun playing(): Boolean = synchronized(this) { segments?.playing() == true }
 
     @Synchronized
     fun stop() {
@@ -296,6 +307,7 @@ class PluxyHttpServer(
             request.path.matches(Regex("^/api/library/items/[0-9a-f]+/chapters$")) && request.method in setOf("GET", "HEAD") -> {
                 val item = requireItem(request.path.removeSuffix("/chapters").substringAfterLast('/'))
                 val analyzer = synchronized(this) {
+                    if (!running) throw HttpFailure(503, "Serveur arrêté")
                     segments ?: com.pluxy.server.library.AutomaticSegments(context, library).also { segments = it }
                 }
                 sendJson(output, 200, analyzer.request(item), headOnly)
@@ -501,6 +513,8 @@ class PluxyHttpServer(
             }
 
             val input = FileInputStream(descriptor.fileDescriptor)
+            val playback = if (overrideUri == null && item.kind != "photo") synchronized(this) { segments } else null
+            playback?.playbackStarted()
             try {
                 val positioned = runCatching { input.channel.position(start); true }.getOrDefault(false)
                 if (!positioned) skipFully(input, start)
@@ -508,6 +522,7 @@ class PluxyHttpServer(
                 copyExactly(input, output, length)
             } finally {
                 runCatching { input.close() }
+                playback?.playbackFinished()
             }
         } finally {
             runCatching { descriptor.close() }

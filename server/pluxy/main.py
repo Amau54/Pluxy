@@ -25,6 +25,25 @@ class _RequestTooLarge(Exception):
     pass
 
 
+class PreparationActivityMiddleware:
+    """Keep background preparation behind active media transfers, including their body."""
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        state = getattr(getattr(scope.get('app'), 'state', None), 'pluxy', None)
+        analyzer = getattr(state, 'segments', None)
+        media = (scope.get('type') == 'http' and scope.get('method') == 'GET'
+                 and scope.get('path', '').startswith(('/stream/direct/', '/stream/remux/', '/stream/convert/', '/stream/hls/')))
+        if not media or not callable(getattr(analyzer, 'playback_started', None)):
+            return await self.app(scope, receive, send)
+        analyzer.playback_started()
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            analyzer.playback_finished()
+
+
 class RequestBodyLimitMiddleware:
     """Borne aussi les corps HTTP chunked, pas seulement Content-Length."""
 
@@ -94,6 +113,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Pluxy", version=__version__, lifespan=lifespan)
 app.add_middleware(RequestBodyLimitMiddleware)
+app.add_middleware(PreparationActivityMiddleware)
 
 
 @app.middleware("http")

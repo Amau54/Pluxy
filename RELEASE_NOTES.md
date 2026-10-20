@@ -1,3 +1,10 @@
+## Windows 1.8.26 · Android 1.7.34
+
+- Préparation automatique des intros et génériques après l’ajout des films et épisodes à la bibliothèque, avant toute demande du lecteur.
+- Vérification périodique des nouveaux fichiers, priorité aux ajouts récents et traitement d’un seul média à la fois.
+- La lecture interrompt les préparations des autres médias. Les repères déjà trouvés restent enregistrés ; le travail reprend ensuite.
+- Réutilisation du cache après redémarrage et nouvelle tentative après une interruption. Une analyse en cours peut encore manquer au tout premier lancement immédiat d’un fichier.
+
 ## Windows 1.8.8 · Android 1.7.14
 
 - Commandes vidéo plus discrètes, icônes Windows redessinées et couleurs des trois thèmes harmonisées.

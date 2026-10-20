@@ -388,6 +388,8 @@ def test_partial_scan_does_not_prune_existing_watch_history(state, monkeypatch):
     state._closing = threading.Event()
     state._job_lock = threading.RLock()
     state._scan_thread = None
+    prepared = []
+    state.segments = SimpleNamespace(prepare=lambda: prepared.append(True))
     state.watch.set("missing_source", 1000, 10000)
     def partial_scan(**kwargs):
         state.library.scan_status = {"status": "warning", "unavailable_sources": 1}
@@ -397,6 +399,7 @@ def test_partial_scan_does_not_prune_existing_watch_history(state, monkeypatch):
     while state._scan_thread is not None and time.monotonic() < deadline:
         time.sleep(0.01)
     assert state.watch.get("missing_source")["position_ms"] == 1000
+    assert prepared == [True]
 
 
 def test_hls_quota_and_owner_pid_guard(state):

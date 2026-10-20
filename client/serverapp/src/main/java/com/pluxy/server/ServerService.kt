@@ -28,6 +28,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -130,6 +132,12 @@ class ServerService : Service() {
         ServerRuntime.replaceCatalog(library.all())
         initializing = false
         registerNetworkCallback()
+        serviceScope.launch {
+            while (isActive) {
+                delay(120_000)
+                if (actuallyRunning && !destroying && !library.isScanning && !http.playing()) scanLibrary()
+            }
+        }
     }
 
     private suspend fun handleCommand(action: String?) {
@@ -191,6 +199,7 @@ class ServerService : Service() {
             return
         }
         job.invokeOnCompletion {
+            if (actuallyRunning && !destroying) http.prepareSegments()
             if (actuallyRunning && rescanPending.getAndSet(false)) {
                 scanLibrary()
             }

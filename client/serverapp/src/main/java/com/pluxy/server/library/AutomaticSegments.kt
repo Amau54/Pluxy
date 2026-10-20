@@ -24,10 +24,42 @@ class AutomaticSegments(private val context: Context, private val library: Media
     }
     private val directory = File(context.filesDir, "segments-v3").apply { mkdirs() }
     private val pending = mutableSetOf<String>()
+    private var playing = 0
+    private var playbackUntil = 0L
+    private var backgroundItem: String? = null
+    @Volatile private var preempted = false
     @Volatile private var closed = false
     private val textEngine = lazy { SegmentOcr() }
     private val textCache = mutableMapOf<Pair<String, Double>, Pair<Double, CreditText>>()
     private val worker = Executors.newSingleThreadExecutor { task -> Thread(task, "pluxy-segments").apply { isDaemon = true; priority = Thread.MIN_PRIORITY } }
+    private val preparation = PreparationQueue<MediaEntry>(MediaEntry::id, ::readyAt, { request(it, background = true) }, {
+        synchronized(pending) { closed || pending.isNotEmpty() || playing > 0 || System.currentTimeMillis() < playbackUntil || library.isScanning }
+    })
+
+    fun prepare(items: List<MediaEntry> = library.all()) {
+        preparation.update(items.filter { it.available && it.kind in setOf("movie", "series") && it.durationSeconds.isFinite() && it.durationSeconds >= 180 }
+            .sortedByDescending { it.addedAtMs })
+    }
+
+    fun playbackStarted() { synchronized(pending) { playing++; if (backgroundItem != null) preempted = true } }
+    fun playbackFinished() {
+        synchronized(pending) { playing = (playing - 1).coerceAtLeast(0); playbackUntil = System.currentTimeMillis() + 60_000 }
+        preparation.wake()
+    }
+    fun playing(): Boolean = synchronized(pending) { playing > 0 || System.currentTimeMillis() < playbackUntil }
+    private fun stopped(): Boolean = closed || preempted
+    fun prepared(item: MediaEntry): Boolean {
+        val cache = read(item) ?: return false
+        return cache.has("segments") && cache.optString("peers") == revision(item) && cache.optBoolean("complete", true)
+    }
+    private fun readyAt(item: MediaEntry): Long? {
+        val cache = read(item)
+        if (cache != null && cache.optString("peers") == revision(item)) {
+            if (cache.has("segments") && cache.optBoolean("complete", true)) return null
+            return cache.optLong("retry_after")
+        }
+        return 0L
+    }
     private fun path(item: MediaEntry): File {
         val key = "v3:${item.id}:${item.uri}:${item.size}:${item.modifiedAtMs}:${item.fingerprint}"
         val hash = MessageDigest.getInstance("SHA-256").digest(key.toByteArray()).joinToString("") { "%02x".format(it) }
@@ -48,15 +80,20 @@ class AutomaticSegments(private val context: Context, private val library: Media
         temporary.writeText(value.toString())
         if (!temporary.renameTo(file)) { temporary.delete(); throw java.io.IOException("Cache indisponible") }
     }
-    fun request(item: MediaEntry): JSONArray {
+    fun request(item: MediaEntry, background: Boolean = false): JSONArray {
+        if (!background) synchronized(pending) { if (backgroundItem == item.id) { backgroundItem = null; preempted = false } }
         val cache = read(item)
         val known = if (cache != null && cache.optString("peers") == revision(item)) cache.optJSONArray("segments") ?: JSONArray() else JSONArray()
         if (cache?.has("segments") == true && cache.optString("peers") == revision(item) && cache.optBoolean("complete", true)) return known
-        if (cache != null && cache.optLong("retry_after") > System.currentTimeMillis()) return known
+        if (cache != null && cache.optString("peers") == revision(item) && cache.optLong("retry_after") > System.currentTimeMillis()) return known
         if (!closed && item.kind in setOf("series", "movie", "clip", "video") && item.durationSeconds >= 180 && item.durationSeconds.isFinite()) synchronized(pending) {
-            if (pending.size < 4 && pending.add(item.id)) worker.execute {
+            if (!closed && pending.size < 4 && pending.add(item.id)) worker.execute {
+                synchronized(pending) {
+                    backgroundItem = if (background) item.id else null
+                    preempted = background && (playing > 0 || System.currentTimeMillis() < playbackUntil)
+                }
                 try { analyze(item) } catch (_: Exception) { /* Optional analysis never blocks playback. */ }
-                finally { synchronized(pending) { pending.remove(item.id) } }
+                finally { synchronized(pending) { pending.remove(item.id); backgroundItem = null; preempted = false }; preparation.wake() }
             }
         }
         return known
@@ -85,7 +122,7 @@ class AutomaticSegments(private val context: Context, private val library: Media
             val info = MediaCodec.BufferInfo()
             val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(90)
             var outputEnded = false
-            while (!closed && count < result.size && System.nanoTime() < deadline) {
+            while (!stopped() && count < result.size && System.nanoTime() < deadline) {
                 if (!inputEnded) {
                     val index = codec.dequeueInputBuffer(1000)
                     if (index >= 0) {
@@ -121,7 +158,7 @@ class AutomaticSegments(private val context: Context, private val library: Media
                     if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) { outputEnded = true; break }
                 }
             }
-            if (closed || (!outputEnded && count < result.size)) throw java.io.IOException("Analyse audio interrompue")
+            if (stopped() || (!outputEnded && count < result.size)) throw java.io.IOException("Analyse audio interrompue")
             if (count < 8000) throw java.io.IOException("Échantillon audio indisponible")
             val fingerprints = AudioSignals.fingerprints(result.copyOf(count))
             write(item, (read(item) ?: JSONObject()).put("audio", JSONArray(fingerprints.toList())))
@@ -129,7 +166,7 @@ class AutomaticSegments(private val context: Context, private val library: Media
         } finally { runCatching { codec?.stop() }; runCatching { codec?.release() }; extractor.release() }
     }
     private fun snapshot(item: MediaEntry, seconds: Double, exact: Boolean = false): SegmentSnapshot.Frame =
-        SegmentSnapshot.read(context, item, seconds, exact) { closed } ?: throw java.io.IOException("Image indisponible")
+        SegmentSnapshot.read(context, item, seconds, exact) { stopped() } ?: throw java.io.IOException("Image indisponible")
 
     private fun visualIntro(item: MediaEntry, peer: MediaEntry, candidate: AudioSignals.Match): Pair<Double, Double>? {
         val length = candidate.end - candidate.start
@@ -166,7 +203,7 @@ class AutomaticSegments(private val context: Context, private val library: Media
     private fun textFrame(item: MediaEntry, seconds: Double): Pair<Double, CreditText> {
         val key = item.id to seconds
         textCache[key]?.let { return it }
-        val frame = SegmentSnapshot.read(context, item, seconds, exact = true, textReader = { textEngine.value.read(it) }) { closed }
+        val frame = SegmentSnapshot.read(context, item, seconds, exact = true, textReader = { textEngine.value.read(it) }) { stopped() }
             ?: throw java.io.IOException("Image OCR indisponible")
         val text = frame.text ?: throw java.io.IOException("Texte indisponible")
         debug("OCR ${frame.seconds}: roles=${text.roles.size}, dense=${text.dense}, names=${text.nameCard}, blank=${text.blank}")
@@ -177,7 +214,7 @@ class AutomaticSegments(private val context: Context, private val library: Media
     private fun textOpening(item: MediaEntry): Pair<Double, Double>? {
         val samples = ArrayList<Pair<Double, CreditText>>()
         for (seconds in 0 until min(300.0, item.durationSeconds * .4).toInt() step 12) {
-            if (closed) throw java.io.IOException("Analyse interrompue")
+            if (stopped()) throw java.io.IOException("Analyse interrompue")
             samples += textFrame(item, seconds.toDouble())
             if (samples.size >= 2 && samples.takeLast(2).all { !it.second.nameCard && !it.second.dense }) {
                 CreditTextPolicy.opening(samples.distinctBy { it.first })?.let { return it }
@@ -199,7 +236,7 @@ class AutomaticSegments(private val context: Context, private val library: Media
             var blanks = 0
             var seconds = anchor + direction * 8
             while (seconds >= start && seconds < item.durationSeconds - 1) {
-                if (closed) throw java.io.IOException("Analyse interrompue")
+                if (stopped()) throw java.io.IOException("Analyse interrompue")
                 val (time, text) = textFrame(item, seconds)
                 if (text.roles.isNotEmpty() || text.roster || direction < 0 && text.nameCard) {
                     lower = minOf(lower, time); upper = maxOf(upper, time)
@@ -222,8 +259,8 @@ class AutomaticSegments(private val context: Context, private val library: Media
         val samples = ArrayList<SegmentSnapshot.Frame>()
         var seconds = start
         while (seconds < item.durationSeconds) {
-            if (closed) throw java.io.IOException("Analyse interrompue")
-            val frame = SegmentSnapshot.read(context, item, seconds) { closed }
+            if (stopped()) throw java.io.IOException("Analyse interrompue")
+            val frame = SegmentSnapshot.read(context, item, seconds) { stopped() }
             if (frame != null && frame.seconds >= start - 15 && frame.seconds < item.durationSeconds &&
                 (samples.isEmpty() || frame.seconds > samples.last().seconds + .1)) samples += frame
             seconds += 12
@@ -244,7 +281,7 @@ class AutomaticSegments(private val context: Context, private val library: Media
         val coarse = runs.firstOrNull() ?: return textCredits(item)
         val scanStart = maxOf(start, coarse.first - 12)
         val scanEnd = minOf(item.durationSeconds, coarse.second + 12)
-        val flags = DecodedCreditFrames.creditWindow(context, item, scanStart, scanEnd) { closed }
+        val flags = DecodedCreditFrames.creditWindow(context, item, scanStart, scanEnd) { stopped() }
             ?: throw java.io.IOException("Analyse des limites interrompue")
         val interval = SegmentSignals.creditInterval(flags) ?: return textCredits(item)
         var lower = scanStart + interval.first
@@ -273,6 +310,7 @@ class AutomaticSegments(private val context: Context, private val library: Media
     }
 
     private fun analyze(item: MediaEntry) {
+        if (stopped()) return
         textCache.clear()
         val previous = read(item) ?: JSONObject()
         val data = JSONObject(previous.toString()).put("peers", revision(item)).put("complete", false)
@@ -282,7 +320,7 @@ class AutomaticSegments(private val context: Context, private val library: Media
         fun add(title: String, interval: Pair<Double, Double>?) {
             if (interval != null) segments.put(JSONObject().put("title", title).put("start_ms", (interval.first * 1000).toLong()).put("end_ms", (interval.second * 1000).toLong()))
         }
-        if (!data.optBoolean("intro_done") && !closed) {
+        if (!data.optBoolean("intro_done") && !stopped()) {
             try {
                 var interval: Pair<Double, Double>? = null
                 if (item.kind == "series") {
@@ -300,24 +338,28 @@ class AutomaticSegments(private val context: Context, private val library: Media
                 }
                 if (interval == null && item.kind == "movie") interval = textOpening(item)
                 if (interval == null && item.kind == "series") {
-                    val frames = DecodedCreditFrames.opening(context, item) { closed } ?: throw java.io.IOException("Analyse du début interrompue")
+                    val frames = DecodedCreditFrames.opening(context, item) { stopped() } ?: throw java.io.IOException("Analyse du début interrompue")
                     interval = OpeningSignals.interval(frames)?.let { it.first.toDouble() to it.second.toDouble() }
                 }
                 add("Opening", interval)
                 data.put("intro_done", true)
                 publish()
-            } catch (error: Exception) { data.put("last_error", error.javaClass.simpleName); debug("Intro : ${error.javaClass.simpleName}") }
+            } catch (error: Exception) { if (!preempted) data.put("last_error", error.javaClass.simpleName); debug("Intro : ${error.javaClass.simpleName}") }
         }
-        if (!data.optBoolean("credits_done") && !closed) {
+        if (!data.optBoolean("credits_done") && !stopped()) {
             try { add("End credits", credits(item)); data.put("credits_done", true) }
-            catch (error: Exception) { data.put("last_error", error.javaClass.simpleName); debug("Générique : ${error.javaClass.simpleName}") }
+            catch (error: Exception) { if (!preempted) data.put("last_error", error.javaClass.simpleName); debug("Générique : ${error.javaClass.simpleName}") }
         }
         val complete = data.optBoolean("intro_done") && data.optBoolean("credits_done")
         if (complete) data.remove("last_error")
-        val attempts = previous.optInt("attempts") + 1
+        val attempts = previous.optInt("attempts") + if (preempted) 0 else 1
         data.put("complete", complete).put("attempts", attempts)
-            .put("retry_after", if (complete) 0L else System.currentTimeMillis() + minOf(900_000L, 15_000L * (1L shl attempts.coerceAtMost(6))))
+            .put("retry_after", if (complete) 0L else System.currentTimeMillis() + if (preempted) 5_000L else minOf(900_000L, 15_000L * (1L shl attempts.coerceAtMost(6))))
         publish()
     }
-    fun close() { closed = true; worker.shutdownNow(); if (textEngine.isInitialized()) textEngine.value.close() }
+    fun close() {
+        synchronized(pending) { closed = true }
+        preparation.close(); worker.shutdownNow()
+        if (textEngine.isInitialized()) textEngine.value.close()
+    }
 }

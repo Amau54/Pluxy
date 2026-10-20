@@ -63,6 +63,13 @@ class AppState:
         # L'index persistant est déjà chargé : la liste est dispo immédiatement.
         # On (re)scanne en arrière-plan pour ne pas bloquer le démarrage.
         self.scan_async()
+        self._maintenance_thread = threading.Thread(target=self._maintain_library, name='pluxy-library-refresh', daemon=True)
+        self._maintenance_thread.start()
+
+    def _maintain_library(self):
+        while not self._closing.wait(120):
+            if not self.segments.playback_active():
+                self.scan_async()
 
     def scan_async(self) -> bool:
         """Lance un scan de la bibliothèque en arrière-plan (+ enrichissement)."""
@@ -76,6 +83,8 @@ class AppState:
                     pass
                 if scan_ok and self.library.scan_status.get("status") == "success":
                     self.watch.prune({item.id for item in self.library.all()})
+                if scan_ok:
+                    self.segments.prepare()
                 if self.cfgm.cfg.metadata.auto_fetch_on_scan:
                     self.enrich_library_async()
             finally:
