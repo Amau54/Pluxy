@@ -45,6 +45,9 @@
       <div class="row"><div><label class="label" for="autostart">Démarrer avec Windows</label><span class="hint">Lance Pluxy automatiquement à l’ouverture de votre session.</span></div><label class="switch"><input id="autostart" type="checkbox"><span class="slider"></span></label></div>
       <div class="row"><div><label class="label" for="discovery">Détection automatique TV</label><span class="hint">Permet à Pluxy TV de trouver ce PC sans saisir d’adresse.</span></div><label class="switch"><input id="discovery" type="checkbox"><span class="slider"></span></label></div>
     </section>
+    <section id="watchedOrganizationRow" class="card glass" hidden>
+      <div class="row"><div><label class="label" for="organizeWatched">Ranger les médias vus dans « Vu »</label><span class="hint">Déplace les films et épisodes vus, avec leurs sous-titres, dans un sous-dossier Vu à côté de chaque fichier. Le classement dans le lecteur reste identique.</span><span id="watchedOrganizationStatus" class="hint" role="status"></span></div><label class="switch"><input id="organizeWatched" type="checkbox"><span class="slider"></span></label></div>
+    </section>
     <details open><summary>Qualité vidéo et transcodage</summary><div class="advanced">
       <div class="row"><div><label class="label" for="hw">Accélération NVIDIA (NVENC)</label><span class="hint">Utilise votre GPU pour convertir les formats incompatibles.</span></div><label class="switch"><input id="hw" type="checkbox"><span class="slider"></span></label></div>
       <div class="row"><div><label class="label" for="force">Forcer le transcodage</label><span class="hint">À utiliser seulement pour diagnostiquer une incompatibilité.</span></div><label class="switch"><input id="force" type="checkbox"><span class="slider"></span></label></div>
@@ -85,5 +88,15 @@
   <div id="folderList" class="folder-list"></div>
   <form id="manualFolderForm" class="manual"><input id="manualFolder" type="text" aria-label="Chemin du dossier de médias" placeholder="Ex. D:\Films"><button class="secondary">Ajouter</button></form>
   <div class="folder-manager-footer"><span id="folderSaveState" role="status"></span><button id="saveFolders" class="primary" onclick="save()">Enregistrer</button></div>
+</dialog>
+<dialog id="watchedConfirmation" class="desktop-menu watched-confirmation" aria-labelledby="watchedConfirmationTitle">
+  <form method="dialog">
+    <h2 id="watchedConfirmationTitle">Ranger aussi les médias déjà vus ?</h2>
+    <p id="watchedConfirmationCount"></p>
+    <p>Les déplacements se feront après la lecture. Désactiver l’option arrête les prochains déplacements ; les fichiers déjà rangés restent dans Vu.</p>
+    <button class="primary" value="existing">Ranger aussi les déjà vus</button>
+    <button class="secondary" value="future">Seulement les prochains visionnages</button>
+    <button class="secondary" value="cancel">Annuler</button>
+  </form>
 </dialog>
 <script src="/settings.js" defer></script><script src="/desktop-updates.js" defer></script></body></html>

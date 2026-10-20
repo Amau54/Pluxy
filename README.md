@@ -6,7 +6,7 @@
 
 Vos films, séries, photos et musique sur la TV.
 
-**Android 1.7.38 · Windows 1.8.29**
+**Android 1.7.38 · Windows 1.8.30**
 
 [Application Android](https://github.com/Amau54/Pluxy/releases/download/dev-latest/Pluxy-debug.apk)
 · [Application PC](https://github.com/Amau54/Pluxy/releases/download/pc-latest/Pluxy-Setup.exe)
@@ -73,6 +73,14 @@ le format choisi ; le mode forcé ne change pas les limites physiques des ports.
 
 Le choix est mémorisé. **Options → Changer de mode** permet de le modifier.
 Le profil Général est utilisé par défaut. Dans Réglages → Options, vous pouvez activer plusieurs profils pour séparer l’historique et les réglages de lecture, sans compte.
+
+Avec un seul profil, les options du serveur proposent **Ranger les médias vus dans
+« Vu »**. Après la lecture, un film ou épisode vu est déplacé avec ses sous-titres
+dans un sous-dossier Vu de son dossier actuel. Il garde sa place dans le lecteur,
+son historique et son classement par série et saison. À l’activation, vous choisissez
+si les médias déjà vus doivent aussi être rangés. Un second profil suspend cette
+fonction. La désactiver arrête les prochains déplacements sans remettre les fichiers
+déjà rangés à leur emplacement initial.
 
 La détection des intros et génériques fonctionne localement, sans clé API ni repère
 à saisir. Les chapitres nommés sont utilisés en priorité. Pour les séries, le serveur

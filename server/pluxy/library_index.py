@@ -36,6 +36,17 @@ class LibraryIndex:
                     logging.getLogger(__name__).warning("Une entrée invalide de l'index a été ignorée.")
             return values
 
+    def update(self, item) -> bool:
+        if not self.path.exists():
+            return False
+        with closing(sqlite3.connect(self.path)) as db, db:
+            if not db.execute('SELECT 1 FROM media WHERE id=?', (item.id,)).fetchone():
+                return False
+            db.execute('PRAGMA synchronous=FULL')
+            db.execute('UPDATE media SET payload=? WHERE id=?',
+                       (json.dumps(item.model_dump(), ensure_ascii=False, sort_keys=True), item.id))
+        return True
+
     def save(self, items: dict) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with closing(sqlite3.connect(self.path)) as db, db:

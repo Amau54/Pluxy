@@ -57,6 +57,7 @@ class ServerCfg(BaseModel):
     transcode_min_free_mb: int = Field(default=1024, ge=0, le=1_048_576)
     # Démarrer le serveur automatiquement à l'ouverture de session Windows.
     autostart: bool = False
+    organize_watched: bool = False
     scan_extensions: List[str] = Field(
         default_factory=lambda: list(DEFAULT_SCAN_EXTENSIONS),
         max_length=64,

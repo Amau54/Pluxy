@@ -74,6 +74,7 @@ class MediaItem(BaseModel):
     id: str
     title: str
     path: str
+    original_path: Optional[str] = None  # Privé : emplacement logique avant rangement dans Vu.
     container: str
     size: int
     duration: float

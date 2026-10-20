@@ -1,3 +1,10 @@
+## Windows 1.8.30
+
+- Option serveur « Ranger les médias vus dans Vu », désactivée par défaut et disponible uniquement avec un seul profil. Un second profil suspend le rangement.
+- À l’activation, choix entre les prochains visionnages uniquement et le rangement des médias déjà vus. Les fichiers sont déplacés après la lecture, avec leurs sous-titres, dans un sous-dossier Vu à côté de chaque média.
+- Identifiants, classement des séries, historique et emplacement affiché conservés après déplacement et redémarrage. Aucun écrasement d’un fichier existant ; les opérations interrompues peuvent être récupérées.
+- Mise à jour de Pillow vers 13.0.0 pour corriger les alertes de sécurité signalées par la vérification des dépendances.
+
 ## Windows 1.8.29
 
 - Analyse des intros et génériques : priorité basse, décodage et filtres sur un seul thread, processus d’analyse limités à un cœur et pauses entre les traitements. La préparation attend lorsque le PC fonctionne sur batterie ou que le processeur est très sollicité.

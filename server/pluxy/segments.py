@@ -229,7 +229,7 @@ class SegmentAnalyzer:
 
     def key(self, item) -> str:
         stat = Path(item.path).stat()
-        value = f"v3:{item.id}:{item.path}:{stat.st_size}:{stat.st_mtime_ns}:{self.cfg.ffmpeg.ffmpeg_path}"
+        value = f"v3:{item.id}:{getattr(item, 'original_path', None) or item.path}:{stat.st_size}:{stat.st_mtime_ns}:{self.cfg.ffmpeg.ffmpeg_path}"
         return hashlib.sha256(value.encode()).hexdigest()
 
     def cached(self, item) -> dict | None:

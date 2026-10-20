@@ -16,6 +16,7 @@ import stat as _stat
 import threading
 import time
 import unicodedata
+from contextlib import contextmanager
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Dict, List
@@ -157,6 +158,24 @@ class Library:
             values = self._items if items is None else items
         self.index.save(values)
 
+    @contextmanager
+    def editing_files(self):
+        with self._lock:
+            if self._scanning:
+                raise BlockingIOError('La bibliothèque est en cours d’analyse.')
+            yield
+
+    def relocated(self, item_id: str, path: str, sidecars: list[str]) -> None:
+        with self._lock:
+            item = self._items[item_id]
+            relocated = item.model_copy(update={'path': path, 'original_path': item.original_path or item.path,
+                                                'external_subs': sidecars})
+            candidate = {**self._items, item_id: relocated}
+            if not self.index.update(relocated):
+                self._save_index(candidate)
+            self._items = candidate
+            self._refresh_snapshot()
+
     # -- Scan -------------------------------------------------------------- #
     def scan(self, stop_event: threading.Event | None = None) -> int:
         """(Re)construit l'index et le persiste. Retourne le nombre d'éléments."""
@@ -174,6 +193,7 @@ class Library:
         found: Dict[str, MediaItem] = {}
         with self._lock:
             previous = {item_id: item.model_copy(deep=True) for item_id, item in self._items.items()}
+        previous_paths = {os.path.normcase(os.path.abspath(item.path)): item for item in previous.values()}
         missing_roots: list[Path] = []
         discovered_at = time.time()
         moved_candidates: dict[str, list[MediaItem]] = {}
@@ -231,7 +251,9 @@ class Library:
                             continue
                         if not _stat.S_ISREG(stat.st_mode):
                             continue
-                        existing = previous.get(item_id)
+                        existing = previous_paths.get(os.path.normcase(os.path.abspath(f))) or previous.get(item_id)
+                        if existing:
+                            item_id = existing.id
                         fingerprint = (existing.fingerprint if existing and existing.size == stat.st_size and
                                        existing.modified_at == stat.st_mtime and existing.fingerprint else
                                        media_fingerprint(f, stat.st_size))
@@ -240,28 +262,30 @@ class Library:
                             existing = candidates[0]
                             item_id = existing.id
                         category = cfg.server.media_dir_types.get(root, "auto")
-                        kind = _detect_kind(f, category, existing.duration if existing else 0,
+                        logical = Path(existing.original_path) if existing and existing.original_path and _is_within(Path(existing.original_path), base) else f
+                        kind = _detect_kind(logical, category, existing.duration if existing else 0,
                                             existing.embedded_title or "" if existing else "")
                         if kind == "photo" and category != "photo" and has_audio and name.casefold() in AUDIO_ARTWORK_NAMES:
                             continue
                         existing = previous.get(item_id)
                         added_at = existing.added_at if existing else discovered_at
                         modified_at = stat.st_mtime
-                        relative = f.relative_to(base).as_posix()
-                        folder = f.parent.relative_to(base).as_posix()
+                        relative = logical.relative_to(base).as_posix()
+                        folder = logical.parent.relative_to(base).as_posix()
                         if folder == ".":
                             folder = base.name or "Médias"
                         album_fields = {
                             "fingerprint": fingerprint,
                             "folder": folder,
-                            "folder_id": self.make_id(str(f.parent)),
+                            "folder_id": self.make_id(str(logical.parent)),
                             "relative_path": relative,
                             "source_id": self.make_id(str(base.resolve())),
                             "source_name": base.name or "Médias",
+                            "original_path": existing.original_path if existing and logical != f else None,
                             "year": _fn.parse(f.stem).year if kind in {"movie", "series"} else None,
                         }
                         sname, skey, season, episode = (
-                            _parse_series(f) if kind == "series" else (None, None, None, None)
+                            _parse_series(logical) if kind == "series" else (None, None, None, None)
                         )
                         subs = self._sidecar_subs(f, sub_exts, sidecar_index.get(f.stem.lower(), []))
                         sub_tracks = self._sub_tracks(f, subs)
@@ -307,8 +331,8 @@ class Library:
                             continue
 
                         v = info.video
-                        kind = _detect_kind(f, category, info.duration, info.tags.get("title", ""))
-                        sname, skey, season, episode = _parse_series(f) if kind == "series" else (None, None, None, None)
+                        kind = _detect_kind(logical, category, info.duration, info.tags.get("title", ""))
+                        sname, skey, season, episode = _parse_series(logical) if kind == "series" else (None, None, None, None)
                         album_fields["year"] = _fn.parse(f.stem).year if kind in {"movie", "series"} else None
                         found[item_id] = MediaItem(
                             id=item_id, title=f.stem, path=str(f),

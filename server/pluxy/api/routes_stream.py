@@ -270,6 +270,9 @@ def set_progress(item_id: str, body: ProgressBody, request: Request) -> dict:
     analyzer = getattr(st, 'segments', None)
     if analyzer and 0 < body.position_ms < body.duration_ms:
         analyzer.playback_touch(item_id)
+    organizer = getattr(st, 'organizer', None)
+    if organizer:
+        organizer.wake.set()
     return reader_watch(st, request).get(item_id)
 
 

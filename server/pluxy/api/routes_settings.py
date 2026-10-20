@@ -59,6 +59,15 @@ def read_settings(request: Request) -> dict:
     return public
 
 
+@router.get('/watched-organization')
+def watched_organization(request: Request, preview: bool = False):
+    require_local_admin(request)
+    organizer = get_state(request).organizer
+    status = organizer.status()
+    status['already_watched_count'] = len(organizer.candidates(include_existing=True)) if preview and status['available'] else 0
+    return status
+
+
 @router.patch("")
 async def patch_settings(request: Request) -> dict:
     """
@@ -77,6 +86,7 @@ async def patch_settings(request: Request) -> dict:
         raise HTTPException(400, "Patch de configuration invalide.")
     if not is_loopback_request(request):
         patch = validate_remote_patch(patch)
+    organization = patch.pop('watched_organization', None)
     discovery_changed = isinstance(patch, dict) and "discovery" in patch
     autostart_changed = (
         isinstance(patch, dict)
@@ -92,6 +102,21 @@ async def patch_settings(request: Request) -> dict:
         if isinstance(srv, dict):
             srv.pop("transcode_temp_dir", None)
     st = get_state(request)
+    organizer = getattr(st, 'organizer', None)
+    if isinstance(patch.get('server'), dict) and 'organize_watched' in patch['server'] and type(patch['server']['organize_watched']) is not bool:
+        raise HTTPException(422, 'Le rangement automatique doit être activé ou désactivé.')
+    enabling = isinstance(patch.get('server'), dict) and patch['server'].get('organize_watched') is True
+    if enabling:
+        require_local_admin(request)
+        if not organizer or not organizer.available():
+            raise HTTPException(422, 'Le rangement dans Vu nécessite un seul profil.')
+        if not st.cfgm.cfg.server.organize_watched:
+            if not isinstance(organization, dict) or type(organization.get('include_existing')) is not bool:
+                raise HTTPException(409, 'Choisissez si les médias déjà vus doivent aussi être rangés.')
+            try:
+                await asyncio.to_thread(organizer.configure, organization['include_existing'])
+            except OSError as exc:
+                raise HTTPException(503, 'Impossible de préparer le rangement des médias.') from exc
     previous_sources = (list(st.cfgm.cfg.server.media_dirs), dict(st.cfgm.cfg.server.media_dir_types))
     try:
         cfg = await asyncio.to_thread(st.cfgm.update, patch)
@@ -101,6 +126,8 @@ async def patch_settings(request: Request) -> dict:
         raise HTTPException(503, "Impossible de sauvegarder la configuration sur le disque.") from exc
     if previous_sources != (cfg.server.media_dirs, cfg.server.media_dir_types):
         st.scan_async()
+    if organizer:
+        organizer.wake.set()
     # Redémarre le répondeur de découverte si ses réglages ont changé.
     if discovery_changed:
         try:

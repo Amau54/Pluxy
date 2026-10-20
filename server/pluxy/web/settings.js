@@ -9,6 +9,7 @@ let statusTimer;
 let toastTimer;
 let desktopServerState = null;
 let folderError = '';
+let watchedOrganization = null;
 const $ = id => document.getElementById(id);
 
 function toast(message, error = false) {
@@ -50,7 +51,7 @@ function folders() {
 
 function readPatch() {
   return {
-    server: {name: $('serverName').value.trim() || 'Pluxy', port: Number($('port').value), media_dirs: folders(), media_dir_types: Object.fromEntries(folders().map(path => [path, CFG.server.media_dir_types?.[path] || 'auto'])), autostart: $('autostart').checked},
+    server: {name: $('serverName').value.trim() || 'Pluxy', port: Number($('port').value), media_dirs: folders(), media_dir_types: Object.fromEntries(folders().map(path => [path, CFG.server.media_dir_types?.[path] || 'auto'])), autostart: $('autostart').checked, ...(watchedOrganization?.available ? {organize_watched: $('organizeWatched').checked} : {})},
     discovery: {enabled: $('discovery').checked},
     transcoding: {prefer_direct_play: $('preferDirect').checked, hardware_acceleration: $('hw').checked, force_transcode: $('force').checked, preset: $('preset').value, max_bitrate_mbps: Number($('bitrate').value), hdr_tone_mapping: $('tonemap').value},
     audio: {force_audio_passthrough: $('passthrough').checked, target_codec: $('acodec').value},
@@ -206,6 +207,8 @@ function loadForm() {
   $('serverName').value = s.name;
   $('port').value = s.port;
   $('autostart').checked = s.autostart;
+  $('organizeWatched').checked = !!s.organize_watched;
+  $('watchedOrganizationRow').hidden = !watchedOrganization?.available;
   $('discovery').checked = d.enabled;
   $('preferDirect').checked = t.prefer_direct_play;
   $('hw').checked = t.hardware_acceleration;
@@ -234,6 +237,7 @@ async function load() {
       throw new Error('Réglages incomplets reçus du serveur.');
     }
     CFG = config;
+    watchedOrganization = await request('/api/settings/watched-organization');
     loadForm();
     $('loadError').hidden = true;
     await updateStatus();
@@ -263,6 +267,11 @@ async function updateStatus() {
     $('ffmpegState').textContent = info.transcoding_available ? 'Disponible' : 'Non détecté';
     $('statusText').textContent = scanning ? 'Analyse en cours' : 'Serveur actif';
     $('statusDot').className = 'dot ok';
+    const wasDirty = isDirty();
+    watchedOrganization = await request('/api/settings/watched-organization', {}, 6000);
+    $('watchedOrganizationRow').hidden = !watchedOrganization.available;
+    $('watchedOrganizationStatus').textContent = watchedOrganization.error || (watchedOrganization.moved ? `${watchedOrganization.moved} média${watchedOrganization.moved > 1 ? 's' : ''} rangé${watchedOrganization.moved > 1 ? 's' : ''}.` : 'Les déplacements attendent la fin des lectures.');
+    if (!wasDirty) baseline = JSON.stringify(readPatch());
   } catch (error) {
     $('statusText').textContent = 'Serveur indisponible';
     $('statusDot').className = 'dot';
@@ -316,6 +325,24 @@ async function save() {
   saving = true;
   updateControls();
   try {
+    if (patch.server.organize_watched && !CFG.server.organize_watched) {
+      const state = await request('/api/settings/watched-organization?preview=true');
+      if (!state.available) throw new Error('Cette option nécessite un seul profil.');
+      let includeExisting = false;
+      if (state.already_watched_count) {
+        const dialog = $('watchedConfirmation');
+        $('watchedConfirmationCount').textContent = `${state.already_watched_count} média${state.already_watched_count > 1 ? 's' : ''} déjà vu${state.already_watched_count > 1 ? 's' : ''} peuvent être déplacés.`;
+        const result = await new Promise(resolve => {
+          dialog.returnValue = 'cancel';
+          dialog.addEventListener('close', () => resolve(dialog.returnValue), {once:true});
+          dialog.showModal();
+          dialog.querySelector('[value="future"]').focus();
+        });
+        if (result !== 'existing' && result !== 'future') return false;
+        includeExisting = result === 'existing';
+      }
+      patch.watched_organization = {include_existing: includeExisting};
+    }
     CFG = await request('/api/settings', {method: 'PATCH', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(patch)});
     loadForm();
     $('restartNotice').hidden = !portChanged;

@@ -232,4 +232,9 @@ details[open] summary::after { transform: rotate(45deg); }
 .folder-manager .folder button { min-width:36px; min-height:36px; color:var(--muted); }
 .folder-manager-footer { display:flex; justify-content:space-between; align-items:center; gap:16px; border-top:1px solid var(--line); padding-top:16px; margin-top:16px; }
 .folder-manager-footer span { font-size:12px; color:var(--muted); }
+.watched-confirmation { width:min(440px,calc(100vw - 40px)); }
+.watched-confirmation h2 { margin:0 0 14px; font-size:20px; }
+.watched-confirmation p { color:var(--muted); font-size:13px; line-height:1.6; }
+.watched-confirmation button { width:100%; margin-top:10px; }
+#watchedOrganizationStatus { margin-top:6px; }
 @media (max-width:560px) { .folder-manager { padding:18px; } .folder-tools { flex-wrap:wrap; } .folder-tools input { flex-basis:100%; } .folder-manager .folder { flex-wrap:wrap; } .folder-manager .folder span { flex-basis:calc(100% - 50px); } .folder-manager .folder select { flex:1; order:3; } .folder-manager .folder-list { max-height:38dvh; } }

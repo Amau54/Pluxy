@@ -31,6 +31,7 @@ def resolution(item: MediaItem) -> str | None:
 def public_item(item: MediaItem, meta: MovieMetadata | None, watch: dict) -> MediaItem:
     pub = item.model_copy()
     pub.path = ""
+    pub.original_path = None
     pub.fingerprint = ""
     pub.external_subs = []
     if meta and item.kind in {"movie", "series"}:

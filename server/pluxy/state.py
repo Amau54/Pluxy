@@ -20,6 +20,7 @@ from .vodhls import VodHls
 from .watchstate import WatchStore
 from .catalogue import Catalogue
 from .segments import SegmentAnalyzer
+from .watched_organizer import WatchedOrganizer
 
 
 class AppState:
@@ -58,6 +59,7 @@ class AppState:
         self._scan_thread: threading.Thread | None = None
         self._enrich_thread: threading.Thread | None = None
         self.enrich_status = {"status": "idle", "processed": 0, "errors": 0, "finished_at": None}
+        self.organizer = WatchedOrganizer(self, data)
         self.discovery = DiscoveryResponder(self.cfgm, active_port=self.active_port)
         self.discovery.start()
         # L'index persistant est déjà chargé : la liste est dispo immédiatement.
@@ -77,6 +79,9 @@ class AppState:
             try:
                 scan_ok = False
                 try:
+                    organizer = getattr(self, 'organizer', None)
+                    if organizer and not organizer.recover():
+                        return
                     self.library.scan(stop_event=self._closing)
                     scan_ok = not self._closing.is_set()
                 except Exception:
@@ -168,6 +173,9 @@ class AppState:
         """Libère les ressources externes même lors d'un arrêt avec lecteurs actifs."""
         with self._job_lock:
             self._closing.set()
+        organizer = getattr(self, 'organizer', None)
+        if organizer:
+            organizer.close()
         self.segments.close()
         self.seek_previews.close()
         try:
