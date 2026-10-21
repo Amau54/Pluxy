@@ -1,12 +1,6 @@
 name: Application PC et installateur Windows
 
 on:
-  push:
-    branches: [main]
-    paths: ['desktop/**', 'server/**', 'assets/**', 'versions.json', 'tools/sync_versions.py', 'tools/Build-PC.ps1', 'tools/Test-PC.ps1', 'tools/PC-Launcher.ps1', 'tools/Start-PC.ps1', 'tools/Media-Runtime.ps1', '.github/workflows/pc-installer.yml']
-  pull_request:
-    branches: [main]
-    paths: ['desktop/**', 'server/**', 'assets/**', 'versions.json', 'tools/sync_versions.py', 'tools/Build-PC.ps1', 'tools/Test-PC.ps1', 'tools/PC-Launcher.ps1', 'tools/Start-PC.ps1', 'tools/Media-Runtime.ps1', '.github/workflows/pc-installer.yml']
   workflow_dispatch:
 
 permissions:

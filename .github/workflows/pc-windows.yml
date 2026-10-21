@@ -1,26 +1,6 @@
 name: Verification du serveur PC Windows
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'Pluxy-Server.bat'
-      - 'server/**'
-      - 'tools/PC-Launcher.ps1'
-      - 'tools/Start-PC.ps1'
-      - 'tools/Media-Runtime.ps1'
-      - 'tools/tests/test_pc_launcher.py'
-      - '.github/workflows/pc-windows.yml'
-  pull_request:
-    branches: [main]
-    paths:
-      - 'Pluxy-Server.bat'
-      - 'server/**'
-      - 'tools/PC-Launcher.ps1'
-      - 'tools/Start-PC.ps1'
-      - 'tools/Media-Runtime.ps1'
-      - 'tools/tests/test_pc_launcher.py'
-      - '.github/workflows/pc-windows.yml'
   workflow_dispatch:
 
 permissions:

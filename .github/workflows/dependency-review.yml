@@ -1,8 +1,17 @@
 name: Revue des dependances
 
 on:
-  pull_request:
-    branches: [main]
+  workflow_dispatch:
+    inputs:
+      base_ref:
+        description: 'Commit de depart de la comparaison'
+        required: true
+        type: string
+      head_ref:
+        description: 'Commit a examiner'
+        required: true
+        default: main
+        type: string
 
 permissions:
   contents: read
@@ -30,3 +39,5 @@ jobs:
         uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4.9.0
         with:
           fail-on-severity: moderate
+          base-ref: ${{ inputs.base_ref }}
+          head-ref: ${{ inputs.head_ref }}

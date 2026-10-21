@@ -241,6 +241,26 @@ Le lecteur Windows est dans `desktop`. Les scripts de construction et d'installa
 Pour construire son installateur sous Windows : `./tools/Build-PC.ps1`.
 `./tools/Test-PC.ps1` vérifie le paquet et la navigation dans une vidéo de douze minutes.
 
+Les versions distribuées sont compilées et testées sur le PC, puis envoyées dans
+les releases GitHub. Aucun workflow Actions ne démarre sur un push, une pull request
+ou un calendrier. Les workflows restent disponibles en lancement manuel.
+
+Après avoir enregistré les modifications dans Git sur `main` :
+
+```powershell
+./tools/Publish-Local.ps1
+./tools/Publish-Local.ps1 -Publish
+```
+
+La première commande compile et teste sans publier. La seconde refait les contrôles,
+envoie les commits, puis publie les fichiers Android et Windows. Utilisez
+`-Target Android` ou `-Target Windows` pour une seule plateforme.
+Les dépendances de `server/requirements-dev.txt`, les outils de compilation Windows,
+le SDK Android et la clé stable doivent être installés sur le PC.
+Les résultats restent dans `artifacts/local-releases/`. Les liens de téléchargement
+et la recherche de mises à jour dans l’application restent les mêmes.
+Les tests Windows utilisent une copie isolée ; ils ne remplacent pas l’application installée.
+
 ## Données et réseau
 
 Les réglages du serveur PC sont dans `%LOCALAPPDATA%\Pluxy` sous Windows,

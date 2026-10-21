@@ -77,11 +77,17 @@ Gardez les clés actuelles pour les prochaines mises à jour.
 
 ## Publication GitHub
 
+La publication habituelle se fait depuis le PC avec
+`./tools/Publish-Local.ps1 -Publish`. Le script réutilise la clé locale stable,
+contrôle les certificats et publie les APK avec `BUILD_INFO.json` et `SHA256SUMS.txt`.
+Les clés restent sur le PC ; elles ne sont pas envoyées dans les releases.
+
+Le workflow Actions reste un secours à lancer manuellement.
 Pour le préfixe `PLUXY_PLAYER_DEBUG_`, les secrets Actions utilisent les suffixes `JKS_BASE64`, `STORE_PASSWORD`, `KEY_ALIAS` et
 `KEY_PASSWORD`, soit quatre secrets. Le Base64 du JKS est lui aussi secret.
 Leurs valeurs doivent être configurées dans le dépôt qui publie les APK.
 
-La publication attend les contrôles Python, Android et APK du même run, vérifie
+Ce workflow attend les contrôles Python, Android et APK du même run, vérifie
 les fichiers et les certificats, puis actualise `dev-latest`. Si les secrets
 manquent, le canal publié reste inchangé. Il n'y a pas de rotation automatique des clés.
 Les fichiers `BUILD_INFO.json` et `SHA256SUMS.txt` accompagnent les APK.

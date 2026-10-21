@@ -25,7 +25,7 @@ def test_quick_apks_are_built_once_and_publication_requires_all_gates():
         }
     assert "artifact-ids: ${{ needs.apk.outputs.artifact_id }}" in sections["dev-release"]
     assert "secrets." not in sections["apk"] + sections["android"] + sections["android-startup"]
-    assert "github.event_name == 'push' && github.ref == 'refs/heads/main'" in sections["dev-release"]
+    assert "github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'" in sections["dev-release"]
     assert "environment: play-release" in sections["release"]
     assert "cancel-in-progress: ${{ github.event_name == 'pull_request' }}" in source
 

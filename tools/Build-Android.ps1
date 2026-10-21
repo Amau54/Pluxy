@@ -68,6 +68,6 @@ try {
         Write-Host "[Pluxy] Pret : dist/$name (code $($info.VersionCode))."
     }
     Write-Host "[Pluxy] Termine en $([math]::Round($timer.Elapsed.TotalSeconds, 1)) s. Versions, certificats et SHA-256 dans dist/BUILD_INFO-*.json."
-    if (-not $Verify -and $Configuration -eq 'Debug') { Write-Host '[Pluxy] Build rapide local. -Verify lance tests, lint et bundles. GitHub garde les controles obligatoires avant publication.' }
+    if (-not $Verify -and $Configuration -eq 'Debug') { Write-Host '[Pluxy] Build rapide local. -Verify lance tests, lint et bundles. Publish-Local.ps1 impose les controles avant publication.' }
 } catch { Write-Host "[ERREUR] $($_.Exception.Message)" -ForegroundColor Red; exit 1 }
 finally { foreach ($name in $localSigningVariables) { [Environment]::SetEnvironmentVariable($name, $null) } }
