@@ -91,6 +91,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 
 @OptIn(UnstableApi::class)
 class PlayerActivity : ThemedActivity() {
@@ -355,7 +357,9 @@ class PlayerActivity : ThemedActivity() {
     private lateinit var seekTargetView: TextView
     private var seekPreviewJob: Job? = null
     private var seekPreviewBucket = -1L
-    private var seekPreviewUnavailableItem: String? = null
+    private var seekPreviewWarmupJob: Job? = null
+    private var seekPreviewFailedKey: String? = null
+    private var seekPreviewRetryAfterMs = 0L
     private val seekPreviewCache = android.util.LruCache<String, Bitmap>(12)
 
     private fun requestSeekPreview(positionMs: Long) {
@@ -363,56 +367,87 @@ class PlayerActivity : ThemedActivity() {
         val image = findViewById<ImageView>(R.id.seekPreviewImage)
         if (bucket != seekPreviewBucket) {
             seekPreviewBucket = bucket
-            image.setImageDrawable(null)
-            image.visibility = View.GONE
+            image.alpha = 0.55f
+            image.visibility = View.VISIBLE
         }
         val key = "${api.baseUrl}:${item.id}:$bucket"
         seekPreviewCache.get(key)?.let {
             image.setImageBitmap(it)
+            image.alpha = 1f
             image.visibility = View.VISIBLE
             return
         }
-        if (seekPreviewUnavailableItem == item.id || seekPreviewJob?.isActive == true) return
+        if (seekPreviewJob?.isActive == true ||
+            (seekPreviewFailedKey == key && SystemClock.elapsedRealtime() < seekPreviewRetryAfterMs)) return
+        seekPreviewWarmupJob?.cancel()
         seekPreviewJob = lifecycleScope.launch {
-            delay(350)
-            var previous = -1L
-            var attempts = 0
+            delay(120)
             while (seekOverlay.visibility == View.VISIBLE && activityStarted) {
                 val requested = seekPreviewBucket
                 val requestedItem = item.id
                 val requestedApi = api
-                if (previous != requested) { previous = requested; attempts = 0 }
                 val cacheKey = "${requestedApi.baseUrl}:$requestedItem:$requested"
-                val bytes = try {
-                    requestedApi.seekPreview(requestedItem, requested)
-                } catch (cancelled: CancellationException) {
-                    throw cancelled
-                } catch (error: com.pluxy.tv.api.ApiException) {
-                    if (error.code == 404 && item.id == requestedItem) seekPreviewUnavailableItem = requestedItem
-                    return@launch
-                } catch (_: Exception) {
-                    return@launch
+                Logger.log("preview", "demande ${requestedItem}:$requested")
+                val bitmap = loadSeekPreview(requestedApi, requestedItem, requested) {
+                    requested == seekPreviewBucket && seekOverlay.visibility == View.VISIBLE
                 }
                 if (item.id != requestedItem || api !== requestedApi) return@launch
-                if (bytes != null) {
-                    val bitmap = kotlinx.coroutines.withContext(Dispatchers.Default) {
-                        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
-                        if (bounds.outWidth !in 1..640 || bounds.outHeight !in 1..360) null
-                        else BitmapFactory.decodeByteArray(bytes, 0, bytes.size,
-                            BitmapFactory.Options().apply { inPreferredConfig = Bitmap.Config.RGB_565 })
-                    }
-                    if (bitmap != null) {
-                        seekPreviewCache.put(cacheKey, bitmap)
-                        if (requested == seekPreviewBucket && seekOverlay.visibility == View.VISIBLE) {
-                            image.setImageBitmap(bitmap)
-                            image.visibility = View.VISIBLE
-                            return@launch
-                        }
-                    }
+                if (requested != seekPreviewBucket) continue
+                if (bitmap != null) {
+                    Logger.log("preview", "image prête $requested")
+                    image.setImageBitmap(bitmap)
+                    image.alpha = 1f
+                    image.visibility = View.VISIBLE
+                } else {
+                    Logger.log("preview", "image indisponible $requested")
+                    seekPreviewFailedKey = cacheKey
+                    seekPreviewRetryAfterMs = SystemClock.elapsedRealtime() + 1_500L
                 }
-                if (requested == seekPreviewBucket && ++attempts >= 4) return@launch
-                delay(if (requested == seekPreviewBucket) 1_000 else 350)
+                return@launch
+            }
+        }
+    }
+
+    private suspend fun loadSeekPreview(owner: PluxyApi, id: String, bucket: Long,
+                                        stillWanted: () -> Boolean): Bitmap? {
+        val key = "${owner.baseUrl}:$id:$bucket"
+        seekPreviewCache.get(key)?.let { return it }
+        val deadline = SystemClock.elapsedRealtime() + 10_000L
+        while (activityStarted && api === owner && item.id == id && stillWanted() &&
+            SystemClock.elapsedRealtime() < deadline) {
+            val bytes = try { owner.seekPreview(id, bucket) }
+            catch (error: CancellationException) { throw error }
+            catch (error: com.pluxy.tv.api.ApiException) {
+                if (error.code in 400..499) return null else null
+            }
+            catch (_: Exception) { null }
+            if (bytes != null) {
+                val bitmap = kotlinx.coroutines.withContext(Dispatchers.Default) {
+                    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+                    if (bounds.outWidth !in 1..640 || bounds.outHeight !in 1..360) null
+                    else BitmapFactory.decodeByteArray(bytes, 0, bytes.size,
+                        BitmapFactory.Options().apply { inPreferredConfig = Bitmap.Config.RGB_565 })
+                }
+                if (bitmap != null) { seekPreviewCache.put(key, bitmap); return bitmap }
+            }
+            delay(350)
+        }
+        return null
+    }
+
+    private fun warmNextSeekPreview() {
+        seekPreviewWarmupJob?.cancel()
+        val owner = api
+        val id = item.id
+        seekPreviewWarmupJob = lifecycleScope.launch {
+            delay(1_500)
+            val p = player ?: return@launch
+            if (!p.isPlaying || seekOverlay.visibility == View.VISIBLE || isSeeking || timelineScrubbing ||
+                p.bufferedPosition - p.currentPosition < 3_000L || api !== owner || item.id != id) return@launch
+            val target = (absolutePositionMs() + 10_000L).coerceAtMost((skipDurationMs - 1_000L).coerceAtLeast(0L))
+            loadSeekPreview(owner, id, target / 10_000L * 10_000L) {
+                player?.isPlaying == true && seekOverlay.visibility != View.VISIBLE
             }
         }
     }
@@ -627,7 +662,7 @@ class PlayerActivity : ThemedActivity() {
             TvPlaybackKeyRouter.Command.PlayOrReplay -> playOrReplay()
             TvPlaybackKeyRouter.Command.Pause -> pausePlayback()
             is TvPlaybackKeyRouter.Command.StartSeek -> {
-                timeline.requestFocus()
+                timeline.requestFocusFromTouch()
                 startSeekHold(command.direction)
             }
             TvPlaybackKeyRouter.Command.KeepSeekAlive -> armSeekReleaseFallback()
@@ -714,11 +749,6 @@ class PlayerActivity : ThemedActivity() {
         setupModernControls()
         findViewById<Button>(R.id.skipSegment).setOnClickListener {
             activeSkipSegment?.let { autoSkipPolicy.mark(item.id, it.kind); goToAbsolute(it.endMs); updateSkipSegment() }
-        }
-        findViewById<Button>(R.id.skipSegment).setOnFocusChangeListener { view, focused ->
-            val button = view as Button
-            button.paintFlags = if (focused) button.paintFlags or android.graphics.Paint.UNDERLINE_TEXT_FLAG
-                else button.paintFlags and android.graphics.Paint.UNDERLINE_TEXT_FLAG.inv()
         }
         loadSkipChapters()
         playerView.resizeMode = aspectModes[aspectIdx].first
@@ -1241,9 +1271,16 @@ class PlayerActivity : ThemedActivity() {
         )
     }
 
+    private var loadingRequested = false
+    private val showLoadingIndicator = Runnable {
+        if (loadingRequested && ::loadingIndicator.isInitialized) loadingIndicator.visibility = View.VISIBLE
+    }
     private fun setLoadingVisible(visible: Boolean) {
-        if (::loadingIndicator.isInitialized) {
-            loadingIndicator.visibility = if (visible) View.VISIBLE else View.GONE
+        if (visible && !loadingRequested) handler.postDelayed(showLoadingIndicator, 180L)
+        loadingRequested = visible
+        if (!visible) {
+            handler.removeCallbacks(showLoadingIndicator)
+            if (::loadingIndicator.isInitialized) loadingIndicator.visibility = View.GONE
         }
     }
 
@@ -1330,8 +1367,9 @@ class PlayerActivity : ThemedActivity() {
 
     private fun setStatus(message: String) {
         if (!::statusView.isInitialized) return
-        statusView.text = message
-        statusView.visibility = if (message.isBlank()) View.GONE else View.VISIBLE
+        if (message.isNotBlank()) Logger.log("playback", message)
+        statusView.text = ""
+        statusView.visibility = View.GONE
     }
 
     private fun showPlayerChoices(
@@ -1611,6 +1649,8 @@ class PlayerActivity : ThemedActivity() {
 
     override fun onStop() {
         activityStarted = false
+        seekPreviewWarmupJob?.cancel()
+        setLoadingVisible(false)
         skipChaptersJob?.cancel()
         dismissSeekOverlay()
         cancelSeekRebuild()
@@ -1687,11 +1727,17 @@ class PlayerActivity : ThemedActivity() {
             repeat(PREPARE_ATTEMPTS) { attempt ->
                 try {
                     val audioMode = AudioOutputMode.fromKey(PluxyApplication.audioOutputMode(this@PlayerActivity))
-                    val decision = if (strategy == PlaybackStrategy.DIRECT && audioFallbackLevel == 0 && audioMode != AudioOutputMode.COMPATIBLE) PlaybackDecision(
-                        mode = "direct_play", streamUrl = "/stream/direct/${item.id}", delivery = "direct",
-                        reasons = listOf("Lecture du fichier original demandée, sans conversion."),
-                    ) else api.decide(item.id, audioFallbackLevel, failedAudioCodec, strategy == PlaybackStrategy.DIRECT)
-                    val runtime = api.clientRuntime()
+                    val (decision, runtime, progress) = coroutineScope {
+                        val runtime = async { api.clientRuntime() }
+                        val progress = async { ProgressOutbox.pendingResume(api.baseUrl, item.id) ?: api.getProgress(item.id) }
+                        val decision = async {
+                            if (strategy == PlaybackStrategy.DIRECT && audioFallbackLevel == 0 && audioMode != AudioOutputMode.COMPATIBLE) PlaybackDecision(
+                                mode = "direct_play", streamUrl = "/stream/direct/${item.id}", delivery = "direct",
+                                reasons = listOf("Lecture du fichier original demandée, sans conversion."),
+                            ) else api.decide(item.id, audioFallbackLevel, failedAudioCodec, strategy == PlaybackStrategy.DIRECT)
+                        }
+                        Triple(decision.await(), runtime.await(), progress.await())
+                    }
                     conversionProfiles = ConversionPolicy.compatible(runtime.conversionProfiles, item, DeviceProfile.capabilities())
                     if (conversionProfiles.isNotEmpty() && PluxyApplication.conversionQuality(this@PlayerActivity) != "auto" &&
                         conversionProfiles.none { it.id == PluxyApplication.conversionQuality(this@PlayerActivity) }) {
@@ -1710,8 +1756,6 @@ class PlayerActivity : ThemedActivity() {
                             "Vérifiez les réglages de transcodage du serveur ou choisissez le mode automatique.")
                         return@launch
                     }
-                    val progress = ProgressOutbox.pendingResume(api.baseUrl, item.id)
-                        ?: api.getProgress(item.id)
 
                     if (!decision.playable && strategy != PlaybackStrategy.DIRECT && conversionProfiles.isEmpty()) {
                         showUnsupportedDecision(decision)
@@ -2312,6 +2356,7 @@ class PlayerActivity : ThemedActivity() {
                     // pour distinguer un vrai rebuffering réseau d'une reprise post-seek.
                     if (playStartedAtMs == 0L) playStartedAtMs = SystemClock.elapsedRealtime()
                     applyTrackChoices()
+                    warmNextSeekPreview()
                 }
                 Player.STATE_ENDED -> {
                     setLoadingVisible(false)
@@ -2947,7 +2992,6 @@ class PlayerActivity : ThemedActivity() {
         } else if (toCompat) "Réseau limité : passage en 1080p compatible…"
         else "Réseau instable : qualité adaptée au débit…"
         setStatus(msg)
-        Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
         Logger.log("downshift", "-> attempt $target (${attempts[target].url})")
         adaptiveHistory.addLast(attemptIdx)
         lastAdaptiveChangeAtMs = SystemClock.elapsedRealtime()
@@ -2984,7 +3028,6 @@ class PlayerActivity : ThemedActivity() {
         stallWindow.clear()
         val msg = "Connexion stable : retour à ${attempts[target].label}…"
         setStatus(msg)
-        Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
         Logger.log("upshift", "-> attempt $target (${attempts[target].url})")
         loadAttempt(target, restorePos = reliablePositionMs())
     }
@@ -3033,7 +3076,6 @@ class PlayerActivity : ThemedActivity() {
         val msg = "Réseau instable : Direct Play conservé, tampon renforcé…"
         recordNetworkConstraintOnce()
         setStatus(msg)
-        Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
         Logger.log("downshift", "serveur sans transcodage -> tampon Direct Play renforcé")
         // Différé d'un tour de boucle : cette méthode peut être appelée depuis un callback
         // du lecteur. Libérer ExoPlayer à l'intérieur de son propre callback est fragile.
@@ -3060,7 +3102,6 @@ class PlayerActivity : ThemedActivity() {
             "Le réseau reste insuffisant au palier compatible. Vérifiez le Wi-Fi ou l'Ethernet."
         }
         setStatus(msg)
-        Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
         Logger.log("network", "palier minimal atteint: $msg")
     }
 

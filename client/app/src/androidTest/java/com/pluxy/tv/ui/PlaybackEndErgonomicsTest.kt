@@ -7,6 +7,8 @@ import android.os.SystemClock
 import android.view.KeyEvent
 import android.view.View
 import android.widget.Button
+import android.widget.ImageView
+import android.widget.TextView
 import androidx.media3.common.Player
 import androidx.test.platform.app.InstrumentationRegistry
 import com.pluxy.tv.PluxyApplication
@@ -104,7 +106,7 @@ class PlaybackEndErgonomicsTest {
             assertEquals(View.VISIBLE, button.visibility)
             assertNull(button.background)
             assertTrue("Skip must receive TV focus automatically", button.hasFocus())
-            assertTrue("Focused text must have a discreet underline", button.paintFlags and android.graphics.Paint.UNDERLINE_TEXT_FLAG != 0)
+            assertEquals("Focused text keeps its clean style", 0, button.paintFlags and android.graphics.Paint.UNDERLINE_TEXT_FLAG)
             assertEquals("Passer l’intro", button.text.toString())
         }
         capture("tv-skip-minimal.png")
@@ -166,6 +168,57 @@ class PlaybackEndErgonomicsTest {
         PlayerActivity::class.java.getDeclaredMethod("showNextEpisodeDialog", MediaItem::class.java)
             .apply { isAccessible = true }.invoke(activity, item)
     }
+    @Test fun directPlaybackShowsRealSeekImagesAndKeepsTechnicalStatusSilent() = withPlayer { activity ->
+        instrumentation.runOnMainSync {
+            val status = PlayerActivity::class.java.getDeclaredMethod("setStatus", String::class.java).apply { isAccessible = true }
+            for (text in listOf("Mise en mémoire tampon…", "Réseau instable : tampon renforcé…")) {
+                status.invoke(activity, text)
+                assertEquals(View.GONE, activity.findViewById<View>(R.id.status).visibility)
+                assertEquals("", activity.findViewById<TextView>(R.id.status).text.toString())
+            }
+            call(activity, "hideControls")
+            activity.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_RIGHT))
+            assertTrue("The timeline must own focus throughout a held remote gesture", activity.findViewById<View>(R.id.playbackTimeline).hasFocus())
+        }
+        try {
+            await("Scrubbing must display an actual decoded preview image") {
+                val now = SystemClock.uptimeMillis()
+                activity.dispatchKeyEvent(KeyEvent(now, now, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_RIGHT, 1))
+                activity.findViewById<ImageView>(R.id.seekPreviewImage).let { it.isShown && it.drawable != null && it.alpha == 1f }
+            }
+            capture("tv-seek-thumbnail.png")
+        } catch (error: AssertionError) {
+            capture("tv-seek-failure.png")
+            var diagnostic = ""
+            instrumentation.runOnMainSync {
+                val image = activity.findViewById<ImageView>(R.id.seekPreviewImage)
+                diagnostic = "held=${field(activity, "seekKeyHeld")} seeking=${field(activity, "isSeeking")} " +
+                    "bucket=${field(activity, "seekPreviewBucket")} job=${field(activity, "seekPreviewJob")} " +
+                    "overlay=${(field(activity, "seekOverlay") as View).visibility} shown=${image.isShown} " +
+                    "alpha=${image.alpha} drawable=${image.drawable} focus=${activity.currentFocus?.id}\n" + com.pluxy.tv.util.Logger.dump()
+            }
+            throw AssertionError("${error.message}\n$diagnostic")
+        } finally {
+            instrumentation.runOnMainSync {
+                activity.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DPAD_RIGHT))
+            }
+        }
+    }
+    @Test fun sliderPreviewWaitsForASlowBackgroundCaptureInsteadOfDisappearing() = withPlayer { activity ->
+        val delayMs = InstrumentationRegistry.getArguments().getString("preview_test_delay_ms")?.toLongOrNull() ?: 0L
+        assumeTrue("Requires delayed preview fixture", delayMs > 0)
+        val started = SystemClock.elapsedRealtime()
+        instrumentation.runOnMainSync {
+            PlayerActivity::class.java.getDeclaredMethod("showScrubPreview", Long::class.javaPrimitiveType)
+                .apply { isAccessible = true }.invoke(activity, 12_000L)
+        }
+        await("A stationary slider must still receive its image after slow background preparation") {
+            activity.findViewById<ImageView>(R.id.seekPreviewImage).let { it.isShown && it.drawable != null && it.alpha == 1f }
+        }
+        assertTrue("The fixture must really delay the image", SystemClock.elapsedRealtime() - started >= delayMs - 500)
+        capture("tv-slider-slow-thumbnail.png")
+        instrumentation.runOnMainSync { call(activity, "dismissSeekOverlay") }
+    }
     private fun seekBeforeEnd(activity: PlayerActivity, remainingMs: Long) {
         instrumentation.runOnMainSync {
             val player = field(activity, "player") as Player
@@ -209,7 +262,8 @@ class PlaybackEndErgonomicsTest {
         await("The next episode must start at the media end") {
             (field(activity, "item") as MediaItem).id == next!!.id
         }
-        assertTrue("No additional five-second wait after the end", SystemClock.elapsedRealtime() - resumedAt < remaining + 2_500)
+        val elapsed = SystemClock.elapsedRealtime() - resumedAt
+        assertTrue("No additional five-second wait after the end (remaining=$remaining elapsed=$elapsed)", elapsed < remaining + 2_500)
     }
     @Test fun seekingBackDismissesTheEarlyPromptAndAutoplayOffDoesNotExitEarly() = withPlayer { activity ->
         assumeTrue("Requires a second episode", nextItem != null)

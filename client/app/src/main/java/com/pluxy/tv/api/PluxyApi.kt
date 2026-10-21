@@ -89,10 +89,10 @@ class PluxyApi(val baseUrl: String, val sessionId: String = UUID.randomUUID().to
     suspend fun seekPreview(itemId: String, positionMs: Long): ByteArray? = withContext(Dispatchers.IO) {
         val path = "/api/library/items/${android.net.Uri.encode(itemId)}/preview?position=${positionMs.coerceAtLeast(0) / 1000}"
         val request = Request.Builder().url(abs(path)).build()
-        previewHttp.newCall(request).execute().use { response ->
-            if (response.code == 202) return@withContext null
+        previewHttp.newCall(request).awaitResult { response ->
+            if (response.code == 202) return@awaitResult null
             if (!response.isSuccessful) throw ApiException(response.code, "Aperçu indisponible")
-            val body = response.body ?: return@withContext null
+            val body = response.body ?: return@awaitResult null
             require(body.contentLength() <= 256 * 1024) { "Aperçu trop volumineux" }
             body.byteStream().use { input ->
                 val output = ByteArrayOutputStream()

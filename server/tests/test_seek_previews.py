@@ -3,11 +3,35 @@ from types import SimpleNamespace
 import sys
 import threading
 import time
+import os
+import shutil
+import subprocess
 
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from pluxy.seek_previews import SeekPreviews, preview_second
+from pluxy.tools import NO_WINDOW
+
+
+def test_long_gop_preview_near_eof_still_produces_an_image(tmp_path):
+    ffmpeg = os.environ.get("PLUXY_TEST_FFMPEG") or shutil.which("ffmpeg")
+    if not ffmpeg:
+        pytest.skip("FFmpeg absent")
+    source = tmp_path / "long-gop.mkv"
+    subprocess.run([ffmpeg, "-v", "error", "-f", "lavfi", "-i", "testsrc2=size=160x90:rate=2",
+                    "-t", "8", "-c:v", "libx264", "-g", "60", "-sc_threshold", "0", "-y", str(source)],
+                   check=True, timeout=10, creationflags=NO_WINDOW)
+    previews = SeekPreviews(SimpleNamespace(ffmpeg=SimpleNamespace(ffmpeg_path=ffmpeg)), tmp_path)
+    target = tmp_path / "near-end.jpg"
+    try:
+        assert previews._capture(source, target, 6)
+        from PIL import Image
+        with Image.open(target) as image:
+            assert image.width <= 320 and image.height <= 180
+            assert image.getbbox() is not None
+    finally:
+        previews.close()
 
 
 @pytest.mark.parametrize(

@@ -1,3 +1,11 @@
+## Windows 1.8.33 · Android 1.7.43
+
+- Lecteur Android : suppression du soulignement des commandes de passage ; le focus automatique et la teinte claire sont conservés.
+- Les messages techniques de tampon, adaptation et reconnexion restent dans les diagnostics sans notifications pendant la lecture. Les erreurs nécessitant une action gardent leur panneau de récupération.
+- Démarrage : appels de préparation parallèles, réserve initiale plafonnée à 1,5 seconde et indicateur retardé pour éviter les flashes. Le budget mémoire et la réserve renforcée après une vraie coupure restent conservés.
+- Navigation vidéo : focus du curseur stabilisé, aperçu conservé pendant le déplacement, attente adaptée aux miniatures en préparation, requêtes annulables et préparation d’une image voisine après stabilisation de la lecture. Une erreur sur une position ne désactive plus les aperçus du film entier.
+- Serveur PC : extraction des aperçus depuis les images clés, avec un seul thread de décodage et de filtre. Les fichiers aux images clés espacées gardent leur aperçu près de la fin.
+
 ## Android 1.7.42
 
 - TV : « Passer l’intro » et « Passer le générique » prennent automatiquement le focus lorsque les commandes sont masquées. Un soulignement fin et une teinte claire signalent qu’un seul appui suffit, sans fond ni changement de texte.

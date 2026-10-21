@@ -28,7 +28,7 @@ internal class AdaptiveBufferPolicy(
         val desired = if (rebuffering) {
             val base = buffer.bufferForPlaybackAfterRebufferMs.coerceAtLeast(5_000)
             (base * Math.pow(1.5, interruptions.toDouble())).toLong().coerceAtMost(30_000L)
-        } else buffer.bufferForPlaybackMs.toLong().coerceAtMost(3_000L)
+        } else buffer.bufferForPlaybackMs.toLong().coerceAtMost(1_500L)
         // Une marge pour les pics de débit et les pistes audio/sous-titres.
         val capacityMs = if (sourceBitrateBps > 0L) {
             (buffer.targetBufferBytes * 8.0 * 0.75 / sourceBitrateBps * 1000 / speed)

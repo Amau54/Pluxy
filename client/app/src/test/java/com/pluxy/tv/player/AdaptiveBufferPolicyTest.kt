@@ -6,6 +6,15 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AdaptiveBufferPolicyTest {
+    @Test fun `quick initial start keeps the full adaptive reserve for real interruptions`() {
+        val runtime = PlaybackMemoryPolicy.resolve(BufferConfig(60_000, 120_000, 5_000, 15_000, 256, 30_000),
+            256, true, false, 10_000_000L)
+        val policy = AdaptiveBufferPolicy(runtime, 10_000_000L)
+        assertEquals(1_500L, policy.requiredPlaybackMs(false, 1f))
+        policy.observe(true, 10_000L)
+        assertTrue(policy.requiredPlaybackMs(true, 1f) > 15_000L)
+        assertEquals(120_000, runtime.maxBufferMs)
+    }
     private fun policy(bitrate: Long = 10_000_000L, lowRam: Boolean = false): AdaptiveBufferPolicy {
         val runtime = PlaybackMemoryPolicy.resolve(
             BufferConfig(60_000, 120_000, 1_500, 5_000, 256, 30_000),
