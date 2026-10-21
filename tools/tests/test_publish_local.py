@@ -33,6 +33,20 @@ def test_windows_detects_modified_installer(windows):
         local.validate_windows(windows, "a" * 40, "1.8.33")
 
 
+def test_local_publication_refuses_tracked_signing_keys(tmp_path):
+    with pytest.raises(ValueError, match="cle de signature"):
+        local.validate_source_files(tmp_path, ["private/signing.JKS"])
+
+
+def test_local_publication_never_prints_literal_signing_password(tmp_path):
+    gradle = tmp_path / "client/app/build.gradle.kts"
+    gradle.parent.mkdir(parents=True)
+    gradle.write_text('keyPassword = "private-value"')
+    with pytest.raises(ValueError) as error:
+        local.validate_source_files(tmp_path, ["client/app/build.gradle.kts"])
+    assert "private-value" not in str(error.value)
+
+
 def test_windows_publishes_only_the_three_public_assets(windows):
     (windows / "private-log.txt").write_text("not for publication")
     files = local.validate_windows(windows, "a" * 40, "1.8.33")
