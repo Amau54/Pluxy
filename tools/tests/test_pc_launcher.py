@@ -696,19 +696,19 @@ def test_batch_double_click_preserves_special_characters_in_install_path(
     assert str(directory / "server") in record.read_text(encoding="utf-8")
 
 
-def test_pc_changes_have_their_own_windows_gate_without_android_rebuild() -> None:
+def test_windows_gate_remains_available_manually_without_android_rebuild() -> None:
     workflow = (ROOT / ".github/workflows/pc-windows.yml").read_text(encoding="utf-8")
     android = (ROOT / ".github/workflows/build-apk.yml").read_text(encoding="utf-8")
     assert "runs-on: windows-latest" in workflow
     assert "python -m pytest -q server/tests tools/tests" in workflow
     assert "contents: read" in workflow
     assert "persist-credentials: false" in workflow
-    assert "Pluxy-Server.bat" in workflow
+    assert "  workflow_dispatch:" in workflow
+    assert "  workflow_dispatch:" in android
+    assert "  push:" not in workflow + android
+    assert "  pull_request:" not in workflow + android
     assert "Initialize-PCEnvironment" in workflow
     assert "Test-PCDependencies" in workflow
     assert "Get-PCPythonCandidates { return @() }" in workflow
-    for path in ("tools/PC-Launcher.ps1", "tools/Start-PC.ps1", "tools/tests/test_pc_launcher.py"):
-        assert f"'{path}'" in workflow
-        assert android.count(f"'!{path}'") == 2
     for action in re.findall(r"uses: ([^\s#]+)", workflow):
         assert re.fullmatch(r"[\w/-]+@[a-f0-9]{40}", action), action
