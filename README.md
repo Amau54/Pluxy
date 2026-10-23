@@ -6,7 +6,7 @@
 
 Vos films, séries, photos et musique sur la TV.
 
-**Android 1.7.44 · Windows 1.8.34**
+**Android 1.7.45 · Windows 1.8.35**
 
 [Application Android](https://github.com/Amau54/Pluxy/releases/download/dev-latest/Pluxy-debug.apk)
 · [Application PC](https://github.com/Amau54/Pluxy/releases/download/pc-latest/Pluxy-Setup.exe)
@@ -40,9 +40,12 @@ Sur téléphone et tablette, glissez verticalement sur la moitié droite de la v
 pour régler la luminosité, ou sur la moitié gauche pour régler le volume.
 Un toucher simple affiche les commandes. Les gestes ne modifient pas la position de lecture.
 
-Le lecteur peut passer automatiquement les intros et génériques détectés. Activez
-ou désactivez **Passer automatiquement les intros et génériques** dans les réglages
-de lecture ou les options du lecteur. Désactivé, le bouton « Passer » reste disponible.
+Le lecteur peut passer automatiquement les intros et les génériques détectés. Les
+réglages **Passer automatiquement les intros** et **Passer automatiquement les
+génériques** sont indépendants dans les réglages de lecture et les options du
+lecteur. Lorsqu’un réglage est désactivé, le bouton « Passer » correspondant reste
+disponible. Un générique final sans scène supplémentaire enchaîne directement sur
+l’épisode suivant lorsqu’il existe ; les scènes après le générique sont conservées.
 
 Pour conserver la vidéo 4K/HDR, choisissez **Mode de lecture → Vidéo originale (4K/HDR)**.
 Le lecteur ne réduit alors pas la résolution et n'accepte aucun réencodage vidéo.
@@ -196,6 +199,12 @@ Les services externes utilisés sont décrits dans la [politique de confidential
 
 Les filtres et la vue sont mémorisés pour chaque bibliothèque et chaque serveur.
 Les collections sont conservées sur le lecteur qui les a créées.
+
+Sur le lecteur Windows, **Organiser** permet de réordonner les cartes des films,
+séries et vidéos par glisser-déposer, ou avec Alt + gauche/droite. L’ordre personnel
+reste enregistré sur ce PC pour chaque serveur et profil. Dans **Gérer la bibliothèque**,
+vous pouvez aussi déposer des dossiers depuis l’Explorateur Windows et les réordonner,
+puis enregistrer. Ces actions ne déplacent pas les fichiers.
 
 Pour chaque dossier vidéo, choisissez **Automatique**, **Films**, **Séries** ou
 **Vidéos** dans le serveur. Le choix explicite prime sur la détection. En automatique,

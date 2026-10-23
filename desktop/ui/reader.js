@@ -7,6 +7,7 @@ let reconnecting = false, toastTimer, searchTimer, slideTimer, photos = [], phot
 let fullscreen = false;
 let folderData = new Map(), galleryGeneration = 0;
 const photoCache = new Map();
+let organizingLibrary = false, draggedLibraryCard = '';
 const labels = {home: 'Accueil', movie: 'Films', series: 'Séries', clip: 'Vidéos', photo: 'Photos', audio: 'Musique'};
 const iconNames = {movie: 'film', series: 'series', clip: 'play', photo: 'photos', audio: 'music'};
 function call(method, args = {}) {
@@ -75,7 +76,8 @@ function applyPreferences() {
   document.documentElement.dataset.theme = ['coral','ocean','midnight'].includes(prefs.theme) ? prefs.theme : 'coral';
   $('theme').value = prefs.theme || 'coral'; $('audio').value = prefs.audio || 'auto';
   $('player-action-hints').checked = Boolean(prefs.playerActionHints);
-  $('auto-skip-segments').checked = prefs.autoSkipSegments !== false;
+  $('auto-skip-intros').checked = prefs.autoSkipIntros !== false;
+  $('auto-skip-credits').checked = prefs.autoSkipCredits !== false;
   $('player-focus-contrast').checked = Boolean(prefs.playerFocusContrast);
   $('multiple-profiles').checked = Boolean(prefs.multipleProfiles);
   hidden('family-settings',!prefs.multipleProfiles);
@@ -117,7 +119,59 @@ async function discover(automatic = false) {
   } catch (error) { $('connection-status').textContent = error.message; showDialog('connection'); }
   finally { reconnecting = false; }
 }
-function filters() { return {kind: kind === 'home' ? 'all' : kind, q: $('search').value.trim(), genre: $('genre').value, watched: $('watched').value, resolution: $('resolution').value, sort: $('sort').value, descending: $('sort').value !== 'title'}; }
+function selectedSort() { return $('sort').value === 'manual' ? 'title' : $('sort').value; }
+function filters() { const sort = selectedSort(); return {kind: kind === 'home' ? 'all' : kind, q: $('search').value.trim(), genre: $('genre').value, watched: $('watched').value, resolution: $('resolution').value, sort, descending: sort !== 'title'}; }
+function canOrganizeLibrary() { return ['movie','series','clip'].includes(kind); }
+function hasLibraryFilters() { return Boolean($('search').value.trim() || $('genre').value || $('watched').value !== 'all' || $('resolution').value !== 'all'); }
+function libraryOrderKey() { return 'library-order:' + encodeURIComponent(connection?.url || prefs.server || 'offline') + ':' + encodeURIComponent(prefs.profile || 'default') + ':' + kind; }
+function libraryOrder() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(libraryOrderKey()) || '[]');
+    if (!Array.isArray(saved)) return [];
+    const unique = new Set();
+    return saved.filter(value => typeof value === 'string' && value.length && value.length <= 256 && !unique.has(value) && unique.add(value)).slice(0,10000);
+  } catch (_) { return []; }
+}
+function saveLibraryOrder(order) {
+  const unique = new Set();
+  const clean = order.filter(value => typeof value === 'string' && value.length && value.length <= 256 && !unique.has(value) && unique.add(value)).slice(0,10000);
+  try { localStorage.setItem(libraryOrderKey(),JSON.stringify(clean)); }
+  catch (_) { toast('Impossible d’enregistrer cet ordre sur ce PC.'); }
+  updateOrganizeControls();
+}
+function hasLibraryOrder() { return libraryOrder().length > 0; }
+function orderLibrary(values, keyFor) {
+  if ($('sort').value !== 'manual') return values;
+  const ranking = new Map(libraryOrder().map((value,index) => [value,index]));
+  return values.map((value,index) => ({value,index,rank:ranking.has(keyFor(value)) ? ranking.get(keyFor(value)) : Number.MAX_SAFE_INTEGER}))
+    .sort((a,b) => a.rank - b.rank || a.index - b.index).map(entry => entry.value);
+}
+function libraryCardIds() { return [...document.querySelectorAll('#content .media-card[data-library-order-id]')].map(card => card.dataset.libraryOrderId); }
+function moveLibraryCard(source, target, after = false) {
+  if (!organizingLibrary || !source || !target || source === target) return;
+  const visible = libraryCardIds();
+  if (!visible.includes(source) || !visible.includes(target)) return;
+  const order = libraryOrder();
+  for (const id of visible) if (!order.includes(id)) order.push(id);
+  const sourceIndex = order.indexOf(source), targetIndex = order.indexOf(target);
+  if (sourceIndex < 0 || targetIndex < 0) return;
+  order.splice(sourceIndex,1); order.splice(order.indexOf(target) + (after ? 1 : 0),0,source);
+  saveLibraryOrder(order); render();
+  requestAnimationFrame(() => document.querySelector('#content .media-card[data-library-order-id="' + CSS.escape(source) + '"]')?.focus());
+  toast('Ordre enregistré.');
+}
+function updateOrganizeControls() {
+  const available = canOrganizeLibrary();
+  if (!available) organizingLibrary = false;
+  hidden('organize-library',!available);
+  hidden('reset-library-order',!available || !hasLibraryOrder());
+  $('organize-library').setAttribute('aria-pressed',String(organizingLibrary));
+  $('organize-library').textContent = organizingLibrary ? 'Terminer' : 'Organiser';
+  $('organize-library').title = organizingLibrary ? 'Terminer la réorganisation' : 'Réorganiser les cartes';
+  $('library-toolbar').classList.toggle('is-organizing',organizingLibrary);
+  for (const id of ['watched','genre','sort','resolution']) $(id).disabled = organizingLibrary;
+  hidden('library-order-help',!organizingLibrary);
+}
 function updateToolbar() {
   const home = kind === 'home' && !$('search').value.trim();
   hidden('library-toolbar',home); hidden('photo-commands',kind !== 'photo');
@@ -126,6 +180,7 @@ function updateToolbar() {
   $('section-label').textContent = kind === 'home' ? 'VOTRE MÉDIATHÈQUE' : 'BIBLIOTHÈQUE';
   $('heading').textContent = kind === 'home' && !home ? 'Résultats de recherche' : labels[kind];
   hidden('clear-filters',!$('search').value && !$('genre').value && $('watched').value === 'all' && $('resolution').value === 'all');
+  updateOrganizeControls();
 }
 function skeleton() {
   const grid = node('div','media-grid skeleton'); grid.setAttribute('aria-label','Chargement de la bibliothèque');
@@ -146,6 +201,16 @@ async function load(append = false, retry = true) {
     let page = await call('page', {...query, grouped: ['series','photo','audio'].includes(selectedKind), audio_folders: selectedKind === 'audio', offset: append ? next : 0, revision: append ? revision : ''});
     if (version !== generation) return;
     items = append ? [...items, ...page.items] : page.items; revision = page.revision; next = page.next_offset;
+    if ($('sort').value === 'manual' && canOrganizeLibrary()) {
+      const offsets = new Set();
+      while (next != null) {
+        if (offsets.has(next)) throw new Error('Pagination interrompue. Actualisez la bibliothèque.');
+        offsets.add(next);
+        page = await call('page', {...query, grouped: selectedKind === 'series', offset: next, revision});
+        if (version !== generation) return;
+        items.push(...page.items); revision = page.revision; next = page.next_offset;
+      }
+    }
     if (version !== generation) return;
     const countLabel = {movie:'film',series:'série',clip:'vidéo',photo:'dossier',audio:'dossier'}[selectedKind];
     $('count').textContent = page.total + (countLabel ? ' ' + countLabel + (page.total === 1 ? '' : 's') : ' éléments');
@@ -163,8 +228,12 @@ async function load(append = false, retry = true) {
     try { await call('ping'); } catch (_) { $('server-choice').classList.add('offline'); await discover(true); }
   }
 }
-function card(item, action, subtitle) {
-  const e = button('', action, 'media-card');
+function card(item, action, subtitle, orderId = '') {
+  const e = button('', event => {
+    if (organizingLibrary && orderId) { event.preventDefault(); return; }
+    if (e.dataset.suppressClick === 'true') { event.preventDefault(); return; }
+    action(event);
+  }, 'media-card');
   e.dataset.mediaId = item.id;
   e.mediaItem = item;
   e.classList.toggle('is-watched',Boolean(item.watched));
@@ -177,7 +246,37 @@ function card(item, action, subtitle) {
     const progress=node('progress','watch-progress'); progress.max=1; progress.value=Math.max(0,Math.min(1,item.progress || 0)); progress.setAttribute('aria-label','Progression de lecture'); poster.append(progress);
   }
   e.append(poster, node('strong','media-title',title(item)), node('span','media-subtitle',subtitle == null ? [item.year, minutes(item)].filter(Boolean).join(' · ') : subtitle));
-  e.title = title(item); return e;
+  e.title = title(item); makeLibraryCardOrganizable(e,orderId); return e;
+}
+function makeLibraryCardOrganizable(card, orderId) {
+  if (!organizingLibrary || !orderId) return;
+  card.dataset.libraryOrderId = orderId; card.draggable = true; card.classList.add('is-organizable');
+  card.setAttribute('aria-grabbed','false');
+  card.setAttribute('aria-label',title(card.mediaItem) + '. Réorganisation active : glissez cette carte ou utilisez Alt + flèche gauche ou droite.');
+  card.addEventListener('dragstart',event => {
+    draggedLibraryCard=orderId; card.classList.add('is-dragging'); card.setAttribute('aria-grabbed','true');
+    event.dataTransfer.effectAllowed='move'; event.dataTransfer.setData('text/plain',orderId);
+  });
+  card.addEventListener('dragenter',event => { if (draggedLibraryCard && draggedLibraryCard !== orderId) { event.preventDefault(); card.classList.add('is-drop-target'); } });
+  card.addEventListener('dragover',event => { if (draggedLibraryCard && draggedLibraryCard !== orderId) { event.preventDefault(); event.dataTransfer.dropEffect='move'; card.classList.add('is-drop-target'); } });
+  card.addEventListener('dragleave',event => { if (!card.contains(event.relatedTarget)) card.classList.remove('is-drop-target'); });
+  card.addEventListener('drop',event => {
+    event.preventDefault(); const source=draggedLibraryCard || event.dataTransfer.getData('text/plain');
+    const bounds=card.getBoundingClientRect();
+    const after=document.documentElement.dataset.view === 'list' ? event.clientY > bounds.top + bounds.height / 2 : event.clientX > bounds.left + bounds.width / 2;
+    draggedLibraryCard=''; card.classList.remove('is-drop-target'); moveLibraryCard(source,orderId,after);
+  });
+  card.addEventListener('dragend',() => {
+    draggedLibraryCard=''; card.classList.remove('is-dragging','is-drop-target'); card.setAttribute('aria-grabbed','false');
+    card.dataset.suppressClick='true'; window.setTimeout(() => { delete card.dataset.suppressClick; },0);
+    document.querySelectorAll('.media-card.is-drop-target').forEach(target => target.classList.remove('is-drop-target'));
+  });
+  card.addEventListener('keydown',event => {
+    if (!event.altKey || event.ctrlKey || event.metaKey || !['ArrowLeft','ArrowRight'].includes(event.key)) return;
+    const ids=libraryCardIds(), index=ids.indexOf(orderId), target=ids[index + (event.key === 'ArrowLeft' ? -1 : 1)];
+    if (!target) return;
+    event.preventDefault(); moveLibraryCard(orderId,target,event.key === 'ArrowRight');
+  });
 }
 async function refreshProgress(id) {
   if (!connection || !id) return;
@@ -205,7 +304,7 @@ function render() {
   if (kind === 'series') { renderSeries(); return; }
   if (kind === 'audio') { renderPhotos(); return; }
   const grid = node('div', 'media-grid ' + (kind === 'clip' ? 'clips' : ''));
-  grid.append(...items.map(item => card(item, () => openItem(item)))); $('content').replaceChildren(grid);
+  grid.append(...orderLibrary(items,item => item.id).map(item => card(item, () => openItem(item),undefined,item.id))); $('content').replaceChildren(grid);
 }
 function openItem(item) {
   if (item.kind === 'photo') { if (kind !== 'photo') groups = [items.filter(e=>e.kind === 'photo')]; openPhoto(item); }
@@ -250,7 +349,9 @@ function renderHome(counts) {
 }
 function resetFilters() { $('genre').value=''; $('search').value=''; $('watched').value='all'; $('resolution').value='all'; load(); }
 function selectKind(value) {
+  organizingLibrary=false; draggedLibraryCard='';
   kind=value; $('genre').value=''; $('search').value=''; $('watched').value='all'; $('resolution').value='all';
+  $('sort').value=canOrganizeLibrary() && hasLibraryOrder() ? 'manual' : 'title';
   document.querySelectorAll('[data-kind]').forEach(b=>{ b.classList.toggle('active',b.dataset.kind===kind); if(b.dataset.kind===kind) b.setAttribute('aria-current','page'); else b.removeAttribute('aria-current'); });
   window.scrollTo(0,0); load();
 }
@@ -307,10 +408,10 @@ function renderSeries() {
   for (const item of items) { const key = seriesKey(item); if (!series.has(key)) series.set(key, []); series.get(key).push(item); }
   groups = [...series.values()];
   const grid = node('div','media-grid');
-  grid.append(...groups.map(episodes => {
+  grid.append(...orderLibrary(groups,episodes => seriesKey(episodes[0])).map(episodes => {
     const first = episodes[0], seasons = new Set(episodes.map(e => e.season || 0));
     const count=first.group_count || episodes.length, seasonCount=first.season_count || seasons.size;
-    return card({...first, metadata_title: first.metadata_title || first.series_name || title(first)}, () => openSeries(first), seasonCount + (seasonCount > 1 ? ' saisons' : ' saison') + ' · ' + count + ' épisodes');
+    return card({...first, metadata_title: first.metadata_title || first.series_name || title(first)}, () => openSeries(first), seasonCount + (seasonCount > 1 ? ' saisons' : ' saison') + ' · ' + count + ' épisodes',seriesKey(first));
   }));
   $('content').replaceChildren(grid);
 }
@@ -443,6 +544,23 @@ document.querySelector('[data-kind="home"]').classList.add('active');
 $('connect-manual').addEventListener('submit',async event => { event.preventDefault(); try { await connect($('address').value); } catch (error) { $('connection-status').textContent = error.message; } });
 $('server-choice').addEventListener('click',() => { showDialog('connection'); discover(); }); $('discover').addEventListener('click',() => discover());
 $('more').addEventListener('click',() => load(true)); $('refresh').addEventListener('click',() => load());
+$('organize-library').addEventListener('click',async () => {
+  if (organizingLibrary) { organizingLibrary=false; updateOrganizeControls(); render(); return; }
+  if (!connection || !canOrganizeLibrary()) return;
+  const address=connection.url, profile=prefs.profile, selectedKind=kind;
+  if (hasLibraryFilters()) {
+    $('search').value=''; $('genre').value=''; $('watched').value='all'; $('resolution').value='all';
+  }
+  $('sort').value='manual';
+  await load();
+  if (connection?.url!==address || prefs.profile!==profile || kind!==selectedKind || next!=null || !items.length) return;
+  organizingLibrary=true; updateOrganizeControls(); render();
+});
+$('reset-library-order').addEventListener('click',() => {
+  try { localStorage.removeItem(libraryOrderKey()); }
+  catch (_) { toast('Impossible de réinitialiser cet ordre sur ce PC.'); return; }
+  organizingLibrary=false; $('sort').value='title'; updateOrganizeControls(); load();
+});
 ['genre','sort','watched','resolution'].forEach(id => $(id).addEventListener('change',() => load()));
 $('clear-filters').addEventListener('click',resetFilters);
 $('fullscreen').addEventListener('click',()=>call('fullscreen').catch(fail));
@@ -477,10 +595,15 @@ $('multiple-profiles').addEventListener('change',async()=>{
   } catch(error) { applyPreferences(); fail(error); }
   finally { $('multiple-profiles').disabled=false; }
 });
-$('auto-skip-segments').addEventListener('change',async () => {
-  try { await call('preferences',{autoSkipSegments:$('auto-skip-segments').checked}); prefs.autoSkipSegments=$('auto-skip-segments').checked; }
-  catch(error) { $('auto-skip-segments').checked=prefs.autoSkipSegments!==false; fail(error); }
-});
+for (const [id,key] of [['auto-skip-intros','autoSkipIntros'],['auto-skip-credits','autoSkipCredits']]) {
+  $(id).addEventListener('change',async () => {
+    const checked=$(id).checked;
+    $(id).disabled=true;
+    try { await call('preferences',{[key]:checked}); prefs[key]=checked; }
+    catch(error) { $(id).checked=prefs[key]!==false; fail(error); }
+    finally { $(id).disabled=false; }
+  });
+}
 $('player-action-hints').addEventListener('change',async () => {
   try { await call('preferences',{playerActionHints:$('player-action-hints').checked}); prefs.playerActionHints=$('player-action-hints').checked; }
   catch(error) { $('player-action-hints').checked=Boolean(prefs.playerActionHints); fail(error); }

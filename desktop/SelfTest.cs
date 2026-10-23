@@ -97,6 +97,16 @@ namespace Pluxy {
             skipPrefs.autoSkipSegments=false; skipPrefs.StoreReader("server","default"); skipPrefs.ApplyReader("server","other");
             Check(skipPrefs.autoSkipSegments,"Un nouveau profil garde son propre réglage de passage automatique");
             skipPrefs.ApplyReader("server","default"); Check(!skipPrefs.autoSkipSegments,"Le réglage désactivé est conservé par profil");
+            var legacyOff=Native.Json.Deserialize<Preferences>("{\"autoSkipSegments\":false}");
+            Check(!legacyOff.SkipEnabled("intro") && !legacyOff.SkipEnabled("credits"),"La migration conserve les deux passages désactivés");
+            legacyOff.autoSkipIntros=true; legacyOff.autoSkipCredits=false;
+            legacyOff.StoreReader("server","default"); legacyOff.ApplyReader("server","other");
+            Check(legacyOff.SkipEnabled("intro") && legacyOff.SkipEnabled("credits"),"Un autre profil conserve ses propres valeurs par défaut");
+            legacyOff.ApplyReader("server","default");
+            var roundTrip=Native.Json.Deserialize<Preferences>(Native.Json.Serialize(legacyOff));
+            Check(roundTrip.SkipEnabled("intro") && !roundTrip.SkipEnabled("credits"),"Intros et génériques gardent des réglages indépendants après sauvegarde et changement de profil");
+            Check(SkipSegments.IsFinalCredits(new SkipSegment {kind="credits",startMs=900000,endMs=1000000},1000000) &&
+                !SkipSegments.IsFinalCredits(new SkipSegment {kind="credits",startMs=900000,endMs=950000},1000000),"L'enchaînement direct distingue un générique final d'une scène après le générique");
             object[] chapters={new Dictionary<string,object>{{"title","Opening"},{"start_ms",10000},{"end_ms",40000}},
                 new Dictionary<string,object>{{"title","Générique de fin"},{"start_ms",900000},{"end_ms",950000}},
                 new Dictionary<string,object>{{"title","Post credits"},{"start_ms",950000},{"end_ms",1000000}}};

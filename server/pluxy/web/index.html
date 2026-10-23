@@ -85,6 +85,7 @@
   <form method="dialog" class="desktop-menu-heading"><h2 id="folderManagerTitle">Gérer la bibliothèque <span id="folderCount" class="folder-count"></span></h2><button class="icon-button" aria-label="Fermer"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg></button></form>
   <div id="folderSummary" class="folder-summary"></div>
   <div class="folder-tools"><input id="folderSearch" type="search" aria-label="Rechercher un dossier" placeholder="Rechercher un dossier…"><button class="secondary" onclick="pickFolder()">Ajouter un dossier</button><button class="primary" id="scanButton" onclick="rescan()"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6.1 6a8 8 0 0 1 13.3 2M4.6 16A8 8 0 0 0 17.9 18"/></svg>Analyser la bibliothèque</button></div>
+  <p id="folderOrderHelp" class="folder-order-help">Glissez les dossiers pour les réordonner, ou déposez-en depuis l’Explorateur Windows pour les ajouter. Aucun fichier n’est déplacé.</p>
   <div id="folderList" class="folder-list"></div>
   <form id="manualFolderForm" class="manual"><input id="manualFolder" type="text" aria-label="Chemin du dossier de médias" placeholder="Ex. D:\Films"><button class="secondary">Ajouter</button></form>
   <div class="folder-manager-footer"><span id="folderSaveState" role="status"></span><button id="saveFolders" class="primary" onclick="save()">Enregistrer</button></div>

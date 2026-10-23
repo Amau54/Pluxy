@@ -98,9 +98,22 @@ class PluxyApplication : Application() {
         fun autoPlayNextEpisode(ctx: Context): Boolean =
             readerPrefs(ctx).getBoolean(KEY_AUTO_PLAY_NEXT, true)
 
-        fun autoSkipSegments(ctx: Context): Boolean = readerPrefs(ctx).getBoolean("auto_skip_segments", true)
+        fun autoSkipIntros(ctx: Context): Boolean = readerPrefs(ctx).let {
+            it.getBoolean("auto_skip_intros", it.getBoolean("auto_skip_segments", true))
+        }
+        fun autoSkipCredits(ctx: Context): Boolean = readerPrefs(ctx).let {
+            it.getBoolean("auto_skip_credits", it.getBoolean("auto_skip_segments", true))
+        }
+        fun setAutoSkipIntros(ctx: Context, enabled: Boolean) {
+            readerPrefs(ctx).edit().putBoolean("auto_skip_intros", enabled).apply()
+        }
+        fun setAutoSkipCredits(ctx: Context, enabled: Boolean) {
+            readerPrefs(ctx).edit().putBoolean("auto_skip_credits", enabled).apply()
+        }
+        fun autoSkipSegments(ctx: Context): Boolean = autoSkipIntros(ctx) && autoSkipCredits(ctx)
         fun setAutoSkipSegments(ctx: Context, enabled: Boolean) {
-            readerPrefs(ctx).edit().putBoolean("auto_skip_segments", enabled).apply()
+            readerPrefs(ctx).edit().putBoolean("auto_skip_segments", enabled)
+                .putBoolean("auto_skip_intros", enabled).putBoolean("auto_skip_credits", enabled).apply()
         }
 
         fun playerActionHints(ctx: Context): Boolean =

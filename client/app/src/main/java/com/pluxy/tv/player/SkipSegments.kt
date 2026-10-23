@@ -23,6 +23,9 @@ data class SkipMarkers(val introStartMs: Long = 0, val introEndMs: Long? = null,
 }
 
 object SkipSegments {
+    fun isFinalCredits(segment: SkipSegment?, durationMs: Long): Boolean = segment?.kind == "credits" &&
+        durationMs > 0 && segment.startMs >= durationMs / 2 && segment.endMs <= durationMs &&
+        segment.endMs >= durationMs - 500
     fun offer(segment: SkipSegment?): Boolean = segment != null &&
         (segment.kind != "intro" || segment.endMs - segment.startMs >= 8_000L)
     fun detected(chapters: List<MediaChapter>, durationMs: Long): List<SkipSegment> = chapters.take(300).mapNotNull { chapter ->

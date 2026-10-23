@@ -10,6 +10,7 @@ let toastTimer;
 let desktopServerState = null;
 let folderError = '';
 let watchedOrganization = null;
+let draggedFolderPath = null;
 const $ = id => document.getElementById(id);
 
 function toast(message, error = false) {
@@ -49,6 +50,52 @@ function folders() {
   return [...new Set((CFG?.server.media_dirs || []).map(path => path.trim()).filter(Boolean))];
 }
 
+function folderIconButton(label, path) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.setAttribute('aria-label', label);
+  button.title = label;
+  const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  icon.setAttribute('class', 'icon');
+  icon.setAttribute('viewBox', '0 0 24 24');
+  icon.setAttribute('aria-hidden', 'true');
+  const glyph = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  glyph.setAttribute('d', path);
+  icon.append(glyph);
+  button.append(icon);
+  return button;
+}
+
+function clearFolderDragState() {
+  document.querySelectorAll('.folder.dragging, .folder.drop-before, .folder.drop-after').forEach(folder => {
+    folder.classList.remove('dragging', 'drop-before', 'drop-after');
+  });
+}
+
+function moveFolder(sourcePath, targetPath, after = false) {
+  if (!CFG || saving || picking || desktopServerState && (!desktopServerState.running || desktopServerState.busy) || !sourcePath || !targetPath || sourcePath === targetPath) return false;
+  const ordered = folders();
+  const sourceIndex = ordered.indexOf(sourcePath);
+  const targetIndex = ordered.indexOf(targetPath);
+  if (sourceIndex < 0 || targetIndex < 0) return false;
+
+  ordered.splice(sourceIndex, 1);
+  const nextTargetIndex = ordered.indexOf(targetPath);
+  ordered.splice(nextTargetIndex + (after ? 1 : 0), 0, sourcePath);
+  CFG.server.media_dirs = ordered;
+  return true;
+}
+
+function moveFolderRelative(path, visiblePaths, direction) {
+  const index = visiblePaths.indexOf(path);
+  const target = visiblePaths[index + direction];
+  if (!target) return;
+  if (moveFolder(path, target, direction > 0)) {
+    renderFolders(path, direction > 0 ? 'down' : 'up');
+    updateControls();
+  }
+}
+
 function readPatch() {
   return {
     server: {name: $('serverName').value.trim() || 'Pluxy', port: Number($('port').value), media_dirs: folders(), media_dir_types: Object.fromEntries(folders().map(path => [path, CFG.server.media_dir_types?.[path] || 'auto'])), autostart: $('autostart').checked, ...(watchedOrganization?.available ? {organize_watched: $('organizeWatched').checked} : {})},
@@ -69,7 +116,7 @@ function isDirty() {
 function updateControls() {
   document.querySelectorAll('button, input, select').forEach(element => {
     if (element.closest('#desktopMenu') || element.closest('.pluxy-update') || element.closest('form[method="dialog"]') || element.id === 'desktopOptions') return;
-    if (element.id !== 'retryButton') element.disabled = !CFG || saving || picking;
+    if (element.id !== 'retryButton') element.disabled = !CFG || saving || picking || element.dataset.folderBoundary === 'true';
   });
   $('scanButton').disabled = !CFG || saving || picking || scanning;
   $('saveButton').disabled = !CFG || saving || picking || !isDirty();
@@ -100,7 +147,7 @@ function updateDesktopControls() {
   $('desktopServerStatus').textContent = state?.status || 'Vérification du serveur…';
 }
 
-function renderFolders() {
+function renderFolders(focusPath = '', focusAction = '') {
   const list = $('folderList');
   const items = folders();
   const categories = [['movie','Films'],['series','Séries'],['clip','Vidéos'],['photo','Photos'],['audio','Musique'],['auto','Automatique']];
@@ -127,33 +174,44 @@ function renderFolders() {
   const searchable = value => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('fr');
   const query = searchable($('folderSearch').value.trim());
   const filtered = items.filter(path => searchable(path).includes(query));
-  const collator = new Intl.Collator('fr', {numeric:true, sensitivity:'base'});
   if (items.length && !filtered.length) {
     const empty = document.createElement('p'); empty.className = 'empty'; empty.textContent = 'Aucun dossier ne correspond à cette recherche.'; list.append(empty);
   }
-  categories.forEach(([value, title]) => {
-    const matching = filtered.filter(path => categoryFor(path) === value).sort(collator.compare);
-    if (!matching.length) return;
-    const heading = document.createElement('h3'); heading.textContent = `${title} · ${matching.length}`; list.append(heading);
-    matching.forEach(path => {
+  filtered.forEach((path, visibleIndex) => {
     const chip = document.createElement('div');
     chip.className = 'folder';
+    chip.dataset.path = path;
+    chip.setAttribute('aria-describedby', 'folderOrderHelp');
     const label = document.createElement('span');
     const name = document.createElement('strong');
     name.textContent = path.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || path;
     const location = document.createElement('small'); location.textContent = path;
     label.append(name, location);
     label.title = path;
-    const remove = document.createElement('button');
-    const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    icon.setAttribute('class', 'icon');
-    icon.setAttribute('viewBox', '0 0 24 24');
-    icon.setAttribute('aria-hidden', 'true');
-    const cross = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    cross.setAttribute('d', 'M6.5 6.5l11 11M17.5 6.5l-11 11');
-    icon.append(cross);
-    remove.append(icon);
-    remove.setAttribute('aria-label', 'Retirer le dossier ' + path);
+    const order = document.createElement('div');
+    order.className = 'folder-order';
+    const orderNumber = document.createElement('span');
+    orderNumber.className = 'folder-order-number';
+    orderNumber.textContent = String(items.indexOf(path) + 1);
+    orderNumber.title = `Priorité d'analyse ${items.indexOf(path) + 1}`;
+    const drag = folderIconButton('Faire glisser le dossier ' + path, 'M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01');
+    drag.className = 'folder-drag-handle';
+    drag.draggable = true;
+    const up = folderIconButton('Monter le dossier ' + path, 'M12 19V5M6 11l6-6 6 6');
+    up.className = 'folder-move';
+    up.dataset.folderAction = 'up';
+    up.disabled = visibleIndex === 0;
+    up.dataset.folderBoundary = String(visibleIndex === 0);
+    up.onclick = () => moveFolderRelative(path, filtered, -1);
+    const down = folderIconButton('Descendre le dossier ' + path, 'M12 5v14M6 13l6 6 6-6');
+    down.className = 'folder-move';
+    down.dataset.folderAction = 'down';
+    down.disabled = visibleIndex === filtered.length - 1;
+    down.dataset.folderBoundary = String(visibleIndex === filtered.length - 1);
+    down.onclick = () => moveFolderRelative(path, filtered, 1);
+    order.append(orderNumber, drag, up, down);
+    const remove = folderIconButton('Retirer le dossier ' + path, 'M6.5 6.5l11 11M17.5 6.5l-11 11');
+    remove.className = 'folder-remove';
     remove.onclick = () => {
       CFG.server.media_dirs = items.filter(item => item !== path);
       renderFolders();
@@ -176,14 +234,73 @@ function renderFolders() {
       updateControls();
       [...list.querySelectorAll('select')].find(element => element.dataset.path === path)?.focus();
     };
-    chip.append(label, category, remove);
-    list.append(chip);
+    drag.addEventListener('dragstart', event => {
+      const transfer = event.dataTransfer;
+      if (!transfer) return;
+      draggedFolderPath = path;
+      transfer.effectAllowed = 'move';
+      transfer.setData('text/plain', path);
+      requestAnimationFrame(() => chip.classList.add('dragging'));
     });
+    drag.addEventListener('dragend', () => {
+      draggedFolderPath = null;
+      clearFolderDragState();
+    });
+    chip.addEventListener('dragover', event => {
+      const sourcePath = draggedFolderPath || event.dataTransfer?.getData('text/plain');
+      if (!sourcePath || sourcePath === path) return;
+      event.preventDefault();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+      const after = event.clientY > chip.getBoundingClientRect().top + chip.getBoundingClientRect().height / 2;
+      chip.classList.toggle('drop-after', after);
+      chip.classList.toggle('drop-before', !after);
+    });
+    chip.addEventListener('dragleave', event => {
+      if (!chip.contains(event.relatedTarget)) chip.classList.remove('drop-before', 'drop-after');
+    });
+    chip.addEventListener('drop', event => {
+      const sourcePath = draggedFolderPath || event.dataTransfer?.getData('text/plain');
+      const after = chip.classList.contains('drop-after');
+      event.preventDefault();
+      clearFolderDragState();
+      draggedFolderPath = null;
+      if (moveFolder(sourcePath, path, after)) {
+        renderFolders(sourcePath, 'drag');
+        updateControls();
+      }
+    });
+    chip.append(order, label, category, remove);
+    list.append(chip);
   });
+  if (focusPath) {
+    requestAnimationFrame(() => {
+      const folder = [...list.querySelectorAll('.folder')].find(element => element.dataset.path === focusPath);
+      const selector = focusAction === 'down' ? '[data-folder-action="down"]' : focusAction === 'up' ? '[data-folder-action="up"]' : '.folder-drag-handle';
+      const control = folder?.querySelector(selector);
+      (control?.disabled ? folder?.querySelector('.folder-drag-handle') : control)?.focus();
+    });
+  }
 }
 
 $('manageFolders').addEventListener('click', () => { folderError = ''; $('folderSearch').value = ''; renderFolders(); updateControls(); $('folderManager').showModal(); });
 $('folderSearch').addEventListener('input', renderFolders);
+const folderManager = $('folderManager');
+folderManager.addEventListener('dragover', event => {
+  if (!event.dataTransfer?.types.includes('Files')) return;
+  event.preventDefault();
+  event.dataTransfer.dropEffect='copy'; folderManager.classList.add('file-drop-target');
+});
+folderManager.addEventListener('dragleave', event => { if (!folderManager.contains(event.relatedTarget)) folderManager.classList.remove('file-drop-target'); });
+folderManager.addEventListener('drop', event => {
+  folderManager.classList.remove('file-drop-target');
+  if (!event.dataTransfer?.types.includes('Files')) return;
+  event.preventDefault();
+  if (!CFG || saving || picking || desktopServerState && (!desktopServerState.running || desktopServerState.busy)) return;
+  if (!window.chrome?.webview?.postMessageWithAdditionalObjects) { toast('Utilisez Ajouter un dossier pour sélectionner cet emplacement.',true); return; }
+  const files=[...event.dataTransfer.files];
+  if (!files.length || files.length>100) { toast('Déposez de 1 à 100 dossiers à la fois.',true); return; }
+  window.chrome.webview.postMessageWithAdditionalObjects({method:'dropFolders'},files);
+});
 $('manualFolderForm').addEventListener('submit', event => { event.preventDefault(); addManualFolder(); });
 
 function setRange(id, value, label, unit) {
@@ -444,6 +561,10 @@ if (window.chrome?.webview) {
       if (!desktopServerState.running) clearTimeout(statusTimer);
       updateControls();
       if (desktopServerState.running && !previous?.running && CFG) updateStatus();
+    } else if (message.eventName === 'droppedFolders') {
+      if (!CFG || saving || picking) return;
+      CFG.server.media_dirs=[...new Set([...folders(),...message.data])];
+      $('folderSearch').value=''; renderFolders(); updateControls(); toast('Dossiers ajoutés. Enregistrez pour les conserver.');
     } else if (message.eventName === 'serverError') toast(message.data, true);
   });
   document.querySelectorAll('[data-desktop]').forEach(button => button.addEventListener('click', async () => {

@@ -222,7 +222,6 @@ details[open] summary::after { transform: rotate(45deg); }
 .folder-tools input { font:inherit; font-size:13px; color:var(--txt); background:#10141c; border:1px solid var(--line); border-radius:12px; padding:11px 12px; outline:none; }
 .folder-tools input:focus-visible { border-color:var(--accent,#f6ad84); outline:2px solid var(--accent,#f6ad84); outline-offset:2px; }
 .folder-manager .folder-list { display:flex; flex-direction:column; flex-wrap:nowrap; max-height:45dvh; overflow:auto; padding:4px; margin:16px -4px; scrollbar-gutter:stable; }
-.folder-list h3 { color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.8px; margin:12px 0 4px; }
 .folder-manager .folder { flex-shrink:0; background:#ffffff03; border-color:var(--line); padding:8px 10px; color:var(--txt); flex-wrap:nowrap; }
 .folder-manager .folder span { min-width:0; flex:1; }
 .folder-manager .folder strong,.folder-manager .folder small { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -230,6 +229,21 @@ details[open] summary::after { transform: rotate(45deg); }
 .folder-manager .folder small { color:var(--muted); font-size:11px; margin-top:3px; }
 .folder-manager .folder select { flex:0 1 190px; min-height:36px; }
 .folder-manager .folder button { min-width:36px; min-height:36px; color:var(--muted); }
+.folder-order-help { margin:12px 0 -2px; color:var(--muted); font-size:12px; line-height:1.5; }
+.folder-manager.file-drop-target { outline:2px solid var(--accent,#f6ad84); outline-offset:-4px; }
+.folder-order { display:flex; align-items:center; gap:2px; flex:0 0 auto; }
+.folder-order-number { display:grid; place-items:center; width:22px; height:22px; color:var(--quiet); font-size:11px; font-variant-numeric:tabular-nums; }
+.folder-manager .folder .folder-drag-handle { color:var(--muted); cursor:grab; touch-action:none; }
+.folder-manager .folder .folder-drag-handle:active { cursor:grabbing; }
+.folder-manager .folder .folder-move { min-width:28px; width:28px; opacity:.78; }
+.folder-manager .folder .folder-move:disabled { opacity:.28; }
+.folder-manager .folder .folder-remove { margin-left:2px; }
+.folder-manager .folder.dragging { opacity:.45; }
+.folder-manager .folder.drop-before,.folder-manager .folder.drop-after { position:relative; border-color:rgba(246,173,132,.75); background:rgba(246,173,132,.08); }
+.folder-manager .folder.drop-before::before,.folder-manager .folder.drop-after::after { content:""; position:absolute; left:10px; right:10px; height:2px; border-radius:2px; background:var(--accent,#f6ad84); box-shadow:0 0 12px rgba(246,173,132,.65); }
+.folder-manager .folder.drop-before::before { top:-5px; }
+.folder-manager .folder.drop-after::after { bottom:-5px; }
+.folder-manager .folder:focus-within { border-color:rgba(246,173,132,.48); }
 .folder-manager-footer { display:flex; justify-content:space-between; align-items:center; gap:16px; border-top:1px solid var(--line); padding-top:16px; margin-top:16px; }
 .folder-manager-footer span { font-size:12px; color:var(--muted); }
 .watched-confirmation { width:min(440px,calc(100vw - 40px)); }

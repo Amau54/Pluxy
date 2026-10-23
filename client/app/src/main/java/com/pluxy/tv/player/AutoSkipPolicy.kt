@@ -10,6 +10,10 @@ class AutoSkipPolicy {
         handled += kind
     }
 
+    fun unmark(itemId: String, kind: String) {
+        if (owner == itemId) handled -= kind
+    }
+
     fun target(itemId: String, segment: SkipSegment?, enabled: Boolean, canSkip: Boolean): Long? {
         if (owner != itemId) { owner = itemId; handled.clear() }
         if (!enabled || !canSkip || segment == null || segment.kind !in setOf("intro", "credits") ||

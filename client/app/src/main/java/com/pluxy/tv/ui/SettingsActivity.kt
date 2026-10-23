@@ -210,11 +210,22 @@ class SettingsActivity : ThemedActivity() {
             "Choisir SmartTube, YouTube ou une autre application installée.")
             .setOnClickListener { anchor -> TrailerPlayer.choosePreference(this, anchor) { render() } }
         val autoNext = PluxyApplication.autoPlayNextEpisode(this)
-        val autoSkip = PluxyApplication.autoSkipSegments(this)
-        localSwitchRow("Passer automatiquement les intros et génériques", autoSkip) {
-            PluxyApplication.setAutoSkipSegments(this, !autoSkip)
+        val intros = PluxyApplication.autoSkipIntros(this)
+        localSwitchRow("Passer automatiquement les intros", intros) {
+            PluxyApplication.setAutoSkipIntros(this, !intros)
             render()
         }
+        val credits = PluxyApplication.autoSkipCredits(this)
+        localSwitchRow("Passer automatiquement les génériques", credits) {
+            PluxyApplication.setAutoSkipCredits(this, !credits)
+            render()
+        }
+        rows.addView(TextView(this).apply {
+            text = "Les passages détectés sont sautés sans bouton. Un générique final enchaîne sur l’épisode suivant s’il existe ; les scènes après le générique sont conservées."
+            textSize = 12f
+            setTextColor(pluxyColor(R.color.text_secondary))
+            setPadding(dp(10), dp(4), dp(10), dp(8))
+        }, lp())
         localSwitchRow("Épisode suivant automatique", autoNext) {
             PluxyApplication.setAutoPlayNextEpisode(this, !autoNext)
             render()

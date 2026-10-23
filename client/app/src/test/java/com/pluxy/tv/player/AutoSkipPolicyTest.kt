@@ -4,6 +4,14 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class AutoSkipPolicyTest {
+    @Test fun onlyCreditsEndingTheMediaCanAdvanceToTheNextEpisode() {
+        assertTrue(SkipSegments.isFinalCredits(SkipSegment("credits", 900_000, 1_000_000), 1_000_000))
+        assertFalse(SkipSegments.isFinalCredits(SkipSegment("credits", 900_000, 950_000), 1_000_000))
+        assertFalse(SkipSegments.isFinalCredits(SkipSegment("intro", 0, 1_000_000), 1_000_000))
+        assertFalse(SkipSegments.isFinalCredits(null, 1_000_000))
+        assertFalse(SkipSegments.isFinalCredits(SkipSegment("credits", 900_000, 1_100_000), 1_000_000))
+    }
+
     private val intro=SkipSegment("intro",10_000,40_000)
     private val credits=SkipSegment("credits",900_000,950_000)
     @Test fun disabledPausedAndUnknownSegmentsNeverJump() {

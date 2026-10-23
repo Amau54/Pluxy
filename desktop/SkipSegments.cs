@@ -24,6 +24,10 @@ namespace Pluxy {
         }
     }
     internal static class SkipSegments {
+        internal static bool IsFinalCredits(SkipSegment segment,long duration) {
+            return segment!=null && segment.kind=="credits" && duration>0 && segment.startMs>=duration/2 &&
+                segment.endMs<=duration && segment.endMs>=duration-500;
+        }
         internal static object[] Chapters(object[] values,double duration) {
             var sorted=(values ?? new object[0]).Select(Native.Object).Where(row=>Native.Number(row,"time",-1)>=0)
                 .OrderBy(row=>Native.Number(row,"time")).Take(300).ToArray();

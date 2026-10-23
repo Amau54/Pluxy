@@ -1,3 +1,10 @@
+## Windows 1.8.35 · Android 1.7.45
+
+- Windows : mode Organiser dans Films, Séries et Vidéos, avec glisser-déposer des cartes, ordre personnel mémorisé par serveur et profil, raccourcis clavier et remise à zéro.
+- Serveur Windows : ajout de dossiers par dépôt depuis l’Explorateur, réorganisation avec poignées ou boutons Monter/Descendre, catégories conservées.
+- Lecteur : les passages automatiques d’intro et de générique se règlent séparément, dans les réglages et les options du lecteur. Chaque passage activé s’effectue sans bouton ; désactivé, son bouton reste disponible.
+- Séries : un générique détecté jusqu’à la toute fin enchaîne directement sur l’épisode suivant quand il existe, sans sacrifier les scènes après le générique.
+
 ## Windows 1.8.34 · Android 1.7.44
 
 - Mobile et tablette : glisser verticalement sur la droite de la vidéo règle la luminosité ; sur la gauche, le volume. Un indicateur discret confirme le réglage. Les boutons et le curseur conservent leur fonctionnement.

@@ -15,7 +15,7 @@ using Microsoft.Web.WebView2.WinForms;
 [assembly: System.Reflection.AssemblyDescription("Lecteur et serveur multimédia Pluxy")]
 [assembly: System.Reflection.AssemblyCompany("Pluxy")]
 [assembly: System.Reflection.AssemblyProduct("Pluxy")]
-[assembly: System.Reflection.AssemblyVersion("1.8.34.0")]
+[assembly: System.Reflection.AssemblyVersion("1.8.35.0")]
 
 namespace Pluxy {
     internal static class Program {
@@ -286,7 +286,7 @@ namespace Pluxy {
             } catch(Exception) { if(!quitting) throw; }
             finally { busy=false; UpdateServerControls(); }
         }
-        private object ReaderState() { return new {mode=choosing?"":prefs.mode,server=prefs.server,serverName=prefs.serverName,theme=prefs.theme,audio=prefs.audio,autoSkipSegments=prefs.autoSkipSegments,playerActionHints=prefs.playerActionHints,playerFocusContrast=prefs.playerFocusContrast,profile=api.ProfileId,multipleProfiles=prefs.multipleProfiles,busy=busy,fullscreen=fullscreen}; }
+        private object ReaderState() { return new {mode=choosing?"":prefs.mode,server=prefs.server,serverName=prefs.serverName,theme=prefs.theme,audio=prefs.audio,autoSkipSegments=prefs.autoSkipSegments,autoSkipIntros=prefs.SkipEnabled("intro"),autoSkipCredits=prefs.SkipEnabled("credits"),playerActionHints=prefs.playerActionHints,playerFocusContrast=prefs.playerFocusContrast,profile=api.ProfileId,multipleProfiles=prefs.multipleProfiles,busy=busy,fullscreen=fullscreen}; }
         private async Task Message(CoreWebView2WebMessageReceivedEventArgs message) {
             Uri source; if(!Uri.TryCreate(message.Source,UriKind.Absolute,out source)) return;
             bool own=source.GetLeftPart(UriPartial.Authority)==Origin.TrimEnd('/');
@@ -298,6 +298,13 @@ namespace Pluxy {
                 if(command=="chooseMode") ChooseMode();
                 else if(command=="serverState") UpdateServerControls();
                 else if(command=="serverStart" || command=="serverStop" || command=="serverRestart") await ControlServer(command);
+                else if(command=="dropFolders") {
+                    try {
+                        var paths=message.AdditionalObjects.OfType<CoreWebView2File>().Take(101).Select(file=>file.Path).ToArray();
+                        if(paths.Length==0 || paths.Length>100 || paths.Any(path=>!Directory.Exists(path))) throw new IOException("Déposez uniquement des dossiers, au maximum 100 à la fois.");
+                        Event("droppedFolders",paths.Select(Path.GetFullPath).Distinct(StringComparer.OrdinalIgnoreCase).ToArray());
+                    } catch(Exception error) { Event("serverError",error.Message); }
+                }
                 else if(command=="quit") Quit();
                 else if(command=="updates") ShowUpdater();
                 else if(command=="updateAction" && updates!=null) {
@@ -336,7 +343,9 @@ namespace Pluxy {
                     string theme=Native.Text(args,"theme",prefs.theme),audio=Native.Text(args,"audio",prefs.audio);
                     if(!new[]{"coral","ocean","midnight"}.Contains(theme) || !new[]{"auto","passthrough","compatible"}.Contains(audio)) throw new ArgumentException("Réglage inconnu.");
                     prefs.theme=theme; prefs.audio=audio;
-                    if(args.ContainsKey("autoSkipSegments") && args["autoSkipSegments"] is bool) prefs.autoSkipSegments=(bool)args["autoSkipSegments"];
+                    if(args.ContainsKey("autoSkipSegments") && args["autoSkipSegments"] is bool) { prefs.autoSkipSegments=(bool)args["autoSkipSegments"]; prefs.autoSkipIntros=prefs.autoSkipCredits=prefs.autoSkipSegments; }
+                    if(args.ContainsKey("autoSkipIntros") && args["autoSkipIntros"] is bool) prefs.autoSkipIntros=(bool)args["autoSkipIntros"];
+                    if(args.ContainsKey("autoSkipCredits") && args["autoSkipCredits"] is bool) prefs.autoSkipCredits=(bool)args["autoSkipCredits"];
                     if(args.ContainsKey("playerActionHints") && args["playerActionHints"] is bool) prefs.playerActionHints=(bool)args["playerActionHints"];
                     if(args.ContainsKey("playerFocusContrast") && args["playerFocusContrast"] is bool) prefs.playerFocusContrast=(bool)args["playerFocusContrast"];
                     prefs.StoreReader(api.Server,api.ProfileId); prefs.Save(); result=true;
@@ -392,7 +401,7 @@ namespace Pluxy {
                     object[] queue=null;
                     if(Native.Text(item,"kind")=="series") queue=await api.Group(itemId,"series");
                     var player=new PlayerWindow(api,itemId,MediaPresentation.PlaybackTitle(item),api.Server+"/stream/direct/"+LibraryClient.ItemPath(itemId),prefs.audio,start,subtitles,queue,item);
-                    player.AutoSkipChanged+=value=> { prefs.autoSkipSegments=value; prefs.StoreReader(api.Server,api.ProfileId); Event("preferencesChanged",ReaderState()); };
+                    player.AutoSkipChanged+=(intros,credits)=> { prefs.autoSkipIntros=intros; prefs.autoSkipCredits=credits; prefs.StoreReader(api.Server,api.ProfileId); prefs.Save(); Event("preferencesChanged",ReaderState()); };
                     players.Add(player); player.FormClosed+=(s,e)=> { players.Remove(player); player.ProgressIds.Add(player.MediaId); foreach(var savedId in player.ProgressIds) Event("progressUpdated",new { id=savedId }); }; player.Show(this); result=true; }
                 }
                 else result=await api.Api(method,args);

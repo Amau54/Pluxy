@@ -748,7 +748,7 @@ class PlayerActivity : ThemedActivity() {
         seekTargetView= findViewById(R.id.seekTarget)
         setupModernControls()
         findViewById<Button>(R.id.skipSegment).setOnClickListener {
-            activeSkipSegment?.let { autoSkipPolicy.mark(item.id, it.kind); goToAbsolute(it.endMs); updateSkipSegment() }
+            activeSkipSegment?.let { autoSkipPolicy.mark(item.id, it.kind); performSegmentSkip(it, automatic = false) }
         }
         loadSkipChapters()
         playerView.resizeMode = aspectModes[aspectIdx].first
@@ -1462,21 +1462,15 @@ class PlayerActivity : ThemedActivity() {
         activeSkipSegment = if (player?.playbackState == Player.STATE_READY && !terminalPlaybackError &&
             !isSeeking && !timelineScrubbing && !playerChoiceMenuShowing && nextEpisodeDialog?.isShowing != true)
             SkipSegments.active(segments, reliablePositionMs()) else null
+        val automatic = if (activeSkipSegment?.kind == "intro") PluxyApplication.autoSkipIntros(this)
+            else PluxyApplication.autoSkipCredits(this)
         val target = autoSkipPolicy.target(item.id, activeSkipSegment,
-            PluxyApplication.autoSkipSegments(this), player?.isPlaying == true && pendingSeekTargetMs == null)
+            automatic, player?.isPlaying == true && pendingSeekTargetMs == null)
         if (target != null) {
-            val label = if (activeSkipSegment?.kind == "intro") "Intro passée" else "Générique passé"
-            activeSkipSegment = null
-            if (button.hasFocus()) {
-                if (controlsOverlay.visibility == View.VISIBLE) playPauseButton.requestFocus() else playerView.requestFocus()
-            }
-            button.visibility = View.GONE
-            timeline.nextFocusUpId = R.id.btnExitPlayback
-            goToAbsolute(target)
-            Toast.makeText(this, label, Toast.LENGTH_SHORT).show()
+            performSegmentSkip(requireNotNull(activeSkipSegment), automatic = true)
             return
         }
-        val visible = SkipSegments.offer(activeSkipSegment)
+        val visible = !automatic && SkipSegments.offer(activeSkipSegment)
         if (!visible) autoFocusedSkipSegment = null
         val bottom = ((if (controlsOverlay.visibility == View.VISIBLE) 100 else 22) * resources.displayMetrics.density).toInt()
         (button.layoutParams as FrameLayout.LayoutParams).apply {
@@ -1497,9 +1491,13 @@ class PlayerActivity : ThemedActivity() {
 
     private fun openMenu() {
         val entries = listOf(
-            "Intros et génériques : ${if (PluxyApplication.autoSkipSegments(this)) "activé" else "désactivé"}" to {
-                PluxyApplication.setAutoSkipSegments(this, !PluxyApplication.autoSkipSegments(this))
-                Toast.makeText(this, if (PluxyApplication.autoSkipSegments(this)) "Passage automatique activé" else "Passage automatique désactivé", Toast.LENGTH_SHORT).show()
+            "Intros automatiques : ${if (PluxyApplication.autoSkipIntros(this)) "activé" else "désactivé"}" to {
+                PluxyApplication.setAutoSkipIntros(this, !PluxyApplication.autoSkipIntros(this))
+                updateSkipSegment()
+            },
+            "Génériques automatiques : ${if (PluxyApplication.autoSkipCredits(this)) "activé" else "désactivé"}" to {
+                PluxyApplication.setAutoSkipCredits(this, !PluxyApplication.autoSkipCredits(this))
+                updateSkipSegment()
             },
             "Vitesse" to { pickSpeed() },
             "Format de l’image" to { pickAspect() },
@@ -2569,17 +2567,36 @@ class PlayerActivity : ThemedActivity() {
 
     private fun approachingEpisodeEnd(): Boolean = player?.isPlaying == true &&
         episodeEndRemainingMs(skipDurationMs, absolutePositionMs()) != null &&
+        (!PluxyApplication.autoSkipCredits(this) || SkipSegments.detected(skipChapters, skipDurationMs)
+            .none { SkipSegments.isFinalCredits(it, skipDurationMs) }) &&
         !isSeeking && !timelineScrubbing && pendingSeekTargetMs == null && !playerChoiceMenuShowing
 
-    private fun offerNextEpisode() {
-        if (nextEpisodeHandled || item.kind != "series" || isFinishing) return
+    private fun performSegmentSkip(segment: SkipSegment, automatic: Boolean) {
+        activeSkipSegment = null
+        val button = findViewById<View>(R.id.skipSegment)
+        if (button.hasFocus()) {
+            if (controlsOverlay.visibility == View.VISIBLE) playPauseButton.requestFocus() else playerView.requestFocus()
+        }
+        button.visibility = View.GONE
+        timeline.nextFocusUpId = R.id.btnExitPlayback
+        if (item.kind == "series" && SkipSegments.isFinalCredits(segment, skipDurationMs))
+            requestNextEpisode(segment, automatic)
+        else goToAbsolute(segment.endMs)
+    }
+
+    private fun offerNextEpisode() = requestNextEpisode()
+
+    private fun requestNextEpisode(finalCredits: SkipSegment? = null, automaticSkip: Boolean = false) {
+        if (item.kind != "series" || isFinishing || (nextEpisodeHandled && finalCredits == null)) return
+        val immediate = finalCredits != null
         val enabled = PluxyApplication.autoPlayNextEpisode(this)
         val ended = player?.playbackState == Player.STATE_ENDED
-        if (!ended && (!enabled || !approachingEpisodeEnd())) return
+        if (!immediate && !ended && (!enabled || !approachingEpisodeEnd())) return
         nextEpisodeHandled = true
-        if (!enabled) { finish(); return }
+        if (!immediate && !enabled) { finish(); return }
         val ownerApi = api
         val finishedItem = item
+        val seekAtRequest = lastSeekAtMs
         nextEpisodeJob?.cancel()
         nextEpisodeJob = lifecycleScope.launch {
             nextEpisodePrefetchJob?.join()
@@ -2597,11 +2614,29 @@ class PlayerActivity : ThemedActivity() {
                 }
                 val fetchedLibrary = library ?: run {
                     nextEpisodeHandled = false
+                    if (finalCredits != null && api === ownerApi && item.id == finishedItem.id &&
+                        lastSeekAtMs == seekAtRequest && !isFinishing && !isDestroyed &&
+                        lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) &&
+                        (!automaticSkip || PluxyApplication.autoSkipCredits(this@PlayerActivity) && player?.playWhenReady == true))
+                        goToAbsolute(finalCredits.endMs)
+                    else autoSkipPolicy.unmark(finishedItem.id, "credits")
                     return@launch
                 }
                 EpisodeQueue.next(finishedItem, fetchedLibrary)
             }
             if (api !== ownerApi || item.id != finishedItem.id) return@launch
+            if (immediate) {
+                if (lastSeekAtMs != seekAtRequest || isFinishing || isDestroyed ||
+                    !lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) ||
+                    (automaticSkip && (!PluxyApplication.autoSkipCredits(this@PlayerActivity) || player?.playWhenReady != true))) {
+                    nextEpisodeHandled = false
+                    autoSkipPolicy.unmark(finishedItem.id, "credits")
+                    return@launch
+                }
+                if (next != null) playNextEpisode(next)
+                else goToAbsolute(requireNotNull(finalCredits).endMs)
+                return@launch
+            }
             if (!PluxyApplication.autoPlayNextEpisode(this@PlayerActivity) ||
                 (player?.playbackState != Player.STATE_ENDED && !approachingEpisodeEnd())) {
                 nextEpisodeHandled = false

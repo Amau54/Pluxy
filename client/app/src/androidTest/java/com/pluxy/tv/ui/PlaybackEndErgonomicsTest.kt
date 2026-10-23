@@ -109,11 +109,13 @@ class PlaybackEndErgonomicsTest {
             }.getInputStream().bufferedReader().use { it.readText() }
             nextItem = Moshi.Builder().add(KotlinJsonAdapterFactory()).build().adapter(MediaItem::class.java).fromJson(data)
         }
-        val before = PluxyApplication.autoSkipSegments(context)
+        val introBefore = PluxyApplication.autoSkipIntros(context)
+        val creditsBefore = PluxyApplication.autoSkipCredits(context)
         val autoplay = PluxyApplication.autoPlayNextEpisode(context)
         PluxyApplication.setServer(context, server, "Test ergonomie")
         PluxyApplication.setPlaybackStrategy(context, "direct")
-        PluxyApplication.setAutoSkipSegments(context, false)
+        PluxyApplication.setAutoSkipIntros(context, false)
+        PluxyApplication.setAutoSkipCredits(context, false)
         PluxyApplication.setAutoPlayNextEpisode(context, true)
         val activity = instrumentation.startActivitySync(Intent(context, PlayerActivity::class.java)
             .putExtra(PlayerActivity.EXTRA_ITEM, json).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) as PlayerActivity
@@ -127,9 +129,28 @@ class PlaybackEndErgonomicsTest {
             test(activity)
         } finally {
             instrumentation.runOnMainSync { activity.finish() }
-            PluxyApplication.setAutoSkipSegments(context, before)
+            PluxyApplication.setAutoSkipIntros(context, introBefore)
+            PluxyApplication.setAutoSkipCredits(context, creditsBefore)
             PluxyApplication.setAutoPlayNextEpisode(context, autoplay)
         }
+    }
+    @Test fun automaticFinalCreditsAdvanceDirectlyToTheNextEpisodeWithoutAPrompt() = withPlayer { activity ->
+        val following = nextItem
+        assumeTrue("Requires two episodes", following != null)
+        val seek = PlayerActivity::class.java.getDeclaredMethod("goToAbsolute", Long::class.javaPrimitiveType).apply { isAccessible = true }
+        instrumentation.runOnMainSync { seek.invoke(activity, 18_300L) }
+        await("Seek must finish") { (field(activity, "player") as Player).let { it.playbackState == Player.STATE_READY && it.currentPosition >= 18_200 } }
+        instrumentation.runOnMainSync {
+            (field(activity, "skipChaptersJob") as? kotlinx.coroutines.Job)?.cancel()
+            PlayerActivity::class.java.getDeclaredField("skipChapters").apply { isAccessible = true }
+                .set(activity, listOf(MediaChapter(18_000, 24_000, "End credits")))
+            PlayerActivity::class.java.getDeclaredField("prefetchedNextEpisode").apply { isAccessible = true }.set(activity, following)
+            PlayerActivity::class.java.getDeclaredField("nextEpisodePrefetched").apply { isAccessible = true }.setBoolean(activity, true)
+            PluxyApplication.setAutoSkipCredits(context, true)
+            (field(activity, "player") as Player).play()
+        }
+        await("Final credits must open the following episode") { (field(activity, "item") as MediaItem).id == following!!.id }
+        instrumentation.runOnMainSync { assertNull(field(activity, "nextEpisodeDialog")) }
     }
     @Test fun shortIntroIsHiddenAndFocusedIntroAndCreditsSkipWithOneOk() = withPlayer { activity ->
         val seek = PlayerActivity::class.java.getDeclaredMethod("goToAbsolute", Long::class.javaPrimitiveType)
