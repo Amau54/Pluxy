@@ -1,3 +1,9 @@
+## Windows 1.8.34 · Android 1.7.44
+
+- Mobile et tablette : glisser verticalement sur la droite de la vidéo règle la luminosité ; sur la gauche, le volume. Un indicateur discret confirme le réglage. Les boutons et le curseur conservent leur fonctionnement.
+- Bibliothèque mobile : les catégories sont accessibles par des onglets horizontaux défilants, sans menu déroulant.
+- Serveur Windows : un seul bouton « Gérer la bibliothèque » réunit les dossiers, leur ajout et l’analyse dans une fenêtre interne.
+
 ## Windows 1.8.33 · Android 1.7.43
 
 - Lecteur Android : suppression du soulignement des commandes de passage ; le focus automatique et la teinte claire sont conservés.

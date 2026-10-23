@@ -20,6 +20,35 @@ import org.junit.Test
 import java.io.File
 
 class LibraryNavigationTest {
+    @Test fun mobileCategoriesUseASingleHorizontalRowAndSelectTheLibrary() {
+        val server = InstrumentationRegistry.getArguments().getString("library_test_url").orEmpty()
+        assumeTrue("Requires isolated catalogue fixture", server.isNotBlank())
+        assumeTrue(context.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_TYPE_MASK !=
+            android.content.res.Configuration.UI_MODE_TYPE_TELEVISION)
+        PluxyApplication.setServer(context, server, "Test mobile")
+        PluxyApplication.setLibraryTab(context, "home")
+        val activity = instrumentation.startActivitySync(Intent(context, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) as MainActivity
+        try {
+            await("Horizontal navigation must be available") {
+                activity.window.decorView.findViewWithTag<View>("library-destinations")?.isShown == true
+            }
+            instrumentation.runOnMainSync {
+                val strip = activity.window.decorView.findViewWithTag<android.widget.HorizontalScrollView>("library-destinations")
+                val tabs = listOf("movie", "series", "clip", "photo", "audio").map {
+                    strip.findViewWithTag<Button>("destination:$it")
+                }
+                assertEquals(android.widget.LinearLayout.HORIZONTAL,
+                    (strip.getChildAt(0) as android.widget.LinearLayout).orientation)
+                assertTrue(tabs[1].isShown)
+                tabs[1].performClick()
+            }
+            await("Selecting the series tab must change the active destination") {
+                activity.window.decorView.findViewWithTag<View>("destination:series")?.isSelected == true
+            }
+            capture("mobile-horizontal-categories.png")
+        } finally { instrumentation.runOnMainSync { activity.finish() } }
+    }
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context get() = instrumentation.targetContext
     private fun await(message: String, predicate: () -> Boolean) {

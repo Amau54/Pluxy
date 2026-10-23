@@ -25,6 +25,49 @@ import java.io.File
 import java.net.URL
 
 class PlaybackEndErgonomicsTest {
+    @Test fun mobileVerticalGesturesAdjustTheCorrectSettingAndKeepTapControls() = withPlayer { activity ->
+        assumeTrue(activity.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_TYPE_MASK !=
+            android.content.res.Configuration.UI_MODE_TYPE_TELEVISION)
+        val audio = activity.getSystemService(android.content.Context.AUDIO_SERVICE) as android.media.AudioManager
+        val originalVolume = audio.getStreamVolume(android.media.AudioManager.STREAM_MUSIC)
+        val originalBrightness = activity.window.attributes.screenBrightness
+        val surface = activity.findViewById<View>(R.id.player_view)
+        fun gesture(x: Float, startY: Float, endY: Float) {
+            val now = SystemClock.uptimeMillis()
+            listOf(Triple(android.view.MotionEvent.ACTION_DOWN, startY, now),
+                Triple(android.view.MotionEvent.ACTION_MOVE, endY, now + 100),
+                Triple(android.view.MotionEvent.ACTION_UP, endY, now + 120)).forEach { (action, y, time) ->
+                android.view.MotionEvent.obtain(now, time, action, x, y, 0).let {
+                    surface.dispatchTouchEvent(it); it.recycle()
+                }
+            }
+        }
+        try {
+            instrumentation.runOnMainSync {
+                call(activity, "hideControls")
+                activity.window.attributes = activity.window.attributes.apply { screenBrightness = .3f }
+                gesture(surface.width * .8f, surface.height * .7f, surface.height * .3f)
+                assertTrue(activity.window.attributes.screenBrightness > .7f)
+                assertEquals(originalVolume, audio.getStreamVolume(android.media.AudioManager.STREAM_MUSIC))
+            }
+            capture("mobile-brightness-gesture.png")
+            instrumentation.runOnMainSync {
+                val brightness = activity.window.attributes.screenBrightness
+                audio.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, audio.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC), 0)
+                gesture(surface.width * .2f, surface.height * .3f, surface.height * .7f)
+                assertTrue(audio.getStreamVolume(android.media.AudioManager.STREAM_MUSIC) < audio.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC))
+                assertEquals(brightness, activity.window.attributes.screenBrightness, .001f)
+                gesture(surface.width * .5f, surface.height * .5f, surface.height * .5f)
+                assertEquals(View.VISIBLE, activity.findViewById<View>(R.id.controlsOverlay).visibility)
+            }
+            capture("mobile-volume-gesture.png")
+        } finally {
+            instrumentation.runOnMainSync {
+                audio.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, originalVolume, 0)
+                activity.window.attributes = activity.window.attributes.apply { screenBrightness = originalBrightness }
+            }
+        }
+    }
     private var nextItem: MediaItem? = null
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context get() = instrumentation.targetContext

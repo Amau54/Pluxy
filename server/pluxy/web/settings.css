@@ -217,7 +217,7 @@ details[open] summary::after { transform: rotate(45deg); }
 .folder-manager { width:780px; max-width:calc(100vw - 32px); max-height:calc(100dvh - 40px); margin:auto; padding:24px; border:1px solid var(--line); border-radius:18px; color:var(--txt); background:linear-gradient(145deg,#242832,#12161e); box-shadow:var(--shadow); }
 .folder-manager::backdrop { background:#05070b90; backdrop-filter:blur(6px); }
 .folder-manager h2 { font-size:20px; }
-.folder-tools { display:flex; align-items:center; gap:12px; }
+.folder-tools { display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin-top:16px; }
 .folder-tools input { flex:1; min-width:0; }
 .folder-tools input { font:inherit; font-size:13px; color:var(--txt); background:#10141c; border:1px solid var(--line); border-radius:12px; padding:11px 12px; outline:none; }
 .folder-tools input:focus-visible { border-color:var(--accent,#f6ad84); outline:2px solid var(--accent,#f6ad84); outline-offset:2px; }

@@ -191,7 +191,7 @@ class MainActivity : ThemedActivity() {
         bindTabs()
         configureTvNavigationRail()
         browserChrome = LibraryBrowserChrome(this, usesRail(),
-            onDestination = ::openLibraryDestinations,
+            onDestination = ::selectDestination,
             onView = { anchor -> if (usesRail()) openLibraryScreenOptions(anchor) else openLibraryViews(anchor) },
             onFilters = ::openLibraryFilters,
             onSort = ::openSortFilter,
@@ -1250,7 +1250,7 @@ class MainActivity : ThemedActivity() {
             selectedKind == "series" -> TvLibraryContent.rows(allItems, query).size
             else -> TvLibraryContent.filterItems(allItems, query).size
         }
-        browserChrome.render(selectedKind, query, viewMode(), total, nextPageOffset != null, searchQuery, selectedCollection?.name)
+        browserChrome.render(selectedKind, query, viewMode(), total, nextPageOffset != null, searchQuery, selectedCollection?.name, discoveredKinds)
     }
 
     private fun showFilteredEmpty(query: TvLibraryContent.Query, focusAction: Boolean) {
@@ -1522,14 +1522,6 @@ class MainActivity : ThemedActivity() {
     }
 
     private fun effectiveSort(): String = currentQuery().sort
-
-    private fun openLibraryDestinations() {
-        val kinds = listOf("Films" to "movie", "Séries" to "series", "Vidéos" to "clip", "Photos" to "photo", "Musique" to "audio")
-            .filter { discoveredKinds.isEmpty() || it.second in discoveredKinds }
-        CompactChoiceMenu.show(this, findViewById(R.id.brand), "Bibliothèque",
-            kinds.map { CompactChoiceMenu.Choice(it.first, it.second) }, selectedKind,
-            onSelect = { selectDestination(it) })
-    }
 
     private fun openLastLibrary() {
         val previous = LibraryPreferences.lastLibrary(this)

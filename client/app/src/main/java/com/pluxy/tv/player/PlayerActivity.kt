@@ -828,6 +828,7 @@ class PlayerActivity : ThemedActivity() {
             if (controlsOverlay.visibility == View.VISIBLE) hideControls()
             else showControls(focusPlayPause = true)
         }
+        PlayerTouchGestures(this, playerView).bind()
 
         timeline.addListener(object : TimeBar.OnScrubListener {
             override fun onScrubStart(timeBar: TimeBar, position: Long) {

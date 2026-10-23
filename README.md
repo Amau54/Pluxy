@@ -6,7 +6,7 @@
 
 Vos films, séries, photos et musique sur la TV.
 
-**Android 1.7.43 · Windows 1.8.33**
+**Android 1.7.44 · Windows 1.8.34**
 
 [Application Android](https://github.com/Amau54/Pluxy/releases/download/dev-latest/Pluxy-debug.apk)
 · [Application PC](https://github.com/Amau54/Pluxy/releases/download/pc-latest/Pluxy-Setup.exe)
@@ -35,6 +35,10 @@ Pendant un déplacement dans la vidéo, un aperçu apparaît lorsque le serveur 
 extraire une image. Les images sont préparées en arrière-plan et mises en cache.
 Avec un ancien serveur ou un serveur Android antérieur à Android 8.1, le temps
 reste affiché sans aperçu. Aucun réencodage du film n'est nécessaire.
+
+Sur téléphone et tablette, glissez verticalement sur la moitié droite de la vidéo
+pour régler la luminosité, ou sur la moitié gauche pour régler le volume.
+Un toucher simple affiche les commandes. Les gestes ne modifient pas la position de lecture.
 
 Le lecteur peut passer automatiquement les intros et génériques détectés. Activez
 ou désactivez **Passer automatiquement les intros et génériques** dans les réglages

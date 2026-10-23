@@ -8,6 +8,7 @@ import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.HorizontalScrollView
 import android.content.res.ColorStateList
 import android.text.TextUtils
 import com.pluxy.tv.R
@@ -16,7 +17,7 @@ import com.pluxy.tv.R
 class LibraryBrowserChrome(
     private val activity: MainActivity,
     private val television: Boolean,
-    private val onDestination: () -> Unit,
+    private val onDestination: (String) -> Unit,
     private val onView: (View) -> Unit,
     private val onFilters: () -> Unit,
     private val onSort: (View) -> Unit,
@@ -62,7 +63,25 @@ class LibraryBrowserChrome(
     private val filters = button("Filtres") { onFilters() }
     private val sort = button("Titre ↑", onSort)
     private val collection = button("Créer") { onCollections() }
-    private val destination = button("Films") { onDestination() }
+    private val destinations = listOf("movie" to "Films", "series" to "Séries", "clip" to "Vidéos", "photo" to "Photos", "audio" to "Musique")
+        .associate { (kind, title) -> kind to button(title) { onDestination(kind) }.apply {
+            setBackgroundResource(R.drawable.bg_tab)
+            setPadding(dp(12), 0, dp(12), 0)
+            minWidth = 0
+            tag = "destination:$kind"
+            contentDescription = title
+        } }
+    private val destinationStrip = HorizontalScrollView(activity).apply {
+        tag = "library-destinations"
+        isHorizontalScrollBarEnabled = false
+        isFillViewport = false
+        overScrollMode = View.OVER_SCROLL_NEVER
+        addView(LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            destinations.values.forEach { addView(it, LinearLayout.LayoutParams(-2, dp(48))) }
+        })
+    }
+    private var previousDestination: String? = null
     private val bottom = LinearLayout(activity).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER
@@ -107,10 +126,14 @@ class LibraryBrowserChrome(
             activity.findViewById<View>(R.id.swipeHint).visibility = View.GONE
             activity.findViewById<View>(R.id.search).visibility = View.GONE
             val brand = activity.findViewById<LinearLayout>(R.id.brand)
-            brand.addView(destination, LinearLayout.LayoutParams(-2, -2))
+            activity.findViewById<View>(R.id.brandName).visibility = View.GONE
+            brand.addView(destinationStrip, LinearLayout.LayoutParams(0, -2, 1f))
             listOf(home, library, search).forEach {
                 it.setBackgroundResource(R.drawable.bg_tab)
-                it.textSize = 13f
+                it.textSize = 12f
+                it.setSingleLine()
+                it.ellipsize = TextUtils.TruncateAt.END
+                it.setPadding(dp(6), 0, dp(6), 0)
                 bottom.addView(it, LinearLayout.LayoutParams(0, dp(56), 1f))
             }
             parent.addView(bottom, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM).apply {
@@ -120,14 +143,20 @@ class LibraryBrowserChrome(
         rows.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> positionContent() }
     }
 
-    fun render(kind: String, query: TvLibraryContent.Query, view: String, total: Int, more: Boolean, searchText: String, collectionName: String? = null) {
+    fun render(kind: String, query: TvLibraryContent.Query, view: String, total: Int, more: Boolean, searchText: String, collectionName: String? = null, availableKinds: Set<String> = emptySet()) {
         val video = if (searchText.isNotBlank()) query.searchScope in setOf("all", "movie", "series", "clip")
             else kind in setOf("movie", "series", "clip")
         rows.visibility = if (kind == "home" && searchText.isBlank()) View.GONE else View.VISIBLE
         photoCommands.visibility = if (kind in setOf("photo", "audio") && query.photoView == "folders" && searchText.isBlank()) View.VISIBLE else View.GONE
-        destination.visibility = if (kind == "home" || searchText.isNotBlank()) View.GONE else View.VISIBLE
-        destination.text = when (kind) { "movie" -> "Films"; "series" -> "Séries"; "clip" -> "Vidéos"; "photo" -> "Photos"; "audio" -> "Musique"; else -> "Médias" }
-        destination.setCompoundDrawablesRelativeWithIntrinsicBounds(0, 0, R.drawable.ic_library_dropdown, 0)
+        destinations.forEach { (key, tab) ->
+            tab.visibility = if (availableKinds.isEmpty() || key in availableKinds) View.VISIBLE else View.GONE
+            tab.isSelected = key == kind
+            tab.contentDescription = tab.text.toString() + if (tab.isSelected) ", sélectionné" else ""
+        }
+        if (!television && previousDestination != kind) destinations[kind]?.post {
+            destinations[kind]?.let { destinationStrip.smoothScrollTo((it.left - dp(8)).coerceAtLeast(0), 0) }
+        }
+        previousDestination = kind
         val displayName = when {
             collectionName != null -> "Collections"
             kind == "photo" -> when (query.photoView) { "timeline" -> "Chronologie"; "albums" -> "Albums"; else -> "Dossiers" }
