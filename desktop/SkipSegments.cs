@@ -24,6 +24,7 @@ namespace Pluxy {
         }
     }
     internal static class SkipSegments {
+        internal static bool SupportsKind(string kind) { return kind=="series"; }
         internal static bool IsFinalCredits(SkipSegment segment,long duration) {
             return segment!=null && segment.kind=="credits" && duration>0 && segment.startMs>=duration/2 &&
                 segment.endMs<=duration && segment.endMs>=duration-500;

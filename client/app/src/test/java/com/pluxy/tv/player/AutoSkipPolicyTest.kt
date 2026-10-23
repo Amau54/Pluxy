@@ -4,6 +4,10 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class AutoSkipPolicyTest {
+    @Test fun skippingIsOnlyAvailableForSeries() {
+        assertTrue(SkipSegments.supportsKind("series"))
+        for (kind in listOf("movie", "clip", "audio", "photo", "", "unknown")) assertFalse(SkipSegments.supportsKind(kind))
+    }
     @Test fun onlyCreditsEndingTheMediaCanAdvanceToTheNextEpisode() {
         assertTrue(SkipSegments.isFinalCredits(SkipSegment("credits", 900_000, 1_000_000), 1_000_000))
         assertFalse(SkipSegments.isFinalCredits(SkipSegment("credits", 900_000, 950_000), 1_000_000))

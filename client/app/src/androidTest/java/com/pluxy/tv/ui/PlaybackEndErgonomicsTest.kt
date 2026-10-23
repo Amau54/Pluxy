@@ -134,6 +134,39 @@ class PlaybackEndErgonomicsTest {
             PluxyApplication.setAutoPlayNextEpisode(context, autoplay)
         }
     }
+    @Test fun moviesAndPersonalVideosNeverOfferOrAutomaticallySkipSegments() = withPlayer { activity ->
+        val itemField = PlayerActivity::class.java.getDeclaredField("item").apply { isAccessible = true }
+        val original = itemField.get(activity) as MediaItem
+        val seek = PlayerActivity::class.java.getDeclaredMethod("goToAbsolute", Long::class.javaPrimitiveType).apply { isAccessible = true }
+        val load = PlayerActivity::class.java.getDeclaredMethod("loadSkipChapters", String::class.java).apply { isAccessible = true }
+        try {
+            for (kind in listOf("movie", "clip")) {
+                instrumentation.runOnMainSync {
+                    itemField.set(activity, original.copy(kind = kind))
+                    load.invoke(activity, PluxyApplication.serverBaseUrl(context))
+                    assertNull("No chapter polling for $kind", field(activity, "skipChaptersJob"))
+                    seek.invoke(activity, 3_500L)
+                }
+                await("Seek must finish") { (field(activity, "player") as Player).let { it.playbackState == Player.STATE_READY && it.currentPosition >= 3_400 } }
+                instrumentation.runOnMainSync {
+                    PlayerActivity::class.java.getDeclaredField("skipChapters").apply { isAccessible = true }
+                        .set(activity, listOf(MediaChapter(0, 10_000, "Opening")))
+                    PluxyApplication.setAutoSkipIntros(context, false)
+                    call(activity, "updateSkipSegment")
+                    assertEquals("No manual skip for $kind", View.GONE, activity.findViewById<View>(R.id.skipSegment).visibility)
+                    PluxyApplication.setAutoSkipIntros(context, true)
+                    (field(activity, "player") as Player).play()
+                }
+                Thread.sleep(1_200)
+                instrumentation.runOnMainSync {
+                    val player = field(activity, "player") as Player
+                    player.pause()
+                    assertTrue("No automatic jump for $kind", player.currentPosition < 8_000)
+                    assertNull(field(activity, "activeSkipSegment"))
+                }
+            }
+        } finally { instrumentation.runOnMainSync { itemField.set(activity, original) } }
+    }
     @Test fun automaticFinalCreditsAdvanceDirectlyToTheNextEpisodeWithoutAPrompt() = withPlayer { activity ->
         val following = nextItem
         assumeTrue("Requires two episodes", following != null)

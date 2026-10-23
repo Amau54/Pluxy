@@ -23,6 +23,7 @@ data class SkipMarkers(val introStartMs: Long = 0, val introEndMs: Long? = null,
 }
 
 object SkipSegments {
+    fun supportsKind(kind: String): Boolean = kind == "series"
     fun isFinalCredits(segment: SkipSegment?, durationMs: Long): Boolean = segment?.kind == "credits" &&
         durationMs > 0 && segment.startMs >= durationMs / 2 && segment.endMs <= durationMs &&
         segment.endMs >= durationMs - 500

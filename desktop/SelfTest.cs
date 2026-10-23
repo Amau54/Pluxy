@@ -86,6 +86,7 @@ namespace Pluxy {
             } finally { if(File.Exists(path)) File.Delete(path); }
         }
         private static void VerifySkipSegments() {
+            Check(SkipSegments.SupportsKind("series") && Array.TrueForAll(new[]{"movie","clip","audio","photo","","unknown"},kind=>!SkipSegments.SupportsKind(kind)),"Le passage des intros et génériques est réservé aux séries");
             var auto=new AutoSkipPolicy();
             var opening=new SkipSegment {kind="intro",startMs=10000,endMs=40000};
             Check(!auto.Target("one",opening,false,true).HasValue && !auto.Target("one",opening,true,false).HasValue,"Désactiver le passage automatique ou mettre en pause conserve l’intro");

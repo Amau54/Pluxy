@@ -1426,10 +1426,12 @@ class PlayerActivity : ThemedActivity() {
 
     private fun loadSkipChapters(server: String = api.baseUrl) {
         skipChaptersJob?.cancel()
+        skipChaptersJob = null
         skipChapters = emptyList()
         activeSkipSegment = null
         autoFocusedSkipSegment = null
         findViewById<View>(R.id.skipSegment).visibility = View.GONE
+        if (!SkipSegments.supportsKind(item.kind)) return
         val ownerId = item.id
         skipChaptersJob = lifecycleScope.launch {
             val chapterApi = PluxyApi(server)
@@ -1459,7 +1461,7 @@ class PlayerActivity : ThemedActivity() {
         if (!::item.isInitialized || !::api.isInitialized) return
         val button = findViewById<Button>(R.id.skipSegment)
         val segments = SkipSegments.detected(skipChapters, skipDurationMs)
-        activeSkipSegment = if (player?.playbackState == Player.STATE_READY && !terminalPlaybackError &&
+        activeSkipSegment = if (SkipSegments.supportsKind(item.kind) && player?.playbackState == Player.STATE_READY && !terminalPlaybackError &&
             !isSeeking && !timelineScrubbing && !playerChoiceMenuShowing && nextEpisodeDialog?.isShowing != true)
             SkipSegments.active(segments, reliablePositionMs()) else null
         val automatic = if (activeSkipSegment?.kind == "intro") PluxyApplication.autoSkipIntros(this)
@@ -1505,7 +1507,7 @@ class PlayerActivity : ThemedActivity() {
             "Qualité de conversion" to { pickConversionQuality() },
             "Sortie audio" to { pickAudioOutput(findViewById(R.id.btnGear)) },
             getString(R.string.player_information_action) to { showDiagnostics() },
-        )
+        ).filterIndexed { index, _ -> index >= 2 || SkipSegments.supportsKind(item.kind) }
         showPlayerChoices(
             findViewById(R.id.btnGear),
             "Lecture",
@@ -2572,6 +2574,7 @@ class PlayerActivity : ThemedActivity() {
         !isSeeking && !timelineScrubbing && pendingSeekTargetMs == null && !playerChoiceMenuShowing
 
     private fun performSegmentSkip(segment: SkipSegment, automatic: Boolean) {
+        if (!SkipSegments.supportsKind(item.kind)) return
         activeSkipSegment = null
         val button = findViewById<View>(R.id.skipSegment)
         if (button.hasFocus()) {

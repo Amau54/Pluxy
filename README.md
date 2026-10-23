@@ -6,7 +6,7 @@
 
 Vos films, séries, photos et musique sur la TV.
 
-**Android 1.7.45 · Windows 1.8.35**
+**Android 1.7.46 · Windows 1.8.36**
 
 [Application Android](https://github.com/Amau54/Pluxy/releases/download/dev-latest/Pluxy-debug.apk)
 · [Application PC](https://github.com/Amau54/Pluxy/releases/download/pc-latest/Pluxy-Setup.exe)
@@ -40,7 +40,7 @@ Sur téléphone et tablette, glissez verticalement sur la moitié droite de la v
 pour régler la luminosité, ou sur la moitié gauche pour régler le volume.
 Un toucher simple affiche les commandes. Les gestes ne modifient pas la position de lecture.
 
-Le lecteur peut passer automatiquement les intros et les génériques détectés. Les
+Pour les séries uniquement, le lecteur peut passer automatiquement les intros et les génériques détectés. Les
 réglages **Passer automatiquement les intros** et **Passer automatiquement les
 génériques** sont indépendants dans les réglages de lecture et les options du
 lecteur. Lorsqu’un réglage est désactivé, le bouton « Passer » correspondant reste

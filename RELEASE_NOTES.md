@@ -1,3 +1,8 @@
+## Windows 1.8.36 · Android 1.7.46
+
+- Passage des intros et génériques réservé aux séries : aucun saut automatique, bouton de passage ou réglage associé pendant la lecture d’un film ou d’une vidéo personnelle.
+- Les réglages généraux précisent leur application aux séries.
+
 ## Windows 1.8.35 · Android 1.7.45
 
 - Windows : mode Organiser dans Films, Séries et Vidéos, avec glisser-déposer des cartes, ordre personnel mémorisé par serveur et profil, raccourcis clavier et remise à zéro.

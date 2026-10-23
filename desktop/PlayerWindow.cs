@@ -231,7 +231,7 @@ namespace Pluxy {
             }
             if(wasPaused) await mpv.Command("set_property","pause",true);
             skipChapters=new object[0];
-            try {
+            if(SkipSegments.SupportsKind(Native.Text(media,"kind"))) try {
                 var chapters=await mpv.Command("get_property","chapter-list") as object[] ?? new object[0];
                 double length=Convert.ToDouble(await mpv.Command("get_property","duration"),CultureInfo.InvariantCulture);
                 skipChapters=SkipSegments.Chapters(chapters,length);
@@ -382,6 +382,7 @@ namespace Pluxy {
             nextPrompt.Location=PointToScreen(new Point(Math.Max(Scale(12),ClientSize.Width-nextPrompt.Width-Scale(24)),Math.Max(Scale(12),controls.Top-nextPrompt.Height-Scale(12))));
         }
         private async Task LoadAutomaticSegments(string ownerId,string ownerServer,object[] nativeChapters,System.Threading.CancellationToken token) {
+            if(!SkipSegments.SupportsKind(Native.Text(media,"kind"))) return;
             try {
                 for(int attempt=0;attempt<80;attempt++) {
                     token.ThrowIfCancellationRequested();
@@ -402,7 +403,7 @@ namespace Pluxy {
             var preferences=Preferences.Load(); autoSkipIntros=preferences.SkipEnabled("intro"); autoSkipCredits=preferences.SkipEnabled("credits");
         }
         private async Task SkipDetectedSegment(SkipSegment segment) {
-            if(segment==null) return;
+            if(segment==null || !SkipSegments.SupportsKind(Native.Text(media,"kind"))) return;
             skipButton.Visible=false;
             int current=episodes.FindIndex(e=>Native.Text(Native.Object(e),"id")==id);
             if(SkipSegments.IsFinalCredits(segment,(long)(duration*1000)) && current>=0 && current+1<episodes.Count) {
@@ -411,7 +412,7 @@ namespace Pluxy {
             } else await Run("seek",segment.endMs/1000.0,"absolute+exact");
         }
         private void UpdateSkip() {
-            activeSkip=ready && !closing && !recovering && !dragging && seekDirection==0 && !nextPrompt.Visible && !optionsShowing?
+            activeSkip=SkipSegments.SupportsKind(Native.Text(media,"kind")) && ready && !closing && !recovering && !dragging && seekDirection==0 && !nextPrompt.Visible && !optionsShowing?
                 SkipSegments.Active(SkipSegments.Detect(skipChapters,(long)(duration*1000)),(long)(position*1000)):null;
             if((activeSkip==null || SkipEnabled(activeSkip)) && skipButton.Focused) pause.Focus();
             skipButton.Visible=activeSkip!=null && !SkipEnabled(activeSkip);
@@ -457,8 +458,8 @@ namespace Pluxy {
             original.Click+=async(s,e)=>{ await Run("set_property","keepaspect",true); await Run("set_property","panscan",0); }; menu.Items.Add(original);
             var zoom=new ToolStripMenuItem("Zoom · remplir l’écran");
             zoom.Click+=async(s,e)=>{ await Run("set_property","keepaspect",true); await Run("set_property","panscan",1); }; menu.Items.Add(zoom);
-            menu.Items.Add(new ToolStripSeparator());
-            foreach(var kind in new[]{"intro","credits"}) {
+            if(SkipSegments.SupportsKind(Native.Text(media,"kind"))) menu.Items.Add(new ToolStripSeparator());
+            foreach(var kind in SkipSegments.SupportsKind(Native.Text(media,"kind"))?new[]{"intro","credits"}:new string[0]) {
                 string key=kind;
                 var skip=new ToolStripMenuItem(key=="intro"?"Passer automatiquement les intros":"Passer automatiquement les génériques") { Checked=key=="intro"?autoSkipIntros:autoSkipCredits,CheckOnClick=true };
                 skip.CheckedChanged+=(s,e)=> {

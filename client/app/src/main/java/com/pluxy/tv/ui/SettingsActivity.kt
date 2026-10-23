@@ -221,7 +221,7 @@ class SettingsActivity : ThemedActivity() {
             render()
         }
         rows.addView(TextView(this).apply {
-            text = "Les passages détectés sont sautés sans bouton. Un générique final enchaîne sur l’épisode suivant s’il existe ; les scènes après le générique sont conservées."
+            text = "Ces deux réglages concernent uniquement les séries. Les passages détectés sont sautés sans bouton. Un générique final enchaîne sur l’épisode suivant s’il existe ; les scènes après le générique sont conservées."
             textSize = 12f
             setTextColor(pluxyColor(R.color.text_secondary))
             setPadding(dp(10), dp(4), dp(10), dp(8))
