@@ -1,3 +1,10 @@
+## Android 1.7.47
+
+- Surveillance du rendu vidéo pendant que l’horloge de lecture avance, même lorsque le lecteur ne signale aucune mise en tampon.
+- Après huit secondes sans nouvelle image, relance limitée à la piste vidéo, avec conservation du flux et des réglages audio. Les pauses, avances rapides, passages en arrière-plan et vidéos à très faible cadence sont exclus.
+- Récupérations espacées et limitées à deux par média. La relance vidéo n’est pas comptée comme une coupure réseau et ne demande aucune conversion.
+- Ajout de diagnostics pour distinguer un blocage du rendu d’une attente réseau. La cause précise d’un gel occasionnel sur un appareil reste à confirmer avec ses journaux.
+
 ## Windows 1.8.36 · Android 1.7.46
 
 - Passage des intros et génériques réservé aux séries : aucun saut automatique, bouton de passage ou réglage associé pendant la lecture d’un film ou d’une vidéo personnelle.

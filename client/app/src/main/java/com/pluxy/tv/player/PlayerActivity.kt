@@ -118,6 +118,9 @@ class PlayerActivity : ThemedActivity() {
     private var activityStarted = false
     private var timelineScrubbing = false
     private var player: ExoPlayer? = null
+    private val videoRenderWatch = VideoRenderWatchPolicy()
+    private var videoRecoveryPending = false
+    private var videoRecoveryGraceUntilMs = 0L
     private val remoteKeyRouter = TvPlaybackKeyRouter()
     private var mediaSession: MediaSession? = null
     private lateinit var api: PluxyApi
@@ -258,6 +261,7 @@ class PlayerActivity : ThemedActivity() {
                 updatePlayPauseButton()
                 updateMediaSessionPlaybackState()
                 maybeRecoverQuality()
+                checkVideoRendering(p)
                 updateSkipSegment()
                 offerNextEpisode()
             }
@@ -1860,6 +1864,8 @@ class PlayerActivity : ThemedActivity() {
     /** (Re)construit l'ExoPlayer depuis l'état conservé, à la dernière position. */
     private fun buildPlayer() {
         if (player != null || buffer == null) return
+        videoRenderWatch.clearObservation()
+        videoRecoveryPending = false
         setLoadingVisible(true)
         val currentBytes = java.util.concurrent.atomic.AtomicLong()
         transferBytes = currentBytes
@@ -2334,7 +2340,8 @@ class PlayerActivity : ThemedActivity() {
                     val pastSeek = now - lastSeekAtMs > SEEK_GRACE_MS
                     val playedLongEnough =
                         playStartedAtMs > 0 && now - playStartedAtMs >= MIN_STABLE_PLAY_MS
-                    if (wasReady && p?.playWhenReady == true && pastSeek && playedLongEnough) {
+                    if (wasReady && p?.playWhenReady == true && pastSeek && playedLongEnough &&
+                        now >= videoRecoveryGraceUntilMs) {
                         networkStallStartMs = now     // début d'un stall réseau qualifié
                         onRebuffer()
                     }
@@ -2824,6 +2831,50 @@ class PlayerActivity : ThemedActivity() {
         prepareAndPlay(strategyOverride ?: if (forceDirectForLaunch) PlaybackStrategy.DIRECT
             else PlaybackStrategy.fromKey(PluxyApplication.playbackStrategy(this)))
         prefetchNextEpisode()
+    }
+
+    private fun checkVideoRendering(p: ExoPlayer) {
+        if (player !== p) return
+        val counters = p.videoDecoderCounters
+        counters?.ensureUpdated()
+        val now = SystemClock.elapsedRealtime()
+        val frameRate = p.videoFormat?.frameRate ?: -1f
+        val eligible = player === p && activityStarted && !isFinishing && !terminalPlaybackError &&
+            p.isPlaying && p.playbackState == Player.STATE_READY &&
+            p.currentTracks.isTypeSelected(C.TRACK_TYPE_VIDEO) && p.videoFormat != null &&
+            (frameRate < 0 || frameRate >= 5f) && playerView.isShown &&
+            !isSeeking && !timelineScrubbing && pendingSeekTargetMs == null && !videoRecoveryPending &&
+            now - lastSeekAtMs > 10_000 && now - lastBuildAtMs > 10_000 &&
+            (p.duration <= 0 || p.duration - p.currentPosition > 2_000)
+        if (videoRenderWatch.observe("${api.baseUrl}:${item.id}", now, p.currentPosition,
+                counters?.renderedOutputBufferCount ?: -1, counters?.decoderInitCount ?: -1, eligible)) {
+            Logger.log("video", "rendu vidéo immobile, horloge active pos=${p.currentPosition} " +
+                "frames=${counters?.renderedOutputBufferCount} dropped=${counters?.droppedBufferCount} " +
+                "buffer=${p.totalBufferedDuration} mime=${p.videoFormat?.sampleMimeType} " +
+                "size=${p.videoFormat?.width}x${p.videoFormat?.height} fps=$frameRate")
+            recoverVideoRenderer(p)
+        }
+    }
+
+    /** Recrée seulement la piste vidéo, à l'horloge audio courante, sans changer de flux. */
+    private fun recoverVideoRenderer(p: ExoPlayer) {
+        if (player !== p || videoRecoveryPending || !activityStarted || isFinishing ||
+            !p.currentTracks.isTypeSelected(C.TRACK_TYPE_VIDEO)) return
+        videoRecoveryPending = true
+        videoRecoveryGraceUntilMs = SystemClock.elapsedRealtime() + 10_000L
+        val ownerId = item.id
+        p.trackSelectionParameters = p.trackSelectionParameters.buildUpon()
+            .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, true).build()
+        handler.postDelayed({
+            if (player === p && item.id == ownerId && activityStarted && !isFinishing) {
+                // Conserve les réglages audio/sous-titres éventuellement modifiés entre-temps.
+                p.trackSelectionParameters = p.trackSelectionParameters.buildUpon()
+                    .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, false).build()
+                Logger.log("video", "relance de la piste vidéo à ${p.currentPosition}, flux et son conservés")
+            }
+            videoRecoveryPending = false
+            videoRenderWatch.clearObservation()
+        }, 150L)
     }
 
     // ---- Chien de garde : chargement bloqué ------------------------------- //

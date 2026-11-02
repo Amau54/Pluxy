@@ -25,6 +25,48 @@ import java.io.File
 import java.net.URL
 
 class PlaybackEndErgonomicsTest {
+    @Test fun videoRendererRecoveryPreservesTheStreamAudioAndPlaybackPosition() = withPlayer { activity ->
+        val player = field(activity, "player") as androidx.media3.exoplayer.ExoPlayer
+        var audioInitializations = 0
+        var originalUri = ""
+        var initialPosition = 0L
+        var oldDecoder: androidx.media3.exoplayer.DecoderCounters? = null
+        val seeks = mutableListOf<Long>()
+        instrumentation.runOnMainSync {
+            player.play()
+            player.addListener(object : Player.Listener {
+                override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo, newPosition: Player.PositionInfo, reason: Int) {
+                    if (reason == Player.DISCONTINUITY_REASON_SEEK) seeks += newPosition.positionMs
+                }
+            })
+        }
+        await("Video must render") { player.videoDecoderCounters?.let { it.ensureUpdated(); it.renderedOutputBufferCount > 0 } == true }
+        instrumentation.runOnMainSync {
+            oldDecoder = player.videoDecoderCounters
+            player.audioDecoderCounters?.ensureUpdated()
+            audioInitializations = player.audioDecoderCounters?.decoderInitCount ?: 0
+            originalUri = player.currentMediaItem?.localConfiguration?.uri.toString()
+            initialPosition = player.currentPosition
+            PlayerActivity::class.java.getDeclaredMethod("recoverVideoRenderer", androidx.media3.exoplayer.ExoPlayer::class.java)
+                .apply { isAccessible = true }.invoke(activity, player)
+        }
+        await("Video must render again after its renderer restarts") {
+            val counters = player.videoDecoderCounters
+            counters?.ensureUpdated()
+            counters != null && counters !== oldDecoder && counters.renderedOutputBufferCount > 0 && player.isPlaying
+        }
+        instrumentation.runOnMainSync {
+            assertSame(player, field(activity, "player"))
+            assertEquals(originalUri, player.currentMediaItem?.localConfiguration?.uri.toString())
+            assertTrue("Position must continue forward", player.currentPosition >= initialPosition)
+            assertTrue("No seek should be introduced", seeks.isEmpty())
+            player.audioDecoderCounters?.ensureUpdated()
+            assertEquals("Audio decoder must be preserved", audioInitializations, player.audioDecoderCounters?.decoderInitCount ?: 0)
+            assertFalse(player.trackSelectionParameters.disabledTrackTypes.contains(androidx.media3.common.C.TRACK_TYPE_VIDEO))
+            assertFalse(field(activity, "videoRecoveryPending") as Boolean)
+            assertTrue((field(activity, "videoRecoveryGraceUntilMs") as Long) > SystemClock.elapsedRealtime())
+        }
+    }
     @Test fun mobileVerticalGesturesAdjustTheCorrectSettingAndKeepTapControls() = withPlayer { activity ->
         assumeTrue(activity.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_TYPE_MASK !=
             android.content.res.Configuration.UI_MODE_TYPE_TELEVISION)
