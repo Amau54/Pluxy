@@ -63,6 +63,18 @@ class ModeActivity : ThemedActivity() {
                     setSpan(RelativeSizeSpan(0.88f), label.length + 1, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                 }
                 contentDescription = "$label. $explanation"
+                tag = "mode:${value.key}"
+                val icon = getDrawable(if (value == ApplicationMode.READER) R.drawable.ic_mode_reader else R.drawable.ic_mode_server)!!.mutate().apply {
+                    setTint(pluxyColor(R.color.text_primary))
+                    setBounds(0, 0, dp(28), dp(28))
+                }
+                val check = if (mode == value) getDrawable(R.drawable.ic_mode_check)!!.mutate().apply {
+                    setTint(pluxyColor(R.color.accent))
+                    setBounds(0, 0, dp(22), dp(22))
+                } else null
+                setCompoundDrawablesRelative(icon, null, check, null)
+                compoundDrawablePadding = dp(14)
+                if (mode == value) contentDescription = "$label. Mode actuel. $explanation"
                 isAllCaps = false
                 textSize = if (television) 17f else 15f
                 gravity = Gravity.START or Gravity.CENTER_VERTICAL
@@ -86,7 +98,7 @@ class ModeActivity : ThemedActivity() {
         val reader = choice(ApplicationMode.READER, "Lecteur", "Lire les médias d’un serveur Pluxy.")
         val server = choice(ApplicationMode.SERVER, "Serveur", "Partager les médias de cet appareil.")
         column.addView(TextView(this).apply {
-            text = "Tu pourras changer de mode dans les options."
+            text = "Tu pourras changer de mode dans les réglages."
             textSize = 13f
             setTextColor(pluxyColor(R.color.text_secondary))
             setPadding(0, dp(6), 0, 0)

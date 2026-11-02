@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.view.Gravity
 import android.view.View
 import android.widget.Button
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -122,13 +123,20 @@ class SettingsActivity : ThemedActivity() {
             else categories.addView(button, LinearLayout.LayoutParams(-1, -2))
         }
         navigation.addView(categories)
+        val modeAction = createModeAction()
+        if (television) {
+            navigation.addView(View(this), LinearLayout.LayoutParams(1, 0, 1f))
+            navigation.addView(modeAction)
+            categoryButtons[SettingsCategory.GENERAL]?.nextFocusDownId = modeAction.id
+            modeAction.nextFocusUpId = categoryButtons[SettingsCategory.GENERAL]!!.id
+        }
         val safeSide = resources.getDimensionPixelSize(R.dimen.screen_pad)
         return LinearLayout(this).apply {
             orientation = if (television) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
             fitsSystemWindows = true
             setBackgroundResource(ambientBackgroundResource())
             setPadding(safeSide, 0, if (television) 0 else safeSide, 0)
-            addView(navigation, LinearLayout.LayoutParams(if (television) dp(192) else -1, -2))
+            addView(navigation, LinearLayout.LayoutParams(if (television) dp(192) else -1, if (television) -1 else -2))
             if (television) {
                 rows.setPadding(dp(24), 0, safeSide, 0)
                 scroll.clipChildren = true
@@ -140,7 +148,46 @@ class SettingsActivity : ThemedActivity() {
             } else {
                 rows.setPadding(0, dp(8), 0, dp(24))
                 addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+                addView(modeAction, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(16) })
             }
+        }
+    }
+
+    private fun createModeAction(): View = LinearLayout(this).apply {
+        id = View.generateViewId()
+        tag = "setting:change-mode"
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        isFocusable = true
+        isClickable = true
+        setPadding(dp(10), dp(12), dp(10), dp(12))
+        minimumHeight = dp(64)
+        setBackgroundResource(R.drawable.bg_settings_category)
+        val mode = com.pluxy.server.ApplicationMode.read(this@SettingsActivity)
+        val label = if (mode == com.pluxy.server.ApplicationMode.SERVER) "Serveur" else "Lecteur"
+        contentDescription = "Changer de mode. Mode actuel : $label"
+        addView(ImageView(this@SettingsActivity).apply {
+            setImageResource(R.drawable.ic_mode_switch)
+            imageTintList = android.content.res.ColorStateList.valueOf(pluxyColor(R.color.text_primary))
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }, LinearLayout.LayoutParams(dp(24), dp(24)).apply { marginEnd = dp(10) })
+        addView(LinearLayout(this@SettingsActivity).apply {
+            orientation = LinearLayout.VERTICAL
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+            addView(TextView(this@SettingsActivity).apply {
+                text = "Changer de mode"
+                textSize = 14f
+                setTextColor(pluxyColor(R.color.text_primary))
+            })
+            addView(TextView(this@SettingsActivity).apply {
+                text = "Mode actuel : $label"
+                textSize = 12f
+                setTextColor(sub)
+            })
+        }, LinearLayout.LayoutParams(0, -2, 1f))
+        setOnClickListener {
+            startActivity(Intent(this@SettingsActivity, ModeActivity::class.java)
+                .putExtra(com.pluxy.server.ApplicationMode.EXTRA_CHOOSE_MODE, true))
         }
     }
 
@@ -166,6 +213,8 @@ class SettingsActivity : ThemedActivity() {
                 val first = (2 until rows.childCount).map { rows.getChildAt(it) }.firstOrNull { it.isFocusable }
                 first?.let { if (it.id == View.NO_ID) it.id = View.generateViewId() }
                 categoryButtons.values.forEach { it.nextFocusRightId = first?.id ?: View.NO_ID }
+                findViewById<View>(android.R.id.content).findViewWithTag<View>("setting:change-mode")
+                    ?.nextFocusRightId = first?.id ?: View.NO_ID
             }
             if (television) target?.requestFocusFromTouch() else target?.requestFocus()
         }
@@ -366,9 +415,6 @@ class SettingsActivity : ThemedActivity() {
     private fun renderApplication() {
         rowButton("Mises à jour", "Vérifier ›", "Télécharger et installer la dernière version depuis GitHub.")
             .setOnClickListener { com.pluxy.server.updates.AppUpdates.open(this) }
-        rowButton("Mode de l’application", "Lecteur ›", "Choisir Lecteur ou Serveur pour cet appareil.", showHint = true)
-            .setOnClickListener { startActivity(Intent(this, ModeActivity::class.java)
-                .putExtra(com.pluxy.server.ApplicationMode.EXTRA_CHOOSE_MODE, true)) }
     }
 
     override fun onResume() {

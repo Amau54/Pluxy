@@ -1,3 +1,8 @@
+## Android 1.7.50
+
+- « Changer de mode » reste accessible en bas des réglages, avec une icône et le mode actuel. La ligne en double dans Général est retirée.
+- Le choix Lecteur / Serveur affiche des icônes et une coche sur le mode actif.
+
 ## Android 1.7.49
 
 - Paramètres réduits à trois entrées : Lecture, Affichage et Général.

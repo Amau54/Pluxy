@@ -18,7 +18,7 @@ class SettingsNavigationTest {
             SettingsCategory.PLAYBACK to listOf("Mode de lecture"),
             SettingsCategory.APPEARANCE to listOf("Thème", "Densité", "Personnaliser l’accueil"),
             SettingsCategory.GENERAL to listOf("Changer de serveur", "Activer plusieurs profils",
-                "Focus du lecteur plus contrasté", "Mises à jour", "Mode de l’application"),
+                "Focus du lecteur plus contrasté", "Mises à jour"),
         )
         try {
             for ((category, settings) in expectedControls) {
@@ -34,6 +34,8 @@ class SettingsNavigationTest {
                         assertNull(root.findViewWithTag<View>("category:$it"))
                     }
                     assertNull(root.findViewWithTag<View>("setting:Options"))
+                    assertNull(root.findViewWithTag<View>("setting:Mode de l’application"))
+                    assertTrue(root.findViewWithTag<View>("setting:change-mode").isShown)
                     assertFalse(activity.isFinishing)
                 }
                 val television = activity.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_TYPE_MASK ==
@@ -67,13 +69,13 @@ class SettingsNavigationTest {
                 }
                 if (television && category == SettingsCategory.GENERAL) {
                     instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_DPAD_RIGHT)
-                    repeat(5) {
+                    repeat(4) {
                         instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_DPAD_DOWN)
                         instrumentation.waitForIdleSync()
                     }
                     Thread.sleep(300)
                     instrumentation.runOnMainSync {
-                        assertEquals("setting:Mode de l’application", activity.currentFocus?.tag)
+                        assertEquals("setting:Mises à jour", activity.currentFocus?.tag)
                         val visible = android.graphics.Rect()
                         assertTrue(activity.currentFocus!!.getGlobalVisibleRect(visible))
                         assertTrue(visible.height() >= activity.currentFocus!!.height - 2)
@@ -89,6 +91,42 @@ class SettingsNavigationTest {
                 }
             }
             assertEquals(0, monitor.hits)
+            instrumentation.runOnMainSync {
+                activity.window.decorView.findViewWithTag<View>("category:general").requestFocusFromTouch()
+            }
+            if (activity.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_TYPE_MASK ==
+                android.content.res.Configuration.UI_MODE_TYPE_TELEVISION) {
+                instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_DPAD_DOWN)
+                instrumentation.waitForIdleSync()
+                instrumentation.runOnMainSync { assertEquals("setting:change-mode", activity.currentFocus?.tag) }
+            }
+            val modeMonitor = instrumentation.addMonitor(ModeActivity::class.java.name, null, false)
+            try {
+                instrumentation.runOnMainSync {
+                    activity.window.decorView.findViewWithTag<View>("setting:change-mode").performClick()
+                }
+                val chooser = instrumentation.waitForMonitorWithTimeout(modeMonitor, 3000)
+                assertNotNull(chooser)
+                instrumentation.waitForIdleSync()
+                instrumentation.runOnMainSync {
+                    val mode = com.pluxy.server.ApplicationMode.read(chooser)
+                    for (value in com.pluxy.server.ApplicationMode.entries) {
+                        val button = chooser.window.decorView.findViewWithTag<android.widget.Button>("mode:${value.key}")
+                        assertNotNull(button.compoundDrawablesRelative[0])
+                        assertEquals(mode == value, button.compoundDrawablesRelative[2] != null)
+                    }
+                }
+                Thread.sleep(400)
+                instrumentation.uiAutomation.takeScreenshot()?.let { image ->
+                    java.io.File(activity.getExternalFilesDir(null), "settings-mode-chooser.png").outputStream().use {
+                        image.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
+                    }
+                    image.recycle()
+                }
+                instrumentation.runOnMainSync { chooser.finish() }
+            } finally {
+                instrumentation.removeMonitor(modeMonitor)
+            }
         } finally {
             instrumentation.removeMonitor(monitor)
             instrumentation.runOnMainSync { activity.finish() }
