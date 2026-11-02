@@ -1,6 +1,6 @@
 package com.pluxy.tv.player
 
-/** One automatic jump per segment kind and media, including after a player rebuild. */
+/** One automatic jump per kind and media, rearmed when automatic skipping is disabled. */
 class AutoSkipPolicy {
     private var owner = ""
     private val handled = mutableSetOf<String>()
@@ -16,6 +16,7 @@ class AutoSkipPolicy {
 
     fun target(itemId: String, segment: SkipSegment?, enabled: Boolean, canSkip: Boolean): Long? {
         if (owner != itemId) { owner = itemId; handled.clear() }
+        if (!enabled && segment != null) handled -= segment.kind
         if (!enabled || !canSkip || segment == null || segment.kind !in setOf("intro", "credits") ||
             segment.startMs < 0 || segment.endMs <= segment.startMs || segment.kind in handled) return null
         mark(itemId, segment.kind)

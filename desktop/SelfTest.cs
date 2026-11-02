@@ -93,6 +93,10 @@ namespace Pluxy {
             Check(auto.Target("one",opening,true,true)==40000 && !auto.Target("one",opening,true,true).HasValue,"L’intro est passée une seule fois, même après un retour arrière");
             Check(auto.Target("one",new SkipSegment {kind="credits",startMs=900000,endMs=950000},true,true)==950000,"Le passage du générique conserve la scène après le générique");
             Check(auto.Target("two",opening,true,true)==40000,"L’épisode suivant dispose de son propre passage automatique");
+            var toggle=new AutoSkipPolicy();
+            Check(toggle.Target("one",opening,true,true)==40000 && !toggle.Target("one",opening,true,true).HasValue &&
+                !toggle.Target("one",opening,false,true).HasValue && toggle.Target("one",opening,true,true)==40000,
+                "Réactiver le passage automatique réarme le passage sans boucler lorsque le réglage reste actif");
             var skipPrefs=Native.Json.Deserialize<Preferences>("{}");
             Check(skipPrefs.autoSkipSegments,"Le passage automatique est activé par défaut pour les anciennes préférences");
             skipPrefs.autoSkipSegments=false; skipPrefs.StoreReader("server","default"); skipPrefs.ApplyReader("server","other");
@@ -112,6 +116,10 @@ namespace Pluxy {
                 new Dictionary<string,object>{{"title","Générique de fin"},{"start_ms",900000},{"end_ms",950000}},
                 new Dictionary<string,object>{{"title","Post credits"},{"start_ms",950000},{"end_ms",1000000}}};
             var detected=SkipSegments.Detect(chapters,1000000);
+            var realCredits=SkipSegments.Detect(new object[]{new Dictionary<string,object>{{"title","Ending credits"},{"start_ms",3173382},{"end_ms",3207416}}},3211392);
+            Check(realCredits.Count==1 && realCredits[0].kind=="credits" && realCredits[0].endMs==3207416 && !SkipSegments.IsFinalCredits(realCredits[0],3211392),"Les chapitres Ending credits des épisodes réels sont reconnus sans supprimer la scène suivante");
+            var roundedCredits=SkipSegments.Detect(new object[]{new Dictionary<string,object>{{"title","Ending credits"},{"start_ms",900000},{"end_ms",1000001}}},1000000);
+            Check(roundedCredits.Count==1 && roundedCredits[0].endMs==1000000,"Un milliseconde d'écart de durée ne masque pas le générique");
             var paired=SkipSegments.Detect(new object[]{new Dictionary<string,object>{{"title","openCreditStart"},{"start_ms",237405},{"end_ms",339405}},
                 new Dictionary<string,object>{{"title","openCreditEnd"},{"start_ms",339405},{"end_ms",500000}}},3200000);
             Check(paired.Count==1 && paired[0].endMs==339405 && SkipSegments.Active(paired,340000)==null,"Les marqueurs de début et fin ne débordent pas sur la scène suivante");

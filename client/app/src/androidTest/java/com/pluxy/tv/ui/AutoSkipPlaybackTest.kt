@@ -118,6 +118,19 @@ class AutoSkipPlaybackTest {
                 assertTrue(player().currentPosition<24_000)
                 assertNotEquals(Player.STATE_ENDED,player().playbackState)
             }
+            instrumentation.runOnMainSync {
+                PluxyApplication.setAutoSkipCredits(context,false)
+                seek.invoke(activity,18_300L)
+            }
+            awaitCondition("Rewinding to the credits must finish") { player().playbackState==Player.STATE_READY && player().currentPosition>=18_200 && player().currentPosition<20_000 }
+            instrumentation.runOnMainSync {
+                PlayerActivity::class.java.getDeclaredMethod("updateSkipSegment").apply { isAccessible=true }.invoke(activity)
+                assertEquals(View.VISIBLE,activity.findViewById<View>(com.pluxy.tv.R.id.skipSegment).visibility)
+                events.clear()
+                PluxyApplication.setAutoSkipCredits(context,true)
+                player().play()
+            }
+            awaitCondition("Re-enabling automatic credits must skip them again") { events.any { it in 20_900..21_200 } }
         } finally {
             PluxyApplication.setAutoSkipIntros(context,introBefore)
             PluxyApplication.setAutoSkipCredits(context,creditsBefore)

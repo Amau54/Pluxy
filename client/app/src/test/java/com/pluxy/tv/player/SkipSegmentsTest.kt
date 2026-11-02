@@ -4,6 +4,20 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class SkipSegmentsTest {
+    @Test fun `real episode ending credits preserve the following scene`() {
+        val result = SkipSegments.detected(listOf(MediaChapter(3173382, 3207416, "Ending credits"),
+            MediaChapter(3207416, 3211392, "Scene 2")), 3211392)
+        assertEquals(SkipSegment("credits", 3173382, 3207416), result.single())
+        assertFalse(SkipSegments.isFinalCredits(result.single(), 3211392))
+        assertNull(SkipSegments.active(result, 3207416))
+    }
+    @Test fun `small container duration differences do not hide credits`() {
+        val result = SkipSegments.detected(listOf(MediaChapter(900000, 1000001, "Ending credits")), 1000000)
+        assertEquals(SkipSegment("credits", 900000, 1000000), result.single())
+        assertTrue(SkipSegments.detected(listOf(MediaChapter(900000, 1000251, "Ending credits")), 1000000).isEmpty())
+        assertTrue(SkipSegments.detected(listOf(MediaChapter(1000001, 1000002, "Ending credits")), 1000000).isEmpty())
+        assertTrue(SkipSegments.detected(listOf(MediaChapter(0, 1, "Ending credits")), 0).isEmpty())
+    }
     @Test fun `short intros are not offered but eight seconds and credits are`() {
         assertFalse(SkipSegments.offer(null))
         assertFalse(SkipSegments.offer(SkipSegment("intro", 1000, 8999)))

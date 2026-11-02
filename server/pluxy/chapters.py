@@ -23,10 +23,14 @@ def skip_chapters(chapters, duration: float) -> list[dict]:
         title = re.sub(r'^\d+', '', re.sub('[^a-z0-9]', '', title))
         kind = ('Opening' if title in {'intro', 'introduction', 'opening', 'openingcredits', 'generiquedebut', 'generiquededebut',
                                       'opencreditstart', 'openingcreditstart', 'openingcreditsstart', 'introstart'} else
-                'End credits' if title in {'credits', 'endcredits', 'closingcredits', 'ending', 'outro', 'generiquefin', 'generiquedefin',
+                'End credits' if title in {'credits', 'endcredits', 'endingcredits', 'closingcredits', 'ending', 'outro', 'generiquefin', 'generiquedefin',
                                           'endcreditstart', 'endcreditsstart', 'creditsstart'} else None)
         start, end = row['start_ms'], row['end_ms']
-        if not kind or start < 0 or end <= start or end > round(duration * 1000):
+        limit = round(duration * 1000)
+        if not kind or limit <= 0 or start < 0 or end <= start or end > limit + 250:
+            continue
+        end = min(end, limit)
+        if end <= start:
             continue
         if kind == 'Opening' and (start > 900000 or end > duration * 500 or end - start > 240000):
             continue

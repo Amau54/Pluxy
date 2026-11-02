@@ -10,11 +10,13 @@ namespace Pluxy {
         }
         internal long? Target(string id,SkipSegment segment,bool enabled,bool canSkip) {
             if(owner!=id) { owner=id; handled.Clear(); }
+            if(!enabled && segment!=null) handled.Remove(segment.kind);
             if(!enabled || !canSkip || segment==null || (segment.kind!="intro" && segment.kind!="credits") ||
                 segment.startMs<0 || segment.endMs<=segment.startMs || handled.Contains(segment.kind)) return null;
             Mark(id,segment.kind);
             return segment.endMs;
         }
         internal static int ProbeDelay(int attempt) { return attempt<10?6000:attempt<30?15000:30000; }
+        internal void Unmark(string id,string kind) { if(owner==id) handled.Remove(kind); }
     }
 }

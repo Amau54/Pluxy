@@ -4,6 +4,15 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class AutoSkipPolicyTest {
+    @Test fun enablingAutomaticSkippingAgainRearmsTheCurrentCreditsOnly() {
+        val policy = AutoSkipPolicy()
+        assertEquals(40_000L, policy.target("one", intro, true, true))
+        assertEquals(950_000L, policy.target("one", credits, true, true))
+        assertNull(policy.target("one", credits, true, true))
+        assertNull(policy.target("one", credits, false, true))
+        assertEquals(950_000L, policy.target("one", credits, true, true))
+        assertNull(policy.target("one", intro, true, true))
+    }
     @Test fun skippingIsOnlyAvailableForSeries() {
         assertTrue(SkipSegments.supportsKind("series"))
         for (kind in listOf("movie", "clip", "audio", "photo", "", "unknown")) assertFalse(SkipSegments.supportsKind(kind))

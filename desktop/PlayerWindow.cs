@@ -384,7 +384,7 @@ namespace Pluxy {
         private async Task LoadAutomaticSegments(string ownerId,string ownerServer,object[] nativeChapters,System.Threading.CancellationToken token) {
             if(!SkipSegments.SupportsKind(Native.Text(media,"kind"))) return;
             try {
-                for(int attempt=0;attempt<80;attempt++) {
+                for(int attempt=0;!token.IsCancellationRequested;attempt=Math.Min(attempt+1,80)) {
                     token.ThrowIfCancellationRequested();
                     object[] chapters=null;
                     try { chapters=await api.Chapters(ownerServer,ownerId); }
@@ -464,6 +464,7 @@ namespace Pluxy {
                 var skip=new ToolStripMenuItem(key=="intro"?"Passer automatiquement les intros":"Passer automatiquement les génériques") { Checked=key=="intro"?autoSkipIntros:autoSkipCredits,CheckOnClick=true };
                 skip.CheckedChanged+=(s,e)=> {
                     if(key=="intro") autoSkipIntros=skip.Checked; else autoSkipCredits=skip.Checked;
+                    if(skip.Checked) autoSkipPolicy.Unmark(id,key);
                     var preferences=Preferences.Load(); preferences.autoSkipIntros=autoSkipIntros; preferences.autoSkipCredits=autoSkipCredits;
                     preferences.StoreReader(server,profile); preferences.Save();
                     UpdateSkip();

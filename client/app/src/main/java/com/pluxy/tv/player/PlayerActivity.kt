@@ -90,6 +90,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -1440,7 +1441,8 @@ class PlayerActivity : ThemedActivity() {
         skipChaptersJob = lifecycleScope.launch {
             val chapterApi = PluxyApi(server)
             try {
-                repeat(AutoSkipPolicy.PROBE_ATTEMPTS) { attempt ->
+                var attempt = 0
+                while (isActive) {
                     val chapters = try {
                         kotlinx.coroutines.withTimeout(10_000) { chapterApi.chapters(ownerId) }
                     } catch (_: kotlinx.coroutines.TimeoutCancellationException) { null }
@@ -1453,6 +1455,7 @@ class PlayerActivity : ThemedActivity() {
                         if (SkipSegments.detected(chapters, skipDurationMs).map { it.kind }.toSet().size == 2) return@launch
                     }
                     kotlinx.coroutines.delay(AutoSkipPolicy.probeDelayMs(attempt))
+                    attempt = (attempt + 1).coerceAtMost(AutoSkipPolicy.PROBE_ATTEMPTS)
                 }
             } catch (e: kotlinx.coroutines.TimeoutCancellationException) { /* Chapitres facultatifs. */ }
             catch (e: CancellationException) { throw e }
@@ -1499,10 +1502,12 @@ class PlayerActivity : ThemedActivity() {
         val entries = listOf(
             "Intros automatiques : ${if (PluxyApplication.autoSkipIntros(this)) "activé" else "désactivé"}" to {
                 PluxyApplication.setAutoSkipIntros(this, !PluxyApplication.autoSkipIntros(this))
+                if (PluxyApplication.autoSkipIntros(this)) autoSkipPolicy.unmark(item.id, "intro")
                 updateSkipSegment()
             },
             "Génériques automatiques : ${if (PluxyApplication.autoSkipCredits(this)) "activé" else "désactivé"}" to {
                 PluxyApplication.setAutoSkipCredits(this, !PluxyApplication.autoSkipCredits(this))
+                if (PluxyApplication.autoSkipCredits(this)) autoSkipPolicy.unmark(item.id, "credits")
                 updateSkipSegment()
             },
             "Vitesse" to { pickSpeed() },

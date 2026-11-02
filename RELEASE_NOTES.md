@@ -1,3 +1,10 @@
+## Windows 1.8.37 · Android 1.7.48
+
+- Reconnaissance des chapitres « Ending credits », présents dans des épisodes réels mais ignorés jusque-là par le passage automatique et le bouton manuel. Les scènes placées après ces chapitres restent conservées.
+- Réactiver le mode automatique permet de passer de nouveau le générique courant, même après un premier passage et un retour arrière.
+- Tolérance de 250 ms entre la durée du fichier et la fin d’un chapitre, pour ne pas écarter un générique à cause d’un arrondi.
+- Vérification des analyses tardives pendant toute la lecture, sans arrêt après environ trente minutes. Les vérifications cessent dès que les deux repères sont connus ou à la fermeture du lecteur.
+
 ## Android 1.7.47
 
 - Surveillance du rendu vidéo pendant que l’horloge de lecture avance, même lorsque le lecteur ne signale aucune mise en tampon.

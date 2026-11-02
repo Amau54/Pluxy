@@ -43,10 +43,11 @@ namespace Pluxy {
                 title=Regex.Replace(Regex.Replace(title,"[^a-z0-9]+"," ").Trim(),"^\\d+ ","");
                 string compact=title.Replace(" ","");
                 string kind=new[]{"intro","introduction","opening","openingcredits","generiquedebut","generiquededebut","opencreditstart","openingcreditstart","openingcreditsstart","introstart"}.Contains(compact)?"intro":
-                    new[]{"credits","endcredits","closingcredits","ending","outro","generiquefin","generiquedefin","endcreditstart","endcreditsstart","creditsstart"}.Contains(compact)?"credits":null;
+                    new[]{"credits","endcredits","endingcredits","closingcredits","ending","outro","generiquefin","generiquedefin","endcreditstart","endcreditsstart","creditsstart"}.Contains(compact)?"credits":null;
                 double a=Native.Number(row,"start_ms",-1),b=Native.Number(row,"end_ms",-1);
-                if(kind==null || double.IsNaN(a) || double.IsInfinity(a) || double.IsNaN(b) || double.IsInfinity(b) || a<0 || b<=a || b>duration) continue;
-                long start=(long)a,end=(long)b;
+                if(kind==null || duration<=0 || double.IsNaN(a) || double.IsInfinity(a) || double.IsNaN(b) || double.IsInfinity(b) || a<0 || b<=a || (b>duration && b-duration>250)) continue;
+                long start=(long)a,end=(long)Math.Min(b,duration);
+                if(end<=start) continue;
                 if(kind=="intro" && (start>900000 || end>duration/2 || end-start>240000)) continue;
                 if(kind=="credits" && (start<duration/2 || end-start>1200000)) continue;
                 result.Add(new SkipSegment {kind=kind,startMs=start,endMs=end});

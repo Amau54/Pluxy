@@ -36,14 +36,17 @@ object SkipSegments {
         val kind = when (title.replace(" ", "")) {
             "intro", "introduction", "opening", "openingcredits", "generiquedebut", "generiquededebut",
             "opencreditstart", "openingcreditstart", "openingcreditsstart", "introstart" -> "intro"
-            "credits", "endcredits", "closingcredits", "ending", "outro", "generiquefin", "generiquedefin",
+            "credits", "endcredits", "endingcredits", "closingcredits", "ending", "outro", "generiquefin", "generiquedefin",
             "endcreditstart", "endcreditsstart", "creditsstart" -> "credits"
             else -> return@mapNotNull null
         }
-        if (chapter.startMs < 0 || chapter.endMs <= chapter.startMs || chapter.endMs > durationMs) return@mapNotNull null
-        if (kind == "intro" && (chapter.startMs > 900_000 || chapter.endMs > durationMs / 2 || chapter.endMs - chapter.startMs > 240_000)) return@mapNotNull null
-        if (kind == "credits" && (chapter.startMs < durationMs / 2 || chapter.endMs - chapter.startMs > 1_200_000)) return@mapNotNull null
-        SkipSegment(kind, chapter.startMs, chapter.endMs)
+        if (durationMs <= 0 || chapter.startMs < 0 || chapter.endMs <= chapter.startMs ||
+            chapter.endMs > durationMs && chapter.endMs - durationMs > 250) return@mapNotNull null
+        val endMs = minOf(chapter.endMs, durationMs)
+        if (endMs <= chapter.startMs) return@mapNotNull null
+        if (kind == "intro" && (chapter.startMs > 900_000 || endMs > durationMs / 2 || endMs - chapter.startMs > 240_000)) return@mapNotNull null
+        if (kind == "credits" && (chapter.startMs < durationMs / 2 || endMs - chapter.startMs > 1_200_000)) return@mapNotNull null
+        SkipSegment(kind, chapter.startMs, endMs)
     }
     fun merge(detected: List<SkipSegment>, manual: List<SkipSegment>): List<SkipSegment> =
         manual + detected.filter { auto -> manual.none { it.kind == auto.kind } }

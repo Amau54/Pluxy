@@ -1,7 +1,23 @@
 from types import SimpleNamespace
 import json
 
-from pluxy.chapters import parse_chapters, read_chapters
+from pluxy.chapters import parse_chapters, read_chapters, skip_chapters
+
+
+def test_real_episode_ending_credits_are_used_without_reanalyzing_the_video():
+    rows = [{"start_ms": 306306, "end_ms": 373400, "title": "Introduction"},
+            {"start_ms": 373400, "end_ms": 3173382, "title": "Scene 1"},
+            {"start_ms": 3173382, "end_ms": 3207416, "title": "Ending credits"},
+            {"start_ms": 3207416, "end_ms": 3211392, "title": "Scene 2"}]
+    assert skip_chapters(rows, 3211.392) == [
+        {"start_ms": 306306, "end_ms": 373400, "title": "Opening"},
+        {"start_ms": 3173382, "end_ms": 3207416, "title": "End credits"}]
+
+
+def test_chapter_end_tolerates_small_container_duration_differences_only():
+    row = {"start_ms": 900000, "end_ms": 1000001, "title": "Ending credits"}
+    assert skip_chapters([row], 1000) == [{**row, "end_ms": 1000000, "title": "End credits"}]
+    assert skip_chapters([{**row, "end_ms": 1000251}], 1000) == []
 
 
 def test_only_valid_bounded_chapters_are_public():
