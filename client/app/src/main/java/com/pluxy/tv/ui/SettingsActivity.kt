@@ -12,6 +12,7 @@ import android.widget.TextView
 import com.pluxy.tv.ui.InAppNotice as Toast
 import androidx.appcompat.widget.SwitchCompat
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.view.ViewCompat
 import androidx.lifecycle.lifecycleScope
 import com.pluxy.tv.PluxyApplication
 import com.pluxy.tv.R
@@ -22,7 +23,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 /**
- * Réglages TV volontairement courts : connexion, préférences de lecture et bibliothèque.
+ * Réglages regroupés dans Lecture, Affichage et Général, sans sous-menus intermédiaires.
  * Les paramètres de transcodage et de serveur restent du ressort du serveur Pluxy.
  */
 class SettingsActivity : ThemedActivity() {
@@ -129,8 +130,13 @@ class SettingsActivity : ThemedActivity() {
             setPadding(safeSide, 0, if (television) 0 else safeSide, 0)
             addView(navigation, LinearLayout.LayoutParams(if (television) dp(192) else -1, -2))
             if (television) {
-                rows.setPadding(dp(24), dp(24), safeSide, dp(24))
-                addView(scroll, LinearLayout.LayoutParams(0, -1, 1f))
+                rows.setPadding(dp(24), 0, safeSide, 0)
+                scroll.clipChildren = true
+                scroll.clipToPadding = true
+                addView(scroll, LinearLayout.LayoutParams(0, -1, 1f).apply {
+                    topMargin = dp(24)
+                    bottomMargin = dp(24)
+                })
             } else {
                 rows.setPadding(0, dp(8), 0, dp(24))
                 addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
@@ -169,16 +175,25 @@ class SettingsActivity : ThemedActivity() {
         while (rows.childCount > 2) rows.removeViewAt(2)
         val configured = PluxyApplication.isConfigured(this)
         (rows.getChildAt(0) as TextView).text = category.label
-        statusView.visibility = if (category == SettingsCategory.CONNECTION) View.VISIBLE else View.GONE
+        statusView.visibility = View.GONE
         statusView.text = if (configured) PluxyApplication.serverName(this) else "Aucun serveur configuré"
         when (category) {
-            SettingsCategory.CONNECTION -> renderConnection(configured)
             SettingsCategory.PLAYBACK -> renderPlayback()
-            SettingsCategory.APPEARANCE -> renderAppearance()
-            SettingsCategory.LIBRARY -> renderLibrary(configured)
-            SettingsCategory.PROFILES -> renderProfiles(configured)
-            SettingsCategory.ACCESSIBILITY -> renderAccessibility()
-            SettingsCategory.APPLICATION -> renderApplication()
+            SettingsCategory.APPEARANCE -> {
+                renderAppearance()
+                sectionHeading("Bibliothèque")
+                renderLibrary(configured)
+            }
+            SettingsCategory.GENERAL -> {
+                sectionHeading("Connexion")
+                renderConnection(configured)
+                sectionHeading("Profils")
+                renderProfiles(configured)
+                sectionHeading("Accessibilité")
+                renderAccessibility()
+                sectionHeading("Application")
+                renderApplication()
+            }
         }
         addClose()
     }
@@ -379,6 +394,17 @@ class SettingsActivity : ThemedActivity() {
     }
 
     // ---- Lignes ---------------------------------------------------------- //
+    private fun sectionHeading(label: String) {
+        rows.addView(TextView(this).apply {
+            tag = "section:$label"
+            text = label
+            textSize = if (television) 15f else 13f
+            typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
+            setTextColor(pluxyColor(R.color.text_secondary))
+            setPadding(dp(10), if (rows.childCount > 2) dp(18) else dp(8), dp(10), dp(8))
+            ViewCompat.setAccessibilityHeading(this, true)
+        }, lp())
+    }
     private fun title(text: String) {
         rows.addView(TextView(this).apply {
             this.text = text

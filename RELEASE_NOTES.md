@@ -1,3 +1,9 @@
+## Android 1.7.49
+
+- Paramètres réduits à trois entrées : Lecture, Affichage et Général.
+- Bibliothèque regroupée dans Affichage. Connexion, Profils, Accessibilité et Application réunis dans Général, avec des sections directement accessibles et sans sous-menu supplémentaire.
+- Les anciens liens vers ces réglages ouvrent leur nouvelle rubrique.
+
 ## Windows 1.8.37 · Android 1.7.48
 
 - Reconnaissance des chapitres « Ending credits », présents dans des épisodes réels mais ignorés jusque-là par le passage automatique et le bouton manuel. Les scènes placées après ces chapitres restent conservées.
