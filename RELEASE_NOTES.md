@@ -1,3 +1,7 @@
+## Android 1.7.51
+
+- Pendant le déplacement du curseur, la vignette apparaît dès qu’une image valide est prête. Si l’image manque, seul le temps s’affiche.
+
 ## Android 1.7.50
 
 - « Changer de mode » reste accessible en bas des réglages, avec une icône et le mode actuel. La ligne en double dans Général est retirée.

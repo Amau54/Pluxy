@@ -343,13 +343,14 @@ class PlaybackEndErgonomicsTest {
             }
         }
     }
-    @Test fun sliderPreviewWaitsForASlowBackgroundCaptureInsteadOfDisappearing() = withPlayer { activity ->
+    @Test fun sliderPreviewStaysHiddenUntilTheImageIsReady() = withPlayer { activity ->
         val delayMs = InstrumentationRegistry.getArguments().getString("preview_test_delay_ms")?.toLongOrNull() ?: 0L
         assumeTrue("Requires delayed preview fixture", delayMs > 0)
         val started = SystemClock.elapsedRealtime()
         instrumentation.runOnMainSync {
             PlayerActivity::class.java.getDeclaredMethod("showScrubPreview", Long::class.javaPrimitiveType)
                 .apply { isAccessible = true }.invoke(activity, 12_000L)
+            assertEquals(View.GONE, activity.findViewById<ImageView>(R.id.seekPreviewImage).visibility)
         }
         await("A stationary slider must still receive its image after slow background preparation") {
             activity.findViewById<ImageView>(R.id.seekPreviewImage).let { it.isShown && it.drawable != null && it.alpha == 1f }

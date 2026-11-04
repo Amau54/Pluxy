@@ -372,13 +372,12 @@ class PlayerActivity : ThemedActivity() {
         val image = findViewById<ImageView>(R.id.seekPreviewImage)
         if (bucket != seekPreviewBucket) {
             seekPreviewBucket = bucket
-            image.alpha = 0.55f
-            image.visibility = View.VISIBLE
+            image.visibility = View.GONE
+            image.setImageDrawable(null)
         }
         val key = "${api.baseUrl}:${item.id}:$bucket"
         seekPreviewCache.get(key)?.let {
             image.setImageBitmap(it)
-            image.alpha = 1f
             image.visibility = View.VISIBLE
             return
         }
@@ -401,7 +400,6 @@ class PlayerActivity : ThemedActivity() {
                 if (bitmap != null) {
                     Logger.log("preview", "image prête $requested")
                     image.setImageBitmap(bitmap)
-                    image.alpha = 1f
                     image.visibility = View.VISIBLE
                 } else {
                     Logger.log("preview", "image indisponible $requested")
