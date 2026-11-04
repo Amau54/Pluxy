@@ -343,21 +343,36 @@ class PlaybackEndErgonomicsTest {
             }
         }
     }
-    @Test fun sliderPreviewStaysHiddenUntilTheImageIsReady() = withPlayer { activity ->
+    @Test fun sliderPreviewKeepsLastFrameUntilReplacementIsReady() = withPlayer { activity ->
         val delayMs = InstrumentationRegistry.getArguments().getString("preview_test_delay_ms")?.toLongOrNull() ?: 0L
         assumeTrue("Requires delayed preview fixture", delayMs > 0)
         val started = SystemClock.elapsedRealtime()
+        val showPreview = PlayerActivity::class.java.getDeclaredMethod("showScrubPreview", Long::class.javaPrimitiveType)
+            .apply { isAccessible = true }
         instrumentation.runOnMainSync {
-            PlayerActivity::class.java.getDeclaredMethod("showScrubPreview", Long::class.javaPrimitiveType)
-                .apply { isAccessible = true }.invoke(activity, 12_000L)
+            showPreview.invoke(activity, 12_000L)
             assertEquals(View.GONE, activity.findViewById<ImageView>(R.id.seekPreviewImage).visibility)
         }
         await("A stationary slider must still receive its image after slow background preparation") {
             activity.findViewById<ImageView>(R.id.seekPreviewImage).let { it.isShown && it.drawable != null && it.alpha == 1f }
         }
         assertTrue("The fixture must really delay the image", SystemClock.elapsedRealtime() - started >= delayMs - 500)
-        capture("tv-slider-slow-thumbnail.png")
-        instrumentation.runOnMainSync { call(activity, "dismissSeekOverlay") }
+        val image = activity.findViewById<ImageView>(R.id.seekPreviewImage)
+        lateinit var firstFrame: android.graphics.drawable.Drawable
+        instrumentation.runOnMainSync {
+            firstFrame = image.drawable
+            showPreview.invoke(activity, 22_000L)
+            assertTrue(image.isShown)
+            assertSame(firstFrame, image.drawable)
+        }
+        await("The next position must replace the previous image") {
+            image.isShown && image.drawable != null && image.drawable !== firstFrame
+        }
+        instrumentation.runOnMainSync {
+            call(activity, "dismissSeekOverlay")
+            assertEquals(View.GONE, image.visibility)
+            assertNull(image.drawable)
+        }
     }
     private fun seekBeforeEnd(activity: PlayerActivity, remainingMs: Long) {
         instrumentation.runOnMainSync {

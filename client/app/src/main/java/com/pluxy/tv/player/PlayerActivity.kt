@@ -370,11 +370,8 @@ class PlayerActivity : ThemedActivity() {
     private fun requestSeekPreview(positionMs: Long) {
         val bucket = positionMs.coerceAtLeast(0) / 10_000 * 10_000
         val image = findViewById<ImageView>(R.id.seekPreviewImage)
-        if (bucket != seekPreviewBucket) {
-            seekPreviewBucket = bucket
-            image.visibility = View.GONE
-            image.setImageDrawable(null)
-        }
+        // Keep the last decoded frame until its replacement is ready or scrubbing ends.
+        seekPreviewBucket = bucket
         val key = "${api.baseUrl}:${item.id}:$bucket"
         seekPreviewCache.get(key)?.let {
             image.setImageBitmap(it)
@@ -434,6 +431,7 @@ class PlayerActivity : ThemedActivity() {
                 }
                 if (bitmap != null) { seekPreviewCache.put(key, bitmap); return bitmap }
             }
+            if (!stillWanted()) return null
             delay(350)
         }
         return null

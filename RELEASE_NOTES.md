@@ -1,3 +1,7 @@
+## Android 1.7.52
+
+- Pendant le déplacement du curseur, la dernière vignette reste visible jusqu’à ce que la suivante soit prête.
+
 ## Android 1.7.51
 
 - Pendant le déplacement du curseur, la vignette apparaît dès qu’une image valide est prête. Si l’image manque, seul le temps s’affiche.
