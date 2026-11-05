@@ -1,3 +1,7 @@
+## Android 1.7.53
+
+- Le lecteur précharge les vignettes proches quand la lecture dispose d’assez de vidéo en réserve. Les images déjà en mémoire s’affichent immédiatement au déplacement du curseur.
+
 ## Android 1.7.52
 
 - Pendant le déplacement du curseur, la dernière vignette reste visible jusqu’à ce que la suivante soit prête.

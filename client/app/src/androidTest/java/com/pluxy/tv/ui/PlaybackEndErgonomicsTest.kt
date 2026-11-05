@@ -374,6 +374,24 @@ class PlaybackEndErgonomicsTest {
             assertNull(image.drawable)
         }
     }
+    @Test fun nearbySeekPreviewIsReadyBeforeTheSliderMoves() = withPlayer { activity ->
+        val delayMs = InstrumentationRegistry.getArguments().getString("preview_test_delay_ms")?.toLongOrNull() ?: 0L
+        assumeTrue("Requires delayed preview fixture", delayMs > 0)
+        val cache = field(activity, "seekPreviewCache") as android.util.LruCache<*, *>
+        instrumentation.runOnMainSync { (field(activity, "player") as Player).play() }
+        await("Playback must preload the first forward preview") {
+            cache.snapshot().keys.any { it.toString().endsWith(":10000") }
+        }
+        instrumentation.runOnMainSync {
+            (field(activity, "player") as Player).pause()
+            PlayerActivity::class.java.getDeclaredMethod("showScrubPreview", Long::class.javaPrimitiveType)
+                .apply { isAccessible = true }.invoke(activity, 12_000L)
+            val image = activity.findViewById<ImageView>(R.id.seekPreviewImage)
+            assertTrue("Cached preview must be visible on the same UI turn", image.isShown)
+            assertNotNull(image.drawable)
+        }
+    }
+
     private fun seekBeforeEnd(activity: PlayerActivity, remainingMs: Long) {
         instrumentation.runOnMainSync {
             val player = field(activity, "player") as Player

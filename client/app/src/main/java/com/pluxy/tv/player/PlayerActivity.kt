@@ -263,6 +263,7 @@ class PlayerActivity : ThemedActivity() {
                 updateMediaSessionPlaybackState()
                 maybeRecoverQuality()
                 checkVideoRendering(p)
+                warmNearbySeekPreviews(p, pos)
                 updateSkipSegment()
                 offerNextEpisode()
             }
@@ -363,12 +364,13 @@ class PlayerActivity : ThemedActivity() {
     private var seekPreviewJob: Job? = null
     private var seekPreviewBucket = -1L
     private var seekPreviewWarmupJob: Job? = null
+    private var seekPreviewWarmupAfterMs = 0L
     private var seekPreviewFailedKey: String? = null
     private var seekPreviewRetryAfterMs = 0L
     private val seekPreviewCache = android.util.LruCache<String, Bitmap>(12)
 
     private fun requestSeekPreview(positionMs: Long) {
-        val bucket = positionMs.coerceAtLeast(0) / 10_000 * 10_000
+        val bucket = seekPreviewBucketAt(positionMs)
         val image = findViewById<ImageView>(R.id.seekPreviewImage)
         // Keep the last decoded frame until its replacement is ready or scrubbing ends.
         seekPreviewBucket = bucket
@@ -382,7 +384,7 @@ class PlayerActivity : ThemedActivity() {
             (seekPreviewFailedKey == key && SystemClock.elapsedRealtime() < seekPreviewRetryAfterMs)) return
         seekPreviewWarmupJob?.cancel()
         seekPreviewJob = lifecycleScope.launch {
-            delay(120)
+            delay(60)
             while (seekOverlay.visibility == View.VISIBLE && activityStarted) {
                 val requested = seekPreviewBucket
                 val requestedItem = item.id
@@ -408,11 +410,17 @@ class PlayerActivity : ThemedActivity() {
         }
     }
 
+    private fun seekPreviewBucketAt(positionMs: Long): Long {
+        val end = skipDurationMs.takeIf { it > 0 }?.let { (it - 100).coerceAtLeast(0) } ?: Long.MAX_VALUE
+        return positionMs.coerceIn(0, end) / SEEK_PREVIEW_STEP_MS * SEEK_PREVIEW_STEP_MS
+    }
+
     private suspend fun loadSeekPreview(owner: PluxyApi, id: String, bucket: Long,
                                         stillWanted: () -> Boolean): Bitmap? {
         val key = "${owner.baseUrl}:$id:$bucket"
         seekPreviewCache.get(key)?.let { return it }
         val deadline = SystemClock.elapsedRealtime() + 10_000L
+        var retryDelay = 100L
         while (activityStarted && api === owner && item.id == id && stillWanted() &&
             SystemClock.elapsedRealtime() < deadline) {
             val bytes = try { owner.seekPreview(id, bucket) }
@@ -432,23 +440,33 @@ class PlayerActivity : ThemedActivity() {
                 if (bitmap != null) { seekPreviewCache.put(key, bitmap); return bitmap }
             }
             if (!stillWanted()) return null
-            delay(350)
+            delay(retryDelay)
+            retryDelay = (retryDelay * 2).coerceAtMost(350L)
         }
         return null
     }
 
-    private fun warmNextSeekPreview() {
-        seekPreviewWarmupJob?.cancel()
+    private fun canWarmSeekPreviews(p: ExoPlayer): Boolean =
+        activityStarted && player === p && p.isPlaying && p.playbackState == Player.STATE_READY &&
+            seekOverlay.visibility != View.VISIBLE && !isSeeking && !timelineScrubbing &&
+            pendingSeekTargetMs == null && p.bufferedPosition - p.currentPosition >= 3_000L
+
+    private fun warmNearbySeekPreviews(p: ExoPlayer, positionMs: Long) {
+        val now = SystemClock.elapsedRealtime()
+        if (now < seekPreviewWarmupAfterMs || seekPreviewWarmupJob?.isActive == true ||
+            !canWarmSeekPreviews(p) || skipDurationMs <= 0 ||
+            item.kind !in setOf("movie", "series", "clip")) return
         val owner = api
         val id = item.id
+        val center = seekPreviewBucketAt(positionMs)
+        val buckets = listOf(center + SEEK_PREVIEW_STEP_MS, center - SEEK_PREVIEW_STEP_MS,
+            center + 2 * SEEK_PREVIEW_STEP_MS).filter { it in 0 until skipDurationMs }
+        seekPreviewWarmupAfterMs = now + 15_000L
         seekPreviewWarmupJob = lifecycleScope.launch {
-            delay(1_500)
-            val p = player ?: return@launch
-            if (!p.isPlaying || seekOverlay.visibility == View.VISIBLE || isSeeking || timelineScrubbing ||
-                p.bufferedPosition - p.currentPosition < 3_000L || api !== owner || item.id != id) return@launch
-            val target = (absolutePositionMs() + 10_000L).coerceAtMost((skipDurationMs - 1_000L).coerceAtLeast(0L))
-            loadSeekPreview(owner, id, target / 10_000L * 10_000L) {
-                player?.isPlaying == true && seekOverlay.visibility != View.VISIBLE
+            for (bucket in buckets) {
+                if (!canWarmSeekPreviews(p) || api !== owner || item.id != id) break
+                // Stop the batch if the server or decoder cannot serve the first missing frame.
+                loadSeekPreview(owner, id, bucket) { canWarmSeekPreviews(p) } ?: break
             }
         }
     }
@@ -1656,6 +1674,7 @@ class PlayerActivity : ThemedActivity() {
     override fun onStop() {
         activityStarted = false
         seekPreviewWarmupJob?.cancel()
+        seekPreviewWarmupAfterMs = 0L
         setLoadingVisible(false)
         skipChaptersJob?.cancel()
         dismissSeekOverlay()
@@ -2365,7 +2384,7 @@ class PlayerActivity : ThemedActivity() {
                     // pour distinguer un vrai rebuffering réseau d'une reprise post-seek.
                     if (playStartedAtMs == 0L) playStartedAtMs = SystemClock.elapsedRealtime()
                     applyTrackChoices()
-                    warmNextSeekPreview()
+                    seekPreviewWarmupAfterMs = 0L
                 }
                 Player.STATE_ENDED -> {
                     setLoadingVisible(false)
@@ -3230,6 +3249,7 @@ class PlayerActivity : ThemedActivity() {
         // Délai d'auto-masquage des contrôles (assez long pour naviguer sereinement).
         private const val CONTROLLER_TIMEOUT_MS = 3_000
         private const val SEEK_PREVIEW_TICK_MS = 50L
+        private const val SEEK_PREVIEW_STEP_MS = 10_000L
         private const val SEEK_RELEASE_FALLBACK_MS = 900L
         private const val NEXT_EPISODE_DELAY_SECONDS = 5
         private const val NEXT_EPISODE_FETCH_ATTEMPTS = 2
