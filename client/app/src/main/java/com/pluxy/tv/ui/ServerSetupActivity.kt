@@ -1,5 +1,6 @@
 package com.pluxy.tv.ui
 
+import android.content.Intent
 import android.os.Bundle
 import android.content.res.Configuration
 import android.view.View
@@ -47,8 +48,12 @@ class ServerSetupActivity : ThemedActivity() {
 
         findViewById<Button>(R.id.rescan).setOnClickListener { runDiscovery() }
         findViewById<Button>(R.id.connectManual).setOnClickListener { connectManual() }
+        findViewById<View>(R.id.setupSettings).setOnClickListener {
+            startActivity(Intent(this, SettingsActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+        }
         findViewById<Button>(R.id.setupChangeMode).setOnClickListener {
-            startActivity(android.content.Intent(this, ModeActivity::class.java)
+            startActivity(Intent(this, ModeActivity::class.java)
                 .putExtra(com.pluxy.server.ApplicationMode.EXTRA_CHOOSE_MODE, true))
         }
         findViewById<android.widget.EditText>(R.id.manualIp).setOnEditorActionListener { input, action, _ ->
@@ -107,7 +112,7 @@ class ServerSetupActivity : ThemedActivity() {
                             servers.size,
                         )
                         servers.forEach { addServerButton(it) }
-                        list.getChildAt(0)?.requestFocus()
+                        if (currentFocus?.id != R.id.setupSettings) list.getChildAt(0)?.requestFocus()
                         return@launch
                     }
                 }

@@ -1,12 +1,41 @@
 package com.pluxy.tv.ui
 
 import android.content.Intent
+import android.view.KeyEvent
 import android.view.View
 import androidx.test.platform.app.InstrumentationRegistry
+import com.pluxy.tv.R
 import org.junit.Assert.*
 import org.junit.Test
 
 class SettingsNavigationTest {
+    @Test
+    fun settingsOpenFromTheServerSearchScreen() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val monitor = instrumentation.addMonitor(SettingsActivity::class.java.name, null, false)
+        val setup = instrumentation.startActivitySync(
+            Intent(instrumentation.targetContext, ServerSetupActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        )
+        try {
+            instrumentation.runOnMainSync {
+                val rescan = setup.findViewById<View>(R.id.rescan)
+                assertTrue(rescan.requestFocusFromTouch())
+                assertTrue(setup.findViewById<View>(R.id.setupSettings).isShown)
+            }
+            instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_UP)
+            instrumentation.waitForIdleSync()
+            instrumentation.runOnMainSync { assertEquals(R.id.setupSettings, setup.currentFocus?.id) }
+            instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_CENTER)
+            val settings = instrumentation.waitForMonitorWithTimeout(monitor, 5_000)
+            assertNotNull("Settings must open without selecting a server", settings)
+            instrumentation.runOnMainSync { settings.finish() }
+        } finally {
+            instrumentation.removeMonitor(monitor)
+            instrumentation.runOnMainSync { setup.finish() }
+        }
+    }
+
     @Test
     fun categoriesStayOnOneScreenWithoutAnOptionsActivityStack() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()

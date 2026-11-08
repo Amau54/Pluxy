@@ -1,3 +1,7 @@
+## Android 1.7.54
+
+- Les réglages sont accessibles depuis l’écran de recherche de serveur, même sans connexion.
+
 ## Android 1.7.53
 
 - Le lecteur précharge les vignettes proches quand la lecture dispose d’assez de vidéo en réserve. Les images déjà en mémoire s’affichent immédiatement au déplacement du curseur.

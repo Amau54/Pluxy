@@ -38,8 +38,8 @@ android {
         applicationId = "com.pluxy.tv"
         minSdk = 23            // Android TV 6.0+ ET mobile (Android 6+)
         targetSdk = 36
-        versionCode = 107
-        versionName = "1.7.53"
+        versionCode = 108
+        versionName = "1.7.54"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
