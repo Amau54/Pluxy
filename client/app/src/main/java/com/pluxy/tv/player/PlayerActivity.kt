@@ -908,7 +908,19 @@ class PlayerActivity : ThemedActivity() {
         }
     }
 
+    @Suppress("DEPRECATION")
     private fun setupImmersivePlayback() {
+        window.setBackgroundDrawableResource(android.R.color.black)
+        window.statusBarColor = Color.TRANSPARENT
+        window.navigationBarColor = Color.TRANSPARENT
+        window.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS or
+            WindowManager.LayoutParams.FLAG_TRANSLUCENT_NAVIGATION)
+        window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) window.navigationBarDividerColor = Color.TRANSPARENT
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            window.isStatusBarContrastEnforced = false
+            window.isNavigationBarContrastEnforced = false
+        }
         WindowCompat.setDecorFitsSystemWindows(window, false)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             window.attributes = window.attributes.apply {

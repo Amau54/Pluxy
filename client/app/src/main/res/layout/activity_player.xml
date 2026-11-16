@@ -40,7 +40,7 @@
         android:id="@+id/controlsOverlay"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="@drawable/player_controls_scrim"
+        android:background="@android:color/transparent"
         android:clickable="false"
         android:visibility="gone">
 
@@ -174,7 +174,7 @@
                 android:id="@+id/playerBottomPanel"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:background="@android:color/transparent"
+                android:background="@drawable/player_controls_backplate"
                 android:clipChildren="false"
                 android:clipToPadding="false"
                 android:elevation="0dp"

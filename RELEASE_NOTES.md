@@ -1,3 +1,8 @@
+## Android 1.7.57
+
+- Le fond sombre des commandes est limité au panneau du bas, sans dégradé sur toute la vidéo.
+- Les barres système du lecteur sont transparentes, sans contraste ajouté par Android.
+
 ## Android 1.7.56 · Windows 1.8.40
 
 - ISO : correction du mode audio compatible et prise en compte explicite du passthrough forcé.
