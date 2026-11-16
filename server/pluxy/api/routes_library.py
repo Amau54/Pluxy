@@ -159,7 +159,7 @@ def item_probe(item_id: str, request: Request) -> MediaInfo:
     it = st.library.get(item_id)
     if not it:
         raise HTTPException(404, "Média introuvable")
-    return probe(st.cfgm.cfg.ffmpeg.ffprobe_path, it.path)
+    return probe(st.cfgm.cfg.ffmpeg.ffprobe_path, it.path, it.disc_title)
 
 
 @router.get("/items/{item_id}/chapters")
@@ -170,6 +170,14 @@ def item_chapters(item_id: str, request: Request):
         raise HTTPException(404, "Média introuvable")
     if item.kind not in ("movie", "series", "clip", "video"):
         return []
+    if item.container == "iso":
+        from ..discs import DiscError, probe_title
+        from ..chapters import parse_chapters
+        try:
+            _, data = probe_title(st.cfgm.cfg.ffmpeg.ffprobe_path, item.path, item.disc_title)
+            return parse_chapters(data)
+        except DiscError:
+            return []
     chapters = read_chapters(st.cfgm.cfg.ffmpeg.ffprobe_path, item.path)
     analyzer = getattr(st, "segments", None)
     return chapters + (analyzer.request(item) if analyzer else [])

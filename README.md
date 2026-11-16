@@ -6,7 +6,7 @@
 
 Vos films, séries, photos et musique sur la TV.
 
-**Android 1.7.54 · Windows 1.8.37**
+**Android 1.7.55 · Windows 1.8.38**
 
 [Application Android](https://github.com/Amau54/Pluxy/releases/download/dev-latest/Pluxy-debug.apk)
 · [Application PC](https://github.com/Amau54/Pluxy/releases/download/pc-latest/Pluxy-Setup.exe)
@@ -50,6 +50,15 @@ l’épisode suivant lorsqu’il existe ; les scènes après le générique sont
 Pour conserver la vidéo 4K/HDR, choisissez **Mode de lecture → Vidéo originale (4K/HDR)**.
 Le lecteur ne réduit alors pas la résolution et n'accepte aucun réencodage vidéo.
 Le HDR dépend aussi de l'écran et de son décodeur.
+
+Les ISO Blu-ray non protégés peuvent être ouverts depuis le serveur PC avec le
+lecteur Android. Un menu propose les titres repérés sur le disque. Vidéo, audio
+et sous-titres sont copiés vers un flux Matroska sans réencodage ; la reprise est
+conservée par titre. Mettez à jour les deux applications pour utiliser cette lecture.
+Cette première prise en charge ne reproduit pas les menus Java du disque : le
+moteur énumère les playlists Blu-ray d’au moins trois minutes et ouvre le titre 1
+des DVD. Les petits bonus, la navigation complète DVD et les chapitres Blu-ray
+ne sont pas encore proposés. Dolby Vision et le passthrough restent dépendants du matériel.
 
 Pour alléger un fichier, choisissez **Mode de lecture → Conversion**, puis
 **Qualité de conversion**. Automatique commence au meilleur palier accepté par

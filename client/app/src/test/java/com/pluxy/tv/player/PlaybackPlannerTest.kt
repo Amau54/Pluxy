@@ -8,6 +8,16 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PlaybackPlannerTest {
+    @Test fun discTitlesNeverFallBackToRawIsoOrVideoConversion() {
+        val stream = decision("/stream/remux/disc~bd00005", "direct_stream")
+        PlaybackStrategy.entries.forEach { strategy ->
+            val plan = PlaybackPlanner.build(strategy, "disc~bd00005", stream, true)
+            assertEquals(listOf(stream.streamUrl), plan.map { it.url })
+            assertEquals(PlaybackTier.ORIGINAL, plan.single().tier)
+            assertFalse(plan.single().adaptiveTarget)
+            assertTrue(PlaybackSeekPolicy.isRemux(plan.single().url))
+        }
+    }
     @Test fun originalVideoCanAdaptAudioWithoutAnyVideoFallback() {
         val stream = decision("/stream/remux/film", "direct_stream").copy(audioAction = "transcode", targetAudioCodec = "eac3")
         val plan = PlaybackPlanner.build(PlaybackStrategy.DIRECT, "film", stream, true)

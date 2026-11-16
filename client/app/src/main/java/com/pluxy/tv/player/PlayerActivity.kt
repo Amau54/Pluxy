@@ -1531,6 +1531,7 @@ class PlayerActivity : ThemedActivity() {
             "Sortie audio" to { pickAudioOutput(findViewById(R.id.btnGear)) },
             getString(R.string.player_information_action) to { showDiagnostics() },
         ).filterIndexed { index, _ -> index >= 2 || SkipSegments.supportsKind(item.kind) }
+            .filter { item.container != "iso" || it.first !in setOf("Mode de lecture", "Qualité de conversion") }
         showPlayerChoices(
             findViewById(R.id.btnGear),
             "Lecture",
@@ -1545,7 +1546,7 @@ class PlayerActivity : ThemedActivity() {
      * reste sur le serveur Pluxy sélectionné et aucune authentification n'est ajoutée.
      */
     private fun openExternalPlayer() {
-        val directUrl = api.abs("/stream/direct/${item.id}")
+        val directUrl = api.abs(if (item.container == "iso") "/stream/remux/${item.id}" else "/stream/direct/${item.id}")
         val intent = Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(Uri.parse(directUrl), "video/*")
             putExtra(Intent.EXTRA_TITLE, LibraryOrganizer.playbackTitle(item))
@@ -1749,6 +1750,24 @@ class PlayerActivity : ThemedActivity() {
         setLoadingVisible(true)
         setStatus("Analyse du flux…")
         prepareJob = lifecycleScope.launch {
+            if (item.container.equals("iso", ignoreCase = true) && !item.id.contains("~")) {
+                try {
+                    setStatus("Ouverture du disque…")
+                    val disc = api.discTitles(item.id)
+                    setLoadingVisible(false)
+                    setStatus("")
+                    val selected = com.pluxy.tv.ui.DiscMenu.choose(this@PlayerActivity,
+                        findViewById(R.id.btnGear), disc)
+                    if (selected == null) { finish(); return@launch }
+                    item = item.copy(id = selected.itemId, duration = selected.duration, size = 0)
+                    setLoadingVisible(true)
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (error: Exception) {
+                    showTerminalPlaybackError(error.message ?: "Impossible d’ouvrir ce disque.")
+                    return@launch
+                }
+            }
             repeat(PREPARE_ATTEMPTS) { attempt ->
                 try {
                     val audioMode = AudioOutputMode.fromKey(PluxyApplication.audioOutputMode(this@PlayerActivity))
@@ -1756,14 +1775,14 @@ class PlayerActivity : ThemedActivity() {
                         val runtime = async { api.clientRuntime() }
                         val progress = async { ProgressOutbox.pendingResume(api.baseUrl, item.id) ?: api.getProgress(item.id) }
                         val decision = async {
-                            if (strategy == PlaybackStrategy.DIRECT && audioFallbackLevel == 0 && audioMode != AudioOutputMode.COMPATIBLE) PlaybackDecision(
+                            if (item.container != "iso" && strategy == PlaybackStrategy.DIRECT && audioFallbackLevel == 0 && audioMode != AudioOutputMode.COMPATIBLE) PlaybackDecision(
                                 mode = "direct_play", streamUrl = "/stream/direct/${item.id}", delivery = "direct",
                                 reasons = listOf("Lecture du fichier original demandée, sans conversion."),
                             ) else api.decide(item.id, audioFallbackLevel, failedAudioCodec, strategy == PlaybackStrategy.DIRECT)
                         }
                         Triple(decision.await(), runtime.await(), progress.await())
                     }
-                    conversionProfiles = ConversionPolicy.compatible(runtime.conversionProfiles, item, DeviceProfile.capabilities())
+                    conversionProfiles = if (item.container == "iso") emptyList() else ConversionPolicy.compatible(runtime.conversionProfiles, item, DeviceProfile.capabilities())
                     if (conversionProfiles.isNotEmpty() && PluxyApplication.conversionQuality(this@PlayerActivity) != "auto" &&
                         conversionProfiles.none { it.id == PluxyApplication.conversionQuality(this@PlayerActivity) }) {
                         PluxyApplication.setConversionQuality(this@PlayerActivity, "auto")

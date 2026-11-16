@@ -12,7 +12,11 @@ from .tools import NO_WINDOW
 _HDR_TRANSFERS = {"smpte2084", "arib-std-b67"}
 
 
-def probe(ffprobe_path: str, file_path: str) -> MediaInfo:
+def probe(ffprobe_path: str, file_path: str, disc_title: str | None = None) -> MediaInfo:
+    if Path(file_path).suffix.lower() == ".iso":
+        from .discs import probe_title
+        _, data = probe_title(ffprobe_path, file_path, disc_title)
+        return _parse_data(data, ffprobe_path, file_path)
     cmd = [
         ffprobe_path,
         "-v", "quiet",
@@ -30,7 +34,10 @@ def probe(ffprobe_path: str, file_path: str) -> MediaInfo:
     if out.returncode != 0 or not out.stdout:
         raise RuntimeError(f"ffprobe a échoué pour {file_path}: {(out.stderr or '').strip()}")
 
-    data = json.loads(out.stdout)
+    return _parse_data(json.loads(out.stdout), ffprobe_path, file_path)
+
+
+def _parse_data(data: dict, ffprobe_path: str, file_path: str) -> MediaInfo:
     fmt = data.get("format", {})
     streams: list[MediaStream] = []
 
@@ -49,7 +56,7 @@ def probe(ffprobe_path: str, file_path: str) -> MediaInfo:
         is_hdr = kind == StreamKind.VIDEO and transfer in _HDR_TRANSFERS
 
         master_display = max_cll = None
-        if is_hdr:
+        if is_hdr and Path(file_path).suffix.lower() != ".iso":
             # Métadonnées HDR10 statiques (mastering display + content light level).
             # Indispensables pour que la TV bascule en mode HDR sur le flux transcodé.
             master_display, max_cll = _hdr_metadata(ffprobe_path, file_path,

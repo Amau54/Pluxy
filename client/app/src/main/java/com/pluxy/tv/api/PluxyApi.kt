@@ -234,6 +234,15 @@ class PluxyApi(val baseUrl: String, val sessionId: String = UUID.randomUUID().to
         requestDecision("/api/playback/decide", itemId, audioFallbackLevel, failedAudioCodec, originalVideo)
     }
 
+    suspend fun discTitles(itemId: String): DiscCatalogue = withContext(Dispatchers.IO) {
+        http.newBuilder().readTimeout(95, TimeUnit.SECONDS).build()
+            .newCall(Request.Builder().url("$baseUrl/api/discs/$itemId").build())
+            .awaitResult { response ->
+                moshi.adapter(DiscCatalogue::class.java).fromJson(response.bodyOrThrow())
+                    ?: throw ApiException(response.code, "Contenu du disque illisible")
+            }
+    }
+
     suspend fun diagnose(itemId: String): PlaybackDecision = withContext(Dispatchers.IO) {
         requestDecision("/api/playback/diagnose", itemId)
     }
@@ -251,7 +260,8 @@ class PluxyApi(val baseUrl: String, val sessionId: String = UUID.randomUUID().to
             .url("$baseUrl$path")
             .post(json.toRequestBody(jsonMedia))
             .build()
-        return http.newCall(req).awaitResult { resp ->
+        val decisionHttp = if (itemId.contains("~")) http.newBuilder().readTimeout(60, TimeUnit.SECONDS).build() else http
+        return decisionHttp.newCall(req).awaitResult { resp ->
             val body = resp.bodyOrThrow()
             moshi.adapter(PlaybackDecision::class.java).fromJson(body)
                 ?: throw ApiException(resp.code, "Décision de lecture illisible")

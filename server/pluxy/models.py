@@ -70,6 +70,7 @@ class SubtitleTrack(BaseModel):
 class MediaItem(BaseModel):
     """Entrée de bibliothèque (vue catalogue)."""
     group_count: int = 1
+    disc_title: Optional[str] = None
     season_count: int = 0
     id: str
     title: str

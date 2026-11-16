@@ -40,6 +40,7 @@ from ..security import playback_key, session_token
 from ..transcoder import build_direct_stream_cmd, build_transcode_cmd
 from ..conversion import available_profiles, conversion_decision
 from ..subtitle_seek import shift_subtitles
+from ..discs import DiscError, inspect_disc, remux_command
 
 router = APIRouter(tags=["stream"])
 
@@ -197,8 +198,11 @@ async def _playback_decision(request: Request, register: bool) -> PlaybackDecisi
     if not it:
         raise HTTPException(404, "Média introuvable")
 
-    media = await asyncio.to_thread(_safe_probe_limited, st, it.path)
-    dec = decide(media, caps, st.cfgm.cfg)
+    if it.container == "iso":
+        media, dec = await asyncio.to_thread(_disc_decision, st, it)
+    else:
+        media = await asyncio.to_thread(_safe_probe_limited, st, it.path)
+        dec = decide(media, caps, st.cfgm.cfg)
     # Mémorise la décision (capacités client réelles) pour les endpoints de flux.
     if register:
         st.remember_decision(session, item_id, (media, dec))
@@ -220,6 +224,40 @@ async def _playback_decision(request: Request, register: bool) -> PlaybackDecisi
     if public.media is not None:
         public.media.path = ""
     return public
+
+
+def _disc_decision(st, item):
+    if not st.probe_slots.acquire(blocking=False):
+        raise HTTPException(503, "Trop d’analyses simultanées")
+    try:
+        media = probe(st.cfgm.cfg.ffmpeg.ffprobe_path, item.path, item.disc_title)
+        return media, PlaybackDecision(mode=PlaybackMode.DIRECT_STREAM, media=media,
+            video_action="copy", audio_action="copy", container="mkv", delivery="direct",
+            summary="Disque · qualité originale", severity="adaptation",
+            reasons=["Vidéo, audio et sous-titres copiés sans réencodage depuis le disque."])
+    except DiscError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    finally:
+        st.probe_slots.release()
+
+
+@router.get("/api/discs/{item_id}")
+def disc_titles(item_id: str, request: Request):
+    st = get_state(request)
+    item = st.library.get(item_id)
+    if item is None or item.container != "iso":
+        raise HTTPException(404, "Disque introuvable")
+    try:
+        disc = inspect_disc(st.cfgm.cfg.ffmpeg.ffprobe_path, item.path)
+    except DiscError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    base = item_id.split("~", 1)[0]
+    titles = sorted(disc.titles, key=lambda title: (title.key != disc.default_title, title.key))
+    return {"kind": disc.kind, "default_title": disc.default_title,
+            "titles": [{"key": title.key, "item_id": f"{base}~{title.key}", "duration": title.duration,
+                        "label": ("Titre principal probable" if title.key == disc.default_title and disc.kind == "bluray"
+                                  else "Titre " + str(int(title.key[2:] if title.key.startswith("bd") else title.key[3:]))) }
+                       for title in titles]}
 
 
 @router.post("/api/playback/decide", response_model=PlaybackDecision)
@@ -286,6 +324,9 @@ def stream_direct(item_id: str, request: Request):
     if not it:
         raise HTTPException(404, "Média introuvable")
 
+    if it.container == "iso":
+        raise HTTPException(409, "Un ISO doit être ouvert par le menu du disque. Mettez à jour le lecteur Pluxy.")
+
     path = it.path
     if not os.path.isfile(path):
         # Index périmé / disque externe débranché : 404 propre (pas un 500).
@@ -350,6 +391,15 @@ def stream_remux(item_id: str, request: Request,
     # Réutilise la décision calculée avec les VRAIES capacités du client (cible audio
     # correcte) ; repli sur une décision par défaut si elle n'a pas été mémorisée.
     try:
+        if Path(it.path).suffix.lower() == ".iso":
+            media, dec = _disc_decision(st, it)
+            title = it.disc_title or inspect_disc(cfg.ffmpeg.ffprobe_path, it.path).default_title
+            if media.duration > 0 and start_ms / 1000 >= media.duration:
+                raise HTTPException(416, "Position après la fin du titre")
+            cmd = remux_command(cfg.ffmpeg.ffmpeg_path, it.path, title, start_ms / 1000)
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
+                                    stderr=subprocess.DEVNULL, creationflags=NO_WINDOW)
+            return _RemuxResponse(proc, st.remux_slots, start_ms, strict=True)
         cached = st.decision_for(playback_key(request), item_id)
         if cached:
             media, dec = cached
@@ -366,6 +416,8 @@ def stream_remux(item_id: str, request: Request,
                                 stderr=subprocess.DEVNULL, creationflags=NO_WINDOW)
     except FileNotFoundError:
         st.remux_slots.release()
+        if Path(it.path).suffix.lower() == ".iso":
+            raise HTTPException(503, "Le moteur de lecture des disques est indisponible")
         if start_ms:
             raise HTTPException(503, "FFmpeg indisponible : déplacement temporel impossible")
         # FFmpeg absent -> repli Direct Play (fichier brut).
@@ -385,6 +437,8 @@ def stream_convert(item_id: str, profile_id: str, request: Request,
     if not item:
         raise HTTPException(404, "Média introuvable")
     profile = next((p for p in available_profiles(st.cfgm.cfg) if p["id"] == profile_id), None)
+    if item.container == "iso":
+        raise HTTPException(409, "Les disques sont lus en qualité originale depuis leur menu")
     if not profile:
         raise HTTPException(422, "Qualité de conversion indisponible sur ce serveur")
     if request.headers.get("range") not in (None, "bytes=0-"):
@@ -450,6 +504,8 @@ def _ensure_vod_ctx(st: "AppState", item_id: str, variant: str, session: str = "
     it = st.library.get(item_id)
     if not it:
         raise HTTPException(404, "Média introuvable")
+    if it.container == "iso":
+        raise HTTPException(409, "Les disques sont lus en qualité originale depuis leur menu")
     if variant not in ("main", "compat"):
         raise HTTPException(404, "Variante inconnue")
     if st.vod._context(item_id, variant, session) is None:

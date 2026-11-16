@@ -8,29 +8,42 @@ function Initialize-PCMediaRuntime {
         -not (Get-Command $_ -CommandType Application -ErrorAction SilentlyContinue) -and
         -not (Test-Path -LiteralPath (Join-Path $bin ($_.ToString() + '.exe')) -PathType Leaf)
     }
-    if ($missing) {
+    $discSupport = $false
+    $probe = Join-Path $bin 'ffprobe.exe'
+    if (Test-Path -LiteralPath $probe -PathType Leaf) {
+        $protocols = & $probe -hide_banner -protocols 2>$null | Out-String
+        $formats = & $probe -hide_banner -demuxers 2>$null | Out-String
+        $discSupport = $protocols -match '(?m)^\s*bluray\s*$' -and $formats -match '\bdvdvideo\b'
+    }
+    if ($missing -or -not $discSupport) {
         Write-Host '[Pluxy] Installation de FFmpeg et ffprobe pour les miniatures et la lecture...'
         # Build Windows référencé par ffmpeg.org ; version et empreinte figées.
-        $uri = 'https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-9.0.2-essentials_build.zip'
-        $expected = '60f467265b1e312373dbcd92200c2618a74850f98d3d078e94296bb3fa2047ba'
+        $uri = 'https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-9.0.2-full_build.7z'
+        $expected = 'f0e46253c70dfe902bac915dfb4224f0cf1b7c6eeab9da2ccc9a5581f9a71b13'
         $parent = [IO.Path]::GetDirectoryName($InstallDirectory)
         New-Item -ItemType Directory -Path $parent -Force | Out-Null
         $stage = Join-Path $parent ('ffmpeg-install-' + [Guid]::NewGuid().ToString('N'))
         New-Item -ItemType Directory -Path $stage | Out-Null
-        $archive = Join-Path $stage 'ffmpeg.zip'
+        $archive = Join-Path $stage 'ffmpeg.7z'
         try {
             [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-            Invoke-WebRequest -Uri $uri -OutFile $archive -UseBasicParsing -TimeoutSec 300
+            Invoke-WebRequest -Uri $uri -OutFile $archive -UseBasicParsing -TimeoutSec 900
             if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) {
                 throw 'Le téléchargement de FFmpeg est incomplet ou ne correspond pas à la version attendue.'
             }
-            Expand-Archive -LiteralPath $archive -DestinationPath $stage
-            $build = Join-Path $stage 'ffmpeg-9.0.2-essentials_build'
+            & "$env:SystemRoot\System32\tar.exe" -xf $archive -C $stage
+            if ($LASTEXITCODE -ne 0) { throw 'Extraction du moteur de lecture impossible.' }
+            $build = Join-Path $stage 'ffmpeg-9.0.2-full_build'
             foreach ($name in @('ffmpeg', 'ffprobe')) {
                 $executable = Join-Path $build ('bin\' + $name + '.exe')
                 if (-not (Test-Path -LiteralPath $executable -PathType Leaf)) { throw 'Archive FFmpeg incomplète.' }
                 & $executable -version *> $null
                 if ($LASTEXITCODE -ne 0) { throw 'FFmpeg ne peut pas démarrer sur ce PC.' }
+                $protocols = & $executable -hide_banner -protocols 2>$null | Out-String
+                $formats = & $executable -hide_banner -demuxers 2>$null | Out-String
+                if ($protocols -notmatch '(?m)^\s*bluray\s*$' -or $formats -notmatch '\bdvdvideo\b') {
+                    throw 'Les modules Blu-ray et DVD sont absents du moteur téléchargé.'
+                }
             }
             if (Test-Path -LiteralPath $InstallDirectory) {
                 $resolved = (Resolve-Path -LiteralPath $InstallDirectory).ProviderPath

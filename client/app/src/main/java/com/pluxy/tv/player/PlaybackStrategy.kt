@@ -70,6 +70,12 @@ object PlaybackPlanner {
         conversionProfiles: List<ConversionProfile> = emptyList(),
         conversionQuality: String = "auto",
     ): List<PlaybackAttempt> {
+        if (decision.streamUrl.contains("/stream/remux/") &&
+            decision.streamUrl.substringBefore('?').substringAfterLast('/').contains("~")) {
+            // Disc titles have no raw-file fallback and must never silently lose quality.
+            return listOf(PlaybackAttempt(decision.streamUrl, "direct", PlaybackTier.ORIGINAL,
+                "Disque · qualité originale"))
+        }
         val directUrl = "/stream/direct/$itemId"
         val mainUrl = "/stream/hls/$itemId/main/index.m3u8"
         val compatUrl = "/stream/hls/$itemId/compat/index.m3u8"

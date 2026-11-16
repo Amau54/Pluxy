@@ -3,6 +3,14 @@ package com.pluxy.tv.api
 import com.squareup.moshi.Json
 import com.squareup.moshi.JsonClass
 
+@JsonClass(generateAdapter = true)
+data class DiscTitle(val key: String, @Json(name = "item_id") val itemId: String,
+                     val duration: Double, val label: String)
+
+@JsonClass(generateAdapter = true)
+data class DiscCatalogue(val kind: String, @Json(name = "default_title") val defaultTitle: String,
+                         val titles: List<DiscTitle>)
+
 /** Élément de bibliothèque renvoyé par /api/library/items */
 @JsonClass(generateAdapter = true)
 data class MediaItem(

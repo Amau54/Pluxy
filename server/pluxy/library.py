@@ -81,6 +81,21 @@ class Library:
         return hashlib.sha1(path.encode("utf-8")).hexdigest()[:16]
 
     def get(self, item_id: str) -> MediaItem | None:
+        if "~" in item_id:
+            from .discs import DiscError, inspect_disc
+            base_id, key = item_id.split("~", 1)
+            with self._lock:
+                base = self._items.get(base_id)
+            if base is None or base.container != "iso":
+                return None
+            try:
+                disc = inspect_disc(self.cfgm.cfg.ffmpeg.ffprobe_path, base.path)
+                title = next((t for t in disc.titles if t.key == key), None)
+                if title is None:
+                    return None
+                return base.model_copy(update={"id": item_id, "disc_title": key, "duration": title.duration})
+            except (DiscError, OSError):
+                return None
         with self._lock:
             return self._items.get(item_id)
 
@@ -188,7 +203,7 @@ class Library:
             self.scan_status = {"status": "scanning", "error": None, "finished_at": None}
 
         cfg = self.cfgm.cfg
-        exts = {e.lower() for e in cfg.server.scan_extensions}
+        exts = {e.lower() for e in cfg.server.scan_extensions} | {".iso"}
         sub_exts = {e.lower() for e in cfg.subtitles.external_extensions}
         found: Dict[str, MediaItem] = {}
         with self._lock:

@@ -19,7 +19,7 @@ from typing import List, Literal
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 _CONFIG_READ_ATTEMPTS = 6
-VIDEO_SCAN_EXTENSIONS = [".mkv", ".mp4", ".m4v", ".mov", ".avi", ".ts", ".webm"]
+VIDEO_SCAN_EXTENSIONS = [".mkv", ".mp4", ".m4v", ".mov", ".avi", ".ts", ".webm", ".iso"]
 DEFAULT_SCAN_EXTENSIONS = VIDEO_SCAN_EXTENSIONS + [
     ".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".tif", ".tiff",
     ".mp3", ".flac", ".m4a", ".m4b", ".aac", ".ogg", ".oga", ".opus", ".wav", ".wma",
