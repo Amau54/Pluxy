@@ -1,4 +1,5 @@
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'PC-Download.ps1')
 
 function Initialize-PCMediaRuntime {
     param([string]$InstallDirectory = (Join-Path $env:LOCALAPPDATA 'Programs\Pluxy\FFmpeg'))
@@ -24,13 +25,14 @@ function Initialize-PCMediaRuntime {
         New-Item -ItemType Directory -Path $parent -Force | Out-Null
         $stage = Join-Path $parent ('ffmpeg-install-' + [Guid]::NewGuid().ToString('N'))
         New-Item -ItemType Directory -Path $stage | Out-Null
-        $archive = Join-Path $stage 'ffmpeg.7z'
+        $archive = Join-Path $parent 'Downloads/ffmpeg-9.0.2-full.7z'
         try {
             [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-            Invoke-WebRequest -Uri $uri -OutFile $archive -UseBasicParsing -TimeoutSec 900
+            Save-PCComponent -Uri $uri -Destination $archive -Sha256 $expected -Label 'Moteur vidéo'
             if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) {
                 throw 'Le téléchargement de FFmpeg est incomplet ou ne correspond pas à la version attendue.'
             }
+            Write-PCPreparationStatus 'Installation du moteur vidéo…'
             & "$env:SystemRoot\System32\tar.exe" -xf $archive -C $stage
             if ($LASTEXITCODE -ne 0) { throw 'Extraction du moteur de lecture impossible.' }
             $build = Join-Path $stage 'ffmpeg-9.0.2-full_build'

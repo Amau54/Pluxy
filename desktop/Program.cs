@@ -15,7 +15,7 @@ using Microsoft.Web.WebView2.WinForms;
 [assembly: System.Reflection.AssemblyDescription("Lecteur et serveur multimédia Pluxy")]
 [assembly: System.Reflection.AssemblyCompany("Pluxy")]
 [assembly: System.Reflection.AssemblyProduct("Pluxy")]
-[assembly: System.Reflection.AssemblyVersion("1.8.38.0")]
+[assembly: System.Reflection.AssemblyVersion("1.8.39.0")]
 
 namespace Pluxy {
     internal static class Program {
@@ -227,7 +227,7 @@ namespace Pluxy {
                     if(server.Running && !server.Owned) throw new IOException("Ce serveur a été démarré par une autre application.");
                     await Task.Run(()=>server.Stop());
                 } else {
-                    Action<string> progress=message=> { serverOperation=message; UpdateServerControls(); };
+                    Action<string> progress=message=> { serverOperation=message; UpdateServerControls(); Event("status",message); };
                     if(command=="serverRestart") await server.Restart(progress); else await server.Start(progress);
                     prefs.mode="server"; prefs.Save(); choosing=false;
                     browser.Source=new Uri(server.Address);

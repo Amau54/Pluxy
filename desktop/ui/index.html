@@ -39,7 +39,7 @@
   <div id="content" aria-live="polite"></div><button id="more" class="more hidden">Afficher plus</button>
  </section>
 </main>
-<div id="loading" class="loading hidden" role="status"><span class="spinner"></span><strong id="loading-text">Ouverture de Pluxy…</strong><p class="muted">La première préparation peut prendre quelques minutes.</p></div>
+<div id="loading" class="loading hidden" role="status"><span class="spinner"></span><strong id="loading-text">Ouverture de Pluxy…</strong><progress id="preparation-progress" class="hidden" max="100" aria-label="Téléchargement des composants"></progress><p class="muted">Les téléchargements interrompus reprennent automatiquement.</p></div>
 <dialog id="connection"><form method="dialog" class="dialog-top"><h2>Votre serveur</h2><button class="icon-button" aria-label="Fermer"><svg><use href="#icon-close"/></svg></button></form><p class="muted">Choisissez un serveur du réseau ou saisissez son adresse.</p><div id="server-list"></div><form id="connect-manual" class="manual"><input id="address" placeholder="192.168.1.20:8420" aria-label="Adresse du serveur" required maxlength="256"><button class="primary">Connecter</button></form><button id="discover" class="text-button">Rechercher à nouveau</button><p id="connection-status" class="muted" role="status"></p></dialog>
 <dialog id="details" class="details"><form method="dialog" class="dialog-top"><button id="detail-back" class="icon-button" aria-label="Fermer"><svg><use href="#icon-close"/></svg></button></form><div id="detail-content"></div></dialog>
 <dialog id="settings">

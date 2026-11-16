@@ -6,7 +6,7 @@
 
 Vos films, séries, photos et musique sur la TV.
 
-**Android 1.7.55 · Windows 1.8.38**
+**Android 1.7.55 · Windows 1.8.39**
 
 [Application Android](https://github.com/Amau54/Pluxy/releases/download/dev-latest/Pluxy-debug.apk)
 · [Application PC](https://github.com/Amau54/Pluxy/releases/download/pc-latest/Pluxy-Setup.exe)
@@ -143,6 +143,13 @@ automatiquement, avec une progression dans l'application. La première préparat
 nécessite Internet. Cette préparation ne demande ni fenêtre de commande ni droits
 administrateur : les composants Python et les réglages sont stockés dans votre compte Windows.
 Le composant d'affichage Microsoft est aussi installé s'il manque.
+
+Les téléchargements Python et vidéo affichent le pourcentage, le volume reçu et
+le débit. Après 25 secondes sans progression, Pluxy tente de reprendre la connexion.
+Les fichiers partiels restent disponibles après fermeture de l’application.
+Pour vérifier leur état depuis CMD :
+`powershell -NoProfile -ExecutionPolicy Bypass -File "C:\Program Files\Pluxy\tools\Repair-PCPreparation.ps1" -StatusOnly`.
+Retirez `-StatusOnly` pour relancer la préparation avec reprise automatique.
 
 Si l'ancien serveur Pluxy tourne déjà, quittez-le depuis son icône près de
 l'horloge avant d'ouvrir le mode Serveur de cette version. Vos réglages sont retrouvés.

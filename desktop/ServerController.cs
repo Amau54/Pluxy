@@ -43,11 +43,16 @@ namespace Pluxy {
                 if(disposed) throw new ObjectDisposedException("ServerController");
                 bootstrap=Process.Start(info);
             }
-            var outputTask=bootstrap.StandardOutput.ReadToEndAsync(); var errorsTask=bootstrap.StandardError.ReadToEndAsync();
+            var outputTask=ReadPreparation(bootstrap.StandardOutput,status); var errorsTask=bootstrap.StandardError.ReadToEndAsync();
             bool finished=await Task.Run(()=>bootstrap.WaitForExit(1200000));
             if(!finished) { StopProcess(bootstrap); throw new IOException("La préparation a pris trop de temps. Relancez Pluxy pour la reprendre."); }
             var output=await outputTask; var errors=await errorsTask;
-            if(bootstrap.ExitCode!=0) { Native.Log(new IOException(output+"\n"+errors)); throw new IOException("Impossible de préparer le serveur. Vérifiez votre connexion Internet, puis réessayez."); }
+            if(bootstrap.ExitCode!=0) {
+                Native.Log(new IOException(output+"\n"+errors));
+                var failure="Impossible de préparer le serveur. Vérifiez votre connexion Internet, puis réessayez.";
+                foreach(var line in output.Split('\n')) if(line.StartsWith("[ERREUR] ")) failure=line.Substring(9).Trim();
+                throw new IOException(failure);
+            }
             var lines=output.Trim().Split('\n'); var prepared=Native.Object(Native.Json.DeserializeObject(lines[lines.Length-1].Trim()));
             var python=Native.Text(prepared,"Python"); if(!File.Exists(python)) throw new IOException("Python n'a pas pu être préparé.");
             status("Démarrage de votre bibliothèque…");
@@ -70,6 +75,15 @@ namespace Pluxy {
                 using(var stop=Process.Start(info)) { if(!stop.WaitForExit(6000)) stop.Kill(); }
                 if(!process.HasExited) process.Kill();
             } catch(InvalidOperationException) { } catch(Exception error) { Native.Log(error); }
+        }
+        private static async Task<string> ReadPreparation(StreamReader reader,Action<string> status) {
+            var output=new System.Text.StringBuilder();
+            string line;
+            while((line=await reader.ReadLineAsync())!=null) {
+                output.AppendLine(line);
+                if(line.StartsWith("[Pluxy] ",StringComparison.Ordinal)) status(line.Substring(8));
+            }
+            return output.ToString();
         }
         public void Stop() {
             Process managed;

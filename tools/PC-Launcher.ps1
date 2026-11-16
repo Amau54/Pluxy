@@ -1,4 +1,5 @@
 # PC bootstrap helpers, compatible with Windows PowerShell 5.1 and PowerShell 7.
+. (Join-Path $PSScriptRoot 'PC-Download.ps1')
 if ($PSVersionTable.PSVersion.Major -lt 6) {
     # A PowerShell Core parent can otherwise shadow built-in Desktop modules.
     Import-Module (Join-Path $PSHOME 'Modules/Microsoft.PowerShell.Utility/Microsoft.PowerShell.Utility.psd1') -Force -ErrorAction Stop
@@ -152,15 +153,7 @@ function Save-PCPythonInstaller {
     param($Installer, [string]$Destination)
     if ($Installer.Url -notmatch '^https://www\.python\.org/ftp/python/') { throw 'Adresse Python officielle requise.' }
     [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
-    for ($attempt = 1; $attempt -le 2; $attempt++) {
-        try {
-            Invoke-WebRequest -Uri $Installer.Url -OutFile $Destination -UseBasicParsing -TimeoutSec 180 -ErrorAction Stop
-            return
-        } catch {
-            if ($attempt -eq 2) { throw 'Telechargement de Python impossible. Verifiez la connexion Internet, puis relancez Pluxy.' }
-            Start-Sleep -Seconds 2
-        }
-    }
+    Save-PCComponent -Uri $Installer.Url -Destination $Destination -Sha256 $Installer.Sha256 -Label 'Python'
 }
 
 function Assert-PCPythonInstaller {
@@ -180,7 +173,8 @@ function Install-PCPython {
     $installer = Get-PCPythonInstaller
     $temporary = Join-Path ([IO.Path]::GetTempPath()) ('Pluxy-Python-' + [Guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Path $temporary -ErrorAction Stop | Out-Null
-    $download = Join-Path $temporary 'python-installer.exe'
+    $download = Join-Path (Split-Path $InstallDirectory) "Downloads/python-$($installer.Version).exe"
+    New-Item -ItemType Directory -Force -Path (Split-Path $download) | Out-Null
     try {
         Write-Host "[Pluxy] Python absent ou incompatible. Telechargement de Python $($installer.Version)..."
         Save-PCPythonInstaller -Installer $installer -Destination $download
@@ -196,7 +190,6 @@ function Install-PCPython {
         return $existing
     } finally {
         # Remove only the explicitly created file and its now-empty directory.
-        if (Test-Path -LiteralPath $download -PathType Leaf) { Remove-Item -LiteralPath $download -Force -ErrorAction SilentlyContinue }
         if (Test-Path -LiteralPath $temporary -PathType Container) { Remove-Item -LiteralPath $temporary -ErrorAction SilentlyContinue }
     }
 }

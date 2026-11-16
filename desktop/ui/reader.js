@@ -24,7 +24,7 @@ window.chrome.webview.addEventListener('message', ({data}) => {
     $('fullscreen').setAttribute('aria-label',fullscreen?'Quitter le plein écran':'Plein écran');
     $('fullscreen').title=fullscreen?'Quitter le plein écran · Échap':'Plein écran · F11'; return;
   }
-  if (data.eventName === 'status') { $('loading-text').textContent = data.data; return; }
+  if (data.eventName === 'status') { preparationStatus(data.data); return; }
   if (data.eventName === 'preferencesChanged') { prefs={...prefs,...data.data}; applyPreferences(); return; }
   if (data.eventName === 'music') { updateMusic(data.data); return; }
   if (data.eventName === 'progressUpdated') { if (prefs.mode === 'reader') refreshProgress(data.data?.id).catch(fail); return; }
@@ -38,7 +38,16 @@ function button(text, action, classes = '') { const e = node('button', classes, 
 function hidden(id, value) { $(id).classList.toggle('hidden', value); }
 function showDialog(id) { if (!$(id).open) $(id).showModal(); }
 function toast(text) { $('toast').textContent = text; hidden('toast', false); clearTimeout(toastTimer); toastTimer = setTimeout(() => hidden('toast', true), 3500); }
-function loading(text) { $('loading-text').textContent = text; hidden('loading', false); }
+function preparationStatus(text) {
+  $('loading-text').textContent = text;
+  const progress = $('preparation-progress');
+  const percent = String(text).match(/\b(\d{1,3})\s*%/);
+  const downloading = percent || /connexion|Mo\/s|reprise automatique|vérification du téléchargement/i.test(text);
+  hidden('preparation-progress', !downloading);
+  if (percent) progress.value = Math.min(100, Number(percent[1]));
+  else progress.removeAttribute('value');
+}
+function loading(text) { preparationStatus(text); hidden('loading', false); }
 function fail(error) { toast(error.message || 'Impossible de terminer cette action.'); }
 function proxy(path) { return 'https://media.pluxy.invalid/remote?server=' + encodeURIComponent(connection.url) + '&path=' + encodeURIComponent(path); }
 function thumbnail(item) { return proxy('/api/library/items/' + encodeURIComponent(item.id) + '/thumbnail'); }
