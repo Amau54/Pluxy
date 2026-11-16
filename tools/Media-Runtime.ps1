@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'PC-Download.ps1')
 
 function Initialize-PCMediaRuntime {
@@ -59,6 +59,16 @@ function Initialize-PCMediaRuntime {
                 Remove-Item -LiteralPath $resolvedStage -Recurse -Force
             }
         }
+    }
+    if (-not (Test-Path -LiteralPath (Join-Path $bin '7z.exe')) -or
+        -not (Test-Path -LiteralPath (Join-Path $bin '7z.dll'))) {
+        $archive = Join-Path ([IO.Path]::GetDirectoryName($InstallDirectory)) 'Downloads/7z2606-x64.exe'
+        Save-PCComponent -Uri 'https://github.com/ip7z/7zip/releases/download/26.06/7z2606-x64.exe' `
+            -Destination $archive -Sha256 '9b697f65ecc2d9b0152f5ee96d72dde522a7827690349d9307935dacf40f42ec' -Label 'Navigation Blu-ray'
+        New-Item -ItemType Directory -Path $bin -Force | Out-Null
+        & "$env:SystemRoot\System32\tar.exe" -xf $archive -C $bin 7z.exe 7z.dll License.txt
+        if ($LASTEXITCODE -ne 0) { throw 'Installation de la navigation Blu-ray impossible.' }
+        Move-Item -LiteralPath (Join-Path $bin 'License.txt') -Destination (Join-Path $bin '7zip-License.txt') -Force
     }
     if (Test-Path -LiteralPath $bin -PathType Container) { $env:PATH = $bin + [IO.Path]::PathSeparator + $env:PATH }
     return $bin

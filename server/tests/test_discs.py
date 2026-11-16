@@ -81,3 +81,53 @@ def test_raw_iso_cannot_be_downloaded_as_a_playable_video(monkeypatch):
     app.include_router(routes_stream.router)
     with TestClient(app) as client:
         assert client.get("/stream/direct/film").status_code == 409
+
+
+def test_disc_compatible_audio_keeps_original_video_and_all_tracks(tmp_path):
+    cmd = discs.remux_command("ffmpeg", str(tmp_path / "film.iso"), "bd00000", 120,
+                              audio_codec="aac", audio_channels=2)
+    assert cmd[cmd.index("-c") + 1] == "copy"
+    assert cmd[cmd.index("-c:a") + 1] == "aac"
+    assert cmd[cmd.index("-ac") + 1] == "2"
+    assert "0:a?" in cmd and "-vf" not in cmd
+
+
+def test_disc_audio_decision_checks_second_track_and_passthrough(monkeypatch):
+    import threading
+    from pluxy.api import routes_stream
+    from pluxy.config import PluxyConfig
+    from pluxy.models import MediaInfo, MediaStream, StreamKind, ClientCapabilities
+    media = MediaInfo(path="film.iso", container="iso", streams=[
+        MediaStream(index=0, kind=StreamKind.VIDEO, codec="hevc", width=3840, height=2160),
+        MediaStream(index=1, kind=StreamKind.AUDIO, codec="aac", channels=2),
+        MediaStream(index=2, kind=StreamKind.AUDIO, codec="truehd", channels=8)])
+    monkeypatch.setattr(routes_stream, "probe", lambda *_: media)
+    state = SimpleNamespace(probe_slots=threading.BoundedSemaphore(1), cfgm=SimpleNamespace(cfg=PluxyConfig()))
+    item = SimpleNamespace(path="film.iso", disc_title="bd00000")
+    _, compatible = routes_stream._disc_decision(state, item,
+        ClientCapabilities(supported_audio_codecs=["aac"], max_audio_channels=2))
+    assert compatible.audio_action == "transcode" and compatible.target_audio_codec == "aac"
+    assert compatible.video_action == "copy"
+    _, original = routes_stream._disc_decision(state, item,
+        ClientCapabilities(supported_audio_codecs=["aac", "truehd"], max_audio_channels=8))
+    assert original.audio_action == "copy"
+
+
+def test_disc_passthrough_ignores_unselected_unsupported_track_and_video_limits(monkeypatch):
+    import threading
+    from pluxy.api import routes_stream
+    from pluxy.config import PluxyConfig
+    from pluxy.models import MediaInfo, MediaStream, StreamKind, ClientCapabilities
+    media = MediaInfo(path="film.iso", container="iso", streams=[
+        MediaStream(index=0, kind=StreamKind.VIDEO, codec="hevc", width=3840, height=2160),
+        MediaStream(index=1, kind=StreamKind.AUDIO, codec="truehd", channels=8),
+        MediaStream(index=2, kind=StreamKind.AUDIO, codec="pcm_bluray", channels=2)])
+    monkeypatch.setattr(routes_stream, "probe", lambda *_: media)
+    state = SimpleNamespace(probe_slots=threading.BoundedSemaphore(1), cfgm=SimpleNamespace(cfg=PluxyConfig()))
+    item = SimpleNamespace(path="film.iso", disc_title="bd00000")
+    _, decision = routes_stream._disc_decision(state, item,
+        ClientCapabilities(audio_passthrough=True, supported_audio_codecs=["truehd"],
+                           max_audio_channels=8, supports_hevc=False, max_video_height=1080))
+    assert decision.audio_action == "copy"
+    assert decision.target_audio_codec is None
+    assert decision.video_action == "copy"

@@ -18,6 +18,8 @@ data class PlaybackSessionState(
     val audioFallbackLevel: Int = 0,
     val failedAudioCodec: String? = null,
     val strategyOverride: String? = null,
+    val onlineSubtitleName: String? = null,
+    val onlineSubtitleLanguage: String = "fr",
 )
 
 data class PlaybackTrackChoice(

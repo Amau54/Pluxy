@@ -18,6 +18,7 @@ object AudioOutputPolicy {
 
     fun capabilities(detected: ClientCapabilities, mode: AudioOutputMode, fallbackLevel: Int = 0, failedCodec: String? = null): ClientCapabilities {
         if (mode == AudioOutputMode.PASSTHROUGH) return detected.copy(
+            audioPassthrough = true,
             supportedAudioCodecs = (detected.supportedAudioCodecs + passthroughCodecs).distinct(),
             maxAudioChannels = 8,
         )

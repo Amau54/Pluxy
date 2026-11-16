@@ -130,6 +130,9 @@ class PlayerActivity : ThemedActivity() {
     private val sessionAdapter by lazy { moshi.adapter(PlaybackSessionState::class.java) }
     private var progressSequence = 0L
     private var playbackSpeed = 1f
+    private var onlineSubtitle: java.io.File? = null
+    private var onlineSubtitleLanguage = "fr"
+    private var subtitleSearchJob: kotlinx.coroutines.Job? = null
     private var subtitlesDisabled = false
     private var audioChoice: PlaybackTrackChoice? = null
     private var subtitleChoice: PlaybackTrackChoice? = null
@@ -727,6 +730,9 @@ class PlayerActivity : ThemedActivity() {
         playbackSpeed = restored?.speed?.takeIf { it.isFinite() && it in 0.5f..2f } ?: 1f
         audioChoice = restored?.audioChoice
         subtitleChoice = restored?.subtitleChoice
+        onlineSubtitle = restored?.onlineSubtitleName?.takeIf { it == java.io.File(it).name }
+            ?.let { java.io.File(cacheDir, it) }?.takeIf { it.isFile }
+        onlineSubtitleLanguage = restored?.onlineSubtitleLanguage ?: "fr"
         aspectIdx = (restored?.aspectIndex ?: 0).coerceIn(aspectModes.indices)
         forceDirectForLaunch = restored?.forceDirect ?: intent.getBooleanExtra(EXTRA_FORCE_DIRECT, false)
         strategyOverride = restored?.strategyOverride?.let(PlaybackStrategy::fromKey)
@@ -785,7 +791,7 @@ class PlayerActivity : ThemedActivity() {
                 item, api.baseUrl, reliablePositionMs(), playIntent, playbackSpeed,
                 subtitlesDisabled, audioChoice, subtitleChoice, aspectIdx, forceDirectForLaunch,
                 audioFallbackLevel > 0, audioFallbackLevel, failedAudioCodec,
-                strategyOverride?.key,
+                strategyOverride?.key, onlineSubtitle?.name, onlineSubtitleLanguage,
             )))
         }
         super.onSaveInstanceState(outState)
@@ -1529,9 +1535,12 @@ class PlayerActivity : ThemedActivity() {
             "Mode de lecture" to { pickPlaybackStrategy() },
             "Qualité de conversion" to { pickConversionQuality() },
             "Sortie audio" to { pickAudioOutput(findViewById(R.id.btnGear)) },
+            "Contenu du disque" to { chooseDiscTitle() },
+            "Chapitres" to { chooseChapter() },
             getString(R.string.player_information_action) to { showDiagnostics() },
         ).filterIndexed { index, _ -> index >= 2 || SkipSegments.supportsKind(item.kind) }
             .filter { item.container != "iso" || it.first !in setOf("Mode de lecture", "Qualité de conversion") }
+            .filter { item.container == "iso" || it.first != "Contenu du disque" }
         showPlayerChoices(
             findViewById(R.id.btnGear),
             "Lecture",
@@ -2092,6 +2101,14 @@ class PlayerActivity : ThemedActivity() {
                     .setSelectionFlags(0).build()
             })
         }
+        onlineSubtitle?.takeIf { it.isFile }?.let { source ->
+            val file = OnlineSubtitles.shifted(source, streamPositionOffsetMs, java.io.File(cacheDir, "${source.nameWithoutExtension}-$streamPositionOffsetMs.srt"))
+            val existingSubs = b.build().localConfiguration?.subtitleConfigurations.orEmpty()
+            b.setSubtitleConfigurations(existingSubs + listOf(MediaItem.SubtitleConfiguration.Builder(Uri.fromFile(file))
+                .setMimeType(MimeTypes.APPLICATION_SUBRIP).setLanguage(onlineSubtitleLanguage)
+                .setLabel("${onlineSubtitleLanguage.uppercase()} · SubtitleDB")
+                .setSelectionFlags(C.SELECTION_FLAG_DEFAULT).build()))
+        }
         return b.build()
     }
 
@@ -2191,6 +2208,83 @@ class PlayerActivity : ThemedActivity() {
         }
     }
 
+    private fun chooseChapter() {
+        val owner = item.id
+        lifecycleScope.launch {
+            try {
+                val chapters = api.chapters(owner)
+                if (item.id != owner) return@launch
+                if (chapters.isEmpty()) {
+                    Toast.makeText(this@PlayerActivity, "Ce titre ne fournit pas de chapitres.", Toast.LENGTH_SHORT).show()
+                    return@launch
+                }
+                showPlayerChoices(findViewById(R.id.btnGear), "Chapitres",
+                    chapters.mapIndexed { i, chapter -> CompactChoiceMenu.Choice(
+                        chapter.title.ifBlank { "Chapitre ${i + 1}" }, i.toString(), fmtPlayerTime(chapter.startMs)) }) { key ->
+                    if (item.id == owner) key.toIntOrNull()?.let(chapters::getOrNull)?.let { goToAbsolute(it.startMs) }
+                }
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) { Toast.makeText(this@PlayerActivity, "Chapitres indisponibles", Toast.LENGTH_SHORT).show() }
+        }
+    }
+
+    private fun chooseDiscTitle() {
+        lifecycleScope.launch {
+            try {
+                val disc = api.discTitles(item.id.substringBefore("~"))
+                val selected = com.pluxy.tv.ui.DiscMenu.choose(this@PlayerActivity, findViewById(R.id.btnGear), disc, item.id.substringAfter("~", disc.defaultTitle))
+                    ?: return@launch
+                if (selected.itemId == item.id) return@launch
+                playNextEpisode(item.copy(id = selected.itemId, duration = selected.duration, size = 0),
+                    markPreviousCompleted = false)
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) { Toast.makeText(this@PlayerActivity, e.message ?: "Disque indisponible", Toast.LENGTH_LONG).show() }
+        }
+    }
+
+    private fun findOnlineSubtitles() {
+        showPlayerChoices(findViewById(R.id.btnSubtitles), "Télécharger des sous-titres · SubtitleDB",
+            listOf(CompactChoiceMenu.Choice("Français", "fr"), CompactChoiceMenu.Choice("Anglais", "en")), "fr") { language ->
+            subtitleSearchJob?.cancel()
+            val currentId = item.id
+            subtitleSearchJob = lifecycleScope.launch {
+                try {
+                    Toast.makeText(this@PlayerActivity, "Recherche des sous-titres…", Toast.LENGTH_SHORT).show()
+                    val metadataId = runCatching { kotlinx.coroutines.withTimeout(4_000) { api.metadata(item.id.substringBefore("~"))?.tmdbId } }.getOrNull()
+                    val results = OnlineSubtitles.search(item, language, metadataId)
+                    if (item.id != currentId) return@launch
+                    if (results.isEmpty()) {
+                        Toast.makeText(this@PlayerActivity, "Aucun sous-titre trouvé dans cette langue.", Toast.LENGTH_LONG).show()
+                        return@launch
+                    }
+                    showPlayerChoices(findViewById(R.id.btnSubtitles), "${results.first().title} · choisir la version",
+                        results.mapIndexed { i, result -> CompactChoiceMenu.Choice(result.release.ifBlank { result.title }, i.toString(), "SubtitleDB · ${result.language.uppercase()}") }) { value ->
+                        val result = value.toIntOrNull()?.let(results::getOrNull) ?: return@showPlayerChoices
+                        subtitleSearchJob = lifecycleScope.launch {
+                            try {
+                                val file = OnlineSubtitles.download(result, cacheDir)
+                                if (item.id != currentId) { file.delete(); return@launch }
+                                onlineSubtitle = file
+                                onlineSubtitleLanguage = language
+                                subtitlesDisabled = false
+                                subtitleChoice = PlaybackTrackChoice(language = language,
+                                    label = "${language.uppercase()} · SubtitleDB", mimeType = MimeTypes.APPLICATION_SUBRIP)
+                                val position = reliablePositionMs()
+                                player?.trackSelectionParameters = player!!.trackSelectionParameters.buildUpon()
+                                    .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+                                    .setPreferredTextLanguage(language).setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false).build()
+                                loadAttempt(attemptIdx, restorePos = position)
+                                Toast.makeText(this@PlayerActivity, "Sous-titres téléchargés et activés", Toast.LENGTH_SHORT).show()
+                            } catch (e: CancellationException) { throw e }
+                            catch (e: Exception) { Toast.makeText(this@PlayerActivity, e.message ?: "Téléchargement impossible", Toast.LENGTH_LONG).show() }
+                        }
+                    }
+                } catch (e: CancellationException) { throw e }
+                catch (e: Exception) { Toast.makeText(this@PlayerActivity, e.message ?: "Recherche indisponible", Toast.LENGTH_LONG).show() }
+            }
+        }
+    }
+
     private fun pickSubtitles() {
         val p = player ?: return
         val opts = tracksOf(C.TRACK_TYPE_TEXT)
@@ -2198,10 +2292,12 @@ class PlayerActivity : ThemedActivity() {
             findViewById(R.id.btnSubtitles),
             "Sous-titres",
             listOf(CompactChoiceMenu.Choice("Désactivés", "off")) +
-                opts.mapIndexed { index, option -> CompactChoiceMenu.Choice(option.label, index.toString()) },
+                opts.mapIndexed { index, option -> CompactChoiceMenu.Choice(option.label, index.toString()) } +
+                CompactChoiceMenu.Choice("Télécharger des sous-titres…", "download"),
             if (subtitlesDisabled) "off" else opts.indexOfFirst { it.selected }.toString(),
         ) { value ->
             if (player !== p) return@showPlayerChoices
+            if (value == "download") { findOnlineSubtitles(); return@showPlayerChoices }
             val o = if (value == "off") null else {
                 value.toIntOrNull()?.let(opts::getOrNull) ?: return@showPlayerChoices
             }
@@ -2831,6 +2927,8 @@ class PlayerActivity : ThemedActivity() {
         }
         ioScope.launch { previousApi.stopHls(previousId) }
 
+        onlineSubtitle = null
+        subtitleSearchJob?.cancel()
         item = next
         loadSkipChapters(serverUrl)
         audioFallbackLevel = 0
@@ -2853,6 +2951,8 @@ class PlayerActivity : ThemedActivity() {
         if (!markPreviousCompleted) {
             audioChoice = null
             subtitleChoice = null
+            onlineSubtitle = null
+            subtitleSearchJob?.cancel()
             subtitlesDisabled = PluxyApplication.subsMode(this) == "off"
             playbackSpeed = 1f
         }

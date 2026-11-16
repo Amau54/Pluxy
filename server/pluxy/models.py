@@ -187,6 +187,7 @@ class ClientCapabilities(BaseModel):
     supported_video_codecs: List[str] = Field(
         default_factory=lambda: ["h264", "hevc"]
     )
+    audio_passthrough: bool = False
     max_audio_channels: int = 6
     # Débit max que la liaison Wi-Fi du client tolère sans micro-coupures.
     max_bitrate_mbps: Optional[int] = None

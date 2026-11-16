@@ -65,7 +65,7 @@ def test_conversion_route_validates_time_profile_and_releases_failed_process(mon
     from pluxy.api import routes_stream
     slots=threading.BoundedSemaphore(1)
     original=PlaybackDecision(mode=PlaybackMode.DIRECT_PLAY,audio_action="transcode",target_audio_codec="aac")
-    state=SimpleNamespace(library=SimpleNamespace(get=lambda _:SimpleNamespace(path="film.mkv")),
+    state=SimpleNamespace(library=SimpleNamespace(get=lambda _:SimpleNamespace(path="film.mkv", container="mkv")),
         cfgm=SimpleNamespace(cfg=PluxyConfig()),remux_slots=slots,decision_for=lambda *_:(sample(),original))
     monkeypatch.setattr(routes_stream,"get_state",lambda _:state)
     monkeypatch.setattr(routes_stream,"available_profiles",lambda _:profiles())

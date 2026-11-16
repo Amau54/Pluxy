@@ -1,3 +1,11 @@
+## Android 1.7.56 · Windows 1.8.40
+
+- ISO : correction du mode audio compatible et prise en compte explicite du passthrough forcé.
+- Les langues des pistes Blu-ray sont récupérées depuis le disque et conservées dans le flux.
+- Accès aux titres du disque et aux chapitres depuis les options de lecture.
+- Téléchargement de sous-titres français ou anglais depuis le lecteur Android, via SubtitleDB sans compte.
+- Les sous-titres téléchargés suivent la position du film après une avance ou un retour.
+
 ## Android 1.7.54
 
 - Les réglages sont accessibles depuis l’écran de recherche de serveur, même sans connexion.

@@ -161,6 +161,7 @@ data class ClientCapabilities(
     @Json(name = "profile_id") val profileId: String? = null,
     @Json(name = "profile_name") val profileName: String? = null,
     @Json(name = "profile_revision") val profileRevision: Int = 0,
+    @Json(name = "audio_passthrough") val audioPassthrough: Boolean = false,
 )
 
 @JsonClass(generateAdapter = true)

@@ -161,7 +161,7 @@ object PluxyPlayerFactory {
         }
 
         val mediaSourceFactory = DefaultMediaSourceFactory(context)
-            .setDataSourceFactory(httpFactory)
+            .setDataSourceFactory(androidx.media3.datasource.DefaultDataSource.Factory(context, httpFactory))
             .setLoadErrorHandlingPolicy(loadErrorPolicy)
 
         // ---- 4. Sélecteur de pistes --------------------------------------- //

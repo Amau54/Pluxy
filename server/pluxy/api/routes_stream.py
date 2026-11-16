@@ -199,7 +199,7 @@ async def _playback_decision(request: Request, register: bool) -> PlaybackDecisi
         raise HTTPException(404, "Média introuvable")
 
     if it.container == "iso":
-        media, dec = await asyncio.to_thread(_disc_decision, st, it)
+        media, dec = await asyncio.to_thread(_disc_decision, st, it, caps)
     else:
         media = await asyncio.to_thread(_safe_probe_limited, st, it.path)
         dec = decide(media, caps, st.cfgm.cfg)
@@ -226,15 +226,28 @@ async def _playback_decision(request: Request, register: bool) -> PlaybackDecisi
     return public
 
 
-def _disc_decision(st, item):
+def _disc_decision(st, item, caps=None):
     if not st.probe_slots.acquire(blocking=False):
         raise HTTPException(503, "Trop d’analyses simultanées")
     try:
         media = probe(st.cfgm.cfg.ffmpeg.ffprobe_path, item.path, item.disc_title)
+        caps = caps or ClientCapabilities()
+        # The selected track need not be the first audio track on a multi-language disc.
+        unsupported = next((a for a in media.audios if a.codec not in caps.supported_audio_codecs
+                            or (a.channels or 2) > max(2, caps.max_audio_channels)), None)
+        if caps.audio_passthrough:
+            unsupported = None
+        # Disc video is always copied: video compatibility must never force AAC.
+        codecs = {c.lower() for c in caps.supported_audio_codecs}
+        target = next((c for c in ("eac3", "ac3", "aac") if c in codecs), "aac")
+        channels = min(max((a.channels or 2 for a in media.audios), default=2),
+                       max(2, caps.max_audio_channels), 6)
         return media, PlaybackDecision(mode=PlaybackMode.DIRECT_STREAM, media=media,
-            video_action="copy", audio_action="copy", container="mkv", delivery="direct",
+            video_action="copy", audio_action="transcode" if unsupported else "copy",
+            target_audio_codec=target if unsupported else None, target_audio_channels=channels,
+            container="mkv", delivery="direct",
             summary="Disque · qualité originale", severity="adaptation",
-            reasons=["Vidéo, audio et sous-titres copiés sans réencodage depuis le disque."])
+            reasons=["Vidéo originale ; le son suit les capacités de la sortie audio choisie."])
     except DiscError as exc:
         raise HTTPException(422, str(exc)) from exc
     finally:
@@ -392,11 +405,17 @@ def stream_remux(item_id: str, request: Request,
     # correcte) ; repli sur une décision par défaut si elle n'a pas été mémorisée.
     try:
         if Path(it.path).suffix.lower() == ".iso":
-            media, dec = _disc_decision(st, it)
+            cached = st.decision_for(playback_key(request), item_id)
+            media, dec = cached if cached else _disc_decision(st, it)
+            if copy_audio:
+                dec = dec.model_copy(update={"audio_action": "copy"})
             title = it.disc_title or inspect_disc(cfg.ffmpeg.ffprobe_path, it.path).default_title
             if media.duration > 0 and start_ms / 1000 >= media.duration:
                 raise HTTPException(416, "Position après la fin du titre")
-            cmd = remux_command(cfg.ffmpeg.ffmpeg_path, it.path, title, start_ms / 1000)
+            cmd = remux_command(cfg.ffmpeg.ffmpeg_path, it.path, title, start_ms / 1000,
+                                audio_codec=dec.target_audio_codec if dec.audio_action != "copy" else None,
+                                audio_channels=dec.target_audio_channels,
+                                audio_languages=[a.language for a in media.audios])
             proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
                                     stderr=subprocess.DEVNULL, creationflags=NO_WINDOW)
             return _RemuxResponse(proc, st.remux_slots, start_ms, strict=True)

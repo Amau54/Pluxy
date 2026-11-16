@@ -6,7 +6,7 @@
 
 Vos films, séries, photos et musique sur la TV.
 
-**Android 1.7.55 · Windows 1.8.39**
+**Android 1.7.56 · Windows 1.8.40**
 
 [Application Android](https://github.com/Amau54/Pluxy/releases/download/dev-latest/Pluxy-debug.apk)
 · [Application PC](https://github.com/Amau54/Pluxy/releases/download/pc-latest/Pluxy-Setup.exe)
@@ -52,13 +52,21 @@ Le lecteur ne réduit alors pas la résolution et n'accepte aucun réencodage vi
 Le HDR dépend aussi de l'écran et de son décodeur.
 
 Les ISO Blu-ray non protégés peuvent être ouverts depuis le serveur PC avec le
-lecteur Android. Un menu propose les titres repérés sur le disque. Vidéo, audio
-et sous-titres sont copiés vers un flux Matroska sans réencodage ; la reprise est
-conservée par titre. Mettez à jour les deux applications pour utiliser cette lecture.
-Cette première prise en charge ne reproduit pas les menus Java du disque : le
-moteur énumère les playlists Blu-ray d’au moins trois minutes et ouvre le titre 1
-des DVD. Les petits bonus, la navigation complète DVD et les chapitres Blu-ray
-ne sont pas encore proposés. Dolby Vision et le passthrough restent dépendants du matériel.
+lecteur Android. Le menu **Contenu du disque** permet de changer de titre ;
+**Chapitres** donne accès aux repères disponibles. La vidéo conserve sa qualité
+originale. Les pistes audio restent sélectionnables, avec priorité à la langue
+choisie. Le mode compatible adapte le son ; le passthrough forcé le conserve.
+La reprise est mémorisée par titre. Mettez à jour le serveur et le lecteur ensemble.
+Les menus Java du disque ne sont pas reproduits. Les playlists Blu-ray de moins
+de trois minutes et la navigation complète DVD ne sont pas encore prises en charge.
+Dolby Vision et le passthrough dépendent aussi du matériel.
+
+Dans **Sous-titres → Télécharger des sous-titres**, choisissez la langue puis la
+version correspondant au film ou à l’épisode. La recherche utilise SubtitleDB,
+sans compte. Le titre ou son identifiant est transmis au service à votre demande ;
+aucun fichier vidéo n’est envoyé. La disponibilité et la synchronisation dépendent
+des contributions du service. Les fichiers téléchargés sont conservés dans le cache
+local du lecteur Android.
 
 Pour alléger un fichier, choisissez **Mode de lecture → Conversion**, puis
 **Qualité de conversion**. Automatique commence au meilleur palier accepté par

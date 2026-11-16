@@ -135,15 +135,38 @@ def probe_title(ffprobe: str, path: str, title: str | None = None) -> tuple[str,
     # libbluray's playlist timeline is authoritative for navigation.
     if disc.kind == "bluray" and selected.duration > 0:
         data = {**data, "format": {**data.get("format", {}), "duration": str(selected.duration)}}
+    from .disc_metadata import playlist_metadata
+    languages, chapters = playlist_metadata(ffprobe, path, chosen)
+    if languages or chapters:
+        streams = []
+        for stream in data.get("streams", []):
+            try:
+                language = languages.get(int(str(stream.get("id", "-1")), 0))
+            except ValueError:
+                language = None
+            streams.append({**stream, "tags": {**stream.get("tags", {}), "language": language}} if language else stream)
+        data = {**data, "streams": streams, "chapters": chapters or data.get("chapters", [])}
     return chosen, data
 
 
-def remux_command(ffmpeg: str, path: str, title: str, start: float) -> list[str]:
-    # No decoder, encoder, scale or tone mapping: every video/audio packet is copied.
+def remux_command(ffmpeg: str, path: str, title: str, start: float,
+                  audio_codec: str | None = None, audio_channels: int = 2,
+                  audio_languages: list[str | None] | None = None) -> list[str]:
+    # Video is always copied; only incompatible audio is encoded.
     seek = ["-ss", f"{start:.3f}"] if start > 0 else []
+    audio = []
+    if audio_codec is not None:
+        if audio_codec not in {"aac", "ac3", "eac3"}:
+            raise DiscError("Format audio de conversion invalide")
+        audio = ["-c:a", audio_codec, "-ac", str(max(1, min(audio_channels, 6))),
+                 "-b:a", "192k" if audio_channels <= 2 else "640k"]
+    metadata = []
+    for index, language in enumerate(audio_languages or []):
+        if language and re.fullmatch(r"[a-z]{3}", language):
+            metadata += [f"-metadata:s:a:{index}", f"language={language}"]
     return [ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin", *seek,
             *input_arguments(path, title), "-map", "0:v", "-map", "0:a?", "-map", "0:s?",
-            "-c", "copy", "-map_metadata", "0", "-map_chapters", "0",
+            "-c", "copy", *audio, "-map_metadata", "0", *metadata, "-map_chapters", "0",
             # Some Blu-rays end with an untimed HEVC end-of-sequence packet.
             # Repair only absent timestamps; encoded payload and valid timings stay intact.
             "-bsf:v", r"setts=pts=if(eq(PTS\,NOPTS)\,PREV_OUTPTS+DURATION\,PTS):dts=if(eq(DTS\,NOPTS)\,PREV_OUTDTS+DURATION\,DTS)",
