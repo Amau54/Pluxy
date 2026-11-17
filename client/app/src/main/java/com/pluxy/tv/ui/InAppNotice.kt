@@ -9,7 +9,6 @@ import android.view.Gravity
 import android.view.View
 import android.widget.FrameLayout
 import android.widget.TextView
-import androidx.core.graphics.ColorUtils
 import com.pluxy.tv.R
 import java.util.WeakHashMap
 
@@ -41,8 +40,8 @@ object InAppNotice {
                     accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
                     background = GradientDrawable().apply {
                         cornerRadius = dp(14).toFloat()
-                        setColor(ColorUtils.setAlphaComponent(color(R.attr.pluxyBgElev), 242))
-                        setStroke(dp(1).coerceAtLeast(1), ColorUtils.setAlphaComponent(color(R.attr.pluxyAccent), 80))
+                        setColor(activity.getColor(R.color.menu_surface))
+                        setStroke(dp(1).coerceAtLeast(1), activity.getColor(R.color.menu_border))
                     }
                     elevation = dp(8).toFloat()
                 }

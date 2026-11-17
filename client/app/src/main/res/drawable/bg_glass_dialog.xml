@@ -1,10 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item>
-        <shape android:shape="rectangle">
-            <solid android:color="?attr/pluxyBgElev" />
-            <corners android:radius="@dimen/radius_lg" />
-        </shape>
-    </item>
-    <item android:drawable="@drawable/bg_glass_panel" />
-</layer-list>
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/menu_surface" />
+    <corners android:radius="@dimen/radius_lg" />
+    <stroke android:width="0.5dp" android:color="@color/menu_border" />
+</shape>

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="menu_surface">#FF1B1C20</color>
+    <color name="menu_focus">#FF393B42</color>
+    <color name="menu_selected">#FF282A30</color>
+    <color name="menu_border">#30FFFFFF</color>
+    <color name="menu_text">#F4F4F6</color>
+    <color name="menu_text_secondary">#BCC0C9</color>
+</resources>
+

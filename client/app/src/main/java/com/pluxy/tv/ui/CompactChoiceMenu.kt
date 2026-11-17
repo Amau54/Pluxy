@@ -23,7 +23,6 @@ import android.widget.ScrollView
 import android.widget.TextView
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
-import androidx.core.graphics.ColorUtils
 import com.pluxy.tv.R
 import kotlin.math.roundToInt
 
@@ -55,35 +54,32 @@ object CompactChoiceMenu {
         fun dp(value: Int) = (value * density).roundToInt()
         val rowHeight = dp(if (compact && television) 40 else 48)
         val gap = dp(if (compact) 4 else 6)
-        val primary = activity.pluxyColor(R.color.text_primary)
-        val secondary = activity.pluxyColor(R.color.text_secondary)
+        val primary = activity.getColor(R.color.menu_text)
+        val secondary = activity.getColor(R.color.menu_text_secondary)
         val accent = activity.pluxyColor(R.color.accent)
 
-        fun shape(top: Int, bottom: Int, border: Int = Color.TRANSPARENT) =
-            GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(top, bottom)).apply {
-                cornerRadius = activity.resources.getDimension(R.dimen.radius_md)
-                setStroke(dp(1), border)
-            }
+        fun shape(fill: Int, border: Int = Color.TRANSPARENT) = GradientDrawable().apply {
+            setColor(fill)
+            cornerRadius = activity.resources.getDimension(R.dimen.radius_md)
+            setStroke(dp(1), border)
+        }
 
         fun rowBackground() = StateListDrawable().apply {
             val focused = shape(
-                activity.pluxyColor(R.color.glass_focus_top),
-                activity.pluxyColor(R.color.glass_focus_bottom),
+                activity.getColor(R.color.menu_focus),
                 activity.pluxyColor(R.color.border_focus),
             )
             addState(intArrayOf(android.R.attr.state_focused), focused)
             addState(
                 intArrayOf(android.R.attr.state_pressed),
                 shape(
-                    activity.pluxyColor(R.color.glass_focus_top),
-                    activity.pluxyColor(R.color.glass_focus_bottom),
+                    activity.getColor(R.color.menu_focus),
                 ),
             )
             addState(
                 intArrayOf(android.R.attr.state_selected),
                 shape(
-                    activity.pluxyColor(R.color.surface_variant),
-                    activity.pluxyColor(R.color.surface),
+                    activity.getColor(R.color.menu_selected),
                 ),
             )
             addState(intArrayOf(), ColorDrawable(Color.TRANSPARENT))
@@ -93,9 +89,8 @@ object CompactChoiceMenu {
             orientation = LinearLayout.VERTICAL
             setPadding(gap, gap, gap, gap)
             background = shape(
-                ColorUtils.setAlphaComponent(activity.pluxyColor(R.color.glass_top), 255),
-                ColorUtils.setAlphaComponent(activity.pluxyColor(R.color.glass_bottom), 255),
-                activity.pluxyColor(R.color.border),
+                activity.getColor(R.color.menu_surface),
+                activity.getColor(R.color.menu_border),
             ).apply { cornerRadius = activity.resources.getDimension(R.dimen.radius_lg) }
             clipToOutline = true
         }
