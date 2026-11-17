@@ -4,21 +4,21 @@
     <item android:state_selected="true" android:state_focused="true">
         <shape android:shape="rectangle">
             <corners android:radius="@dimen/radius_md" />
-            <gradient android:angle="315" android:startColor="?attr/pluxyGlassFocusTop" android:endColor="?attr/pluxyGlassFocusBottom" />
+            <solid android:color="?attr/pluxyGlassFocusTop" />
             <stroke android:width="2dp" android:color="?attr/pluxyBorderFocus" />
         </shape>
     </item>
     <item android:state_selected="true">
         <shape android:shape="rectangle">
             <corners android:radius="@dimen/radius_md" />
-            <gradient android:angle="315" android:startColor="?attr/pluxyGlassFocusTop" android:endColor="?attr/pluxyGlassFocusBottom" />
+            <solid android:color="?attr/pluxyGlassFocusTop" />
             <stroke android:width="0.5dp" android:color="?attr/pluxyGlowEdge" />
         </shape>
     </item>
     <item android:state_focused="true">
         <shape android:shape="rectangle">
             <corners android:radius="@dimen/radius_md" />
-            <gradient android:angle="315" android:startColor="?attr/pluxyGlassFocusTop" android:endColor="?attr/pluxyGlassFocusBottom" />
+            <solid android:color="?attr/pluxyGlassFocusTop" />
             <stroke android:width="2dp" android:color="?attr/pluxyBorderFocus" />
         </shape>
     </item>

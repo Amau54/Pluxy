@@ -1,3 +1,8 @@
+## Android 1.7.58
+
+- Correction des plantages liés aux dégradés sur les téléviseurs Android 8, vérifiée sur Philips 55OLED803.
+- Sauts avant/arrière de 5 secondes et paliers d’accélération atteints plus rapidement lorsque la touche est maintenue.
+
 ## Android 1.7.57
 
 - Le fond sombre des commandes est limité au panneau du bas, sans dégradé sur toute la vidéo.

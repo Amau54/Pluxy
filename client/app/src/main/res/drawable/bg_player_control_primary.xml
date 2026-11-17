@@ -14,7 +14,7 @@
     </item>
     <item>
         <shape android:shape="oval">
-            <gradient android:angle="315" android:startColor="?attr/pluxyAccent" android:endColor="?attr/pluxyAccentDim" />
+            <solid android:color="?attr/pluxyAccent" />
         </shape>
     </item>
 </selector>

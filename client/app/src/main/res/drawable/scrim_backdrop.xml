@@ -4,20 +4,12 @@
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item>
         <shape android:shape="rectangle">
-            <gradient
-                android:angle="90"
-                android:startColor="?attr/pluxyBgFull"
-                android:centerColor="#990B0E14"
-                android:endColor="?attr/pluxyBgTrans" />
+            <solid android:color="?attr/pluxyBgFull" />
         </shape>
     </item>
     <item>
         <shape android:shape="rectangle">
-            <gradient
-                android:angle="0"
-                android:startColor="?attr/pluxyBgFull"
-                android:centerColor="#660B0E14"
-                android:endColor="?attr/pluxyBgTrans" />
+            <solid android:color="?attr/pluxyBgFull" />
         </shape>
     </item>
 </layer-list>

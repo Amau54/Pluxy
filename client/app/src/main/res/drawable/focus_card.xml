@@ -3,14 +3,14 @@
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:state_focused="true">
         <shape android:shape="rectangle">
-            <gradient android:angle="315" android:startColor="?attr/pluxyGlassFocusTop" android:endColor="?attr/pluxyGlassFocusBottom" />
+            <solid android:color="?attr/pluxyGlassFocusTop" />
             <stroke android:width="2dp" android:color="?attr/pluxyBorderFocus" />
             <corners android:radius="@dimen/radius_lg" />
         </shape>
     </item>
     <item>
         <shape android:shape="rectangle">
-            <gradient android:angle="315" android:startColor="?attr/pluxyGlassTop" android:endColor="?attr/pluxyGlassBottom" />
+            <solid android:color="?attr/pluxyGlassTop" />
             <stroke android:width="0.5dp" android:color="?attr/pluxyBorderSubtle" />
             <corners android:radius="@dimen/radius_lg" />
         </shape>

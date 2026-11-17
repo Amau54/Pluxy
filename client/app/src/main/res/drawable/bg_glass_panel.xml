@@ -3,8 +3,7 @@
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item>
         <shape android:shape="rectangle">
-            <gradient android:angle="315"
-                android:startColor="?attr/pluxyGlassTop" android:endColor="?attr/pluxyGlassBottom" />
+            <solid android:color="?attr/pluxyGlassTop" />
             <corners android:radius="@dimen/radius_lg" />
             <stroke android:width="0.5dp" android:color="?attr/pluxyBorder" />
         </shape>
@@ -12,8 +11,7 @@
     <item android:height="1dp" android:gravity="top"
         android:left="18dp" android:right="18dp">
         <shape android:shape="rectangle">
-            <gradient android:angle="0" android:startColor="?attr/pluxyGlassGlintTrans"
-                android:centerColor="?attr/pluxyGlassGlint" android:endColor="?attr/pluxyGlassGlintTrans" />
+            <solid android:color="?attr/pluxyGlassGlintTrans" />
         </shape>
     </item>
 </layer-list>

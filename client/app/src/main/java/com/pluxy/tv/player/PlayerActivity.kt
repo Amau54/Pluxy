@@ -824,11 +824,11 @@ class PlayerActivity : ThemedActivity() {
 
         playPauseButton.setOnClickListener { togglePlayPause() }
         findViewById<ImageButton>(R.id.btnRewind).setOnClickListener {
-            goToAbsolute(reliablePositionMs() - 10_000L)
+            goToAbsolute(reliablePositionMs() - SeekAcceleration.TAP_MS)
             showControls()
         }
         findViewById<ImageButton>(R.id.btnForward).setOnClickListener {
-            goToAbsolute(reliablePositionMs() + 10_000L)
+            goToAbsolute(reliablePositionMs() + SeekAcceleration.TAP_MS)
             showControls()
         }
         findViewById<ImageButton>(R.id.btnRestart).apply {
@@ -1254,13 +1254,13 @@ class PlayerActivity : ThemedActivity() {
                 }
 
                 override fun onRewind() {
-                    goToAbsolute(reliablePositionMs() - 10_000L)
+                    goToAbsolute(reliablePositionMs() - SeekAcceleration.TAP_MS)
                     showControls()
                     updateMediaSessionPlaybackState()
                 }
 
                 override fun onFastForward() {
-                    goToAbsolute(reliablePositionMs() + 10_000L)
+                    goToAbsolute(reliablePositionMs() + SeekAcceleration.TAP_MS)
                     showControls()
                     updateMediaSessionPlaybackState()
                 }

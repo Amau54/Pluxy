@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Verre neutre au repos, contour chaud contrasté pour la télécommande. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true">
+        <shape android:shape="rectangle">
+            <gradient android:angle="315" android:startColor="?attr/pluxyGlassFocusTop" android:endColor="?attr/pluxyGlassFocusBottom" />
+            <stroke android:width="2dp" android:color="?attr/pluxyBorderFocus" />
+            <corners android:radius="@dimen/radius_lg" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <gradient android:angle="315" android:startColor="?attr/pluxyGlassTop" android:endColor="?attr/pluxyGlassBottom" />
+            <stroke android:width="0.5dp" android:color="?attr/pluxyBorderSubtle" />
+            <corners android:radius="@dimen/radius_lg" />
+        </shape>
+    </item>
+</selector>

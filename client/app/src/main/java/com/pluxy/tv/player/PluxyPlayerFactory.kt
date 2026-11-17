@@ -194,9 +194,9 @@ object PluxyPlayerFactory {
             .setLoadControl(AdaptiveLoadControl(loadControl, runtimeBuffer, sourceBitrateBps))
             .setMediaSourceFactory(mediaSourceFactory)
             .setTrackSelector(trackSelector)
-            // Saut avant/arrière de 10 s (boutons natifs du PlayerView).
-            .setSeekBackIncrementMs(10_000)
-            .setSeekForwardIncrementMs(10_000)
+            // Saut avant/arrière de 5 s (boutons natifs du PlayerView).
+            .setSeekBackIncrementMs(SeekAcceleration.TAP_MS)
+            .setSeekForwardIncrementMs(SeekAcceleration.TAP_MS)
             // Surdimensionne le back-buffer audio pour éviter les coupures son ARC.
             .setReleaseTimeoutMs(5000)
             .build()
