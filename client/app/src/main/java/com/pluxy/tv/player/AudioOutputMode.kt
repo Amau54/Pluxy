@@ -54,4 +54,8 @@ object AudioOutputPolicy {
     fun canAdapt(strategy: PlaybackStrategy, mode: AudioOutputMode, available: Boolean, level: Int, mime: String?): Boolean =
         strategy != PlaybackStrategy.COMPATIBILITY && mode == AudioOutputMode.AUTO && available && level < 2 &&
             mime?.startsWith("audio/") == true
+
+    fun canRetryPassthroughRoute(mode: AudioOutputMode, alreadyRetried: Boolean, mime: String?, outputFailure: Boolean): Boolean =
+        mode == AudioOutputMode.PASSTHROUGH && !alreadyRetried && outputFailure &&
+            codecForMime(mime) in passthroughCodecs
 }

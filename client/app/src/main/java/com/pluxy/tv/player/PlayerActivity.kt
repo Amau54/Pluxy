@@ -143,6 +143,7 @@ class PlayerActivity : ThemedActivity() {
     private var audioFallbackLevel = 0
     private var failedAudioCodec: String? = null
     private var audioAdaptationPending = false
+    private var passthroughRouteRetried = false
     private var startFromBeginning = false
     private var autoResume = false
     private var networkConstraintRecorded = false
@@ -1626,6 +1627,7 @@ class PlayerActivity : ThemedActivity() {
             AudioOutputMode.entries.map { CompactChoiceMenu.Choice(it.title, it.key, it.description) },
             PluxyApplication.audioOutputMode(this)) { value ->
             PluxyApplication.setAudioOutputMode(this, value)
+            passthroughRouteRetried = false
             audioFallbackLevel = 0
             failedAudioCodec = null
             audioChoice = audioChoice?.copy(mimeType = null, channels = -1, trackId = null)
@@ -1935,6 +1937,7 @@ class PlayerActivity : ThemedActivity() {
             bufferForPlaybackAfterRebufferMs = buffer!!.bufferForPlaybackAfterRebufferMs.coerceAtMost(2_500),
         ) else buffer!!
         val exo = PluxyPlayerFactory.build(this, playbackBuffer, api.baseUrl, api.sessionId,
+            preferDigitalAudioDevice = passthroughRouteRetried,
             sourceBitrateBps = if (isTranscode) 0L else (sourceBitrateMbps() * 1_000_000).toLong()) {
             currentBytes.addAndGet(it.toLong())
         }
@@ -2591,10 +2594,13 @@ class PlayerActivity : ThemedActivity() {
             Logger.log("error", "renderer=$rendererMime detail=${error.cause?.message?.take(180)}")
             learnDeterministicFormatFailure(error)
             if (audioAdaptationPending) return
+            if (tryPassthroughRouteRecovery(error, rendererMime)) return
             if (tryAudioAdaptation(rendererMime)) return
             if (rendererMime?.startsWith("audio/") == true) {
-                showTerminalPlaybackError("La lecture du son a échoué sur cet appareil ou sa sortie HDMI. " +
-                    "Changer la résolution vidéo ne corrige pas ce problème. Essayez un autre lecteur ou une autre piste audio.", audioFailure = true)
+                val message = if (AudioOutputMode.fromKey(PluxyApplication.audioOutputMode(this@PlayerActivity)) == AudioOutputMode.PASSTHROUGH)
+                    "La sortie audio refuse ce format en passthrough. Essayez une autre piste audio, Automatique ou Audio compatible. La qualité vidéo originale peut être conservée."
+                else "La lecture du son a échoué sur cet appareil ou sa sortie HDMI. Essayez une autre piste audio ou Audio compatible."
+                showTerminalPlaybackError(message, audioFailure = true)
                 return
             }
             val httpError = generateSequence(error as Throwable) { it.cause }
@@ -2638,6 +2644,32 @@ class PlayerActivity : ThemedActivity() {
                 showTerminalPlaybackError(getString(R.string.player_stream_error))
             }
         }
+    }
+
+    private fun tryPassthroughRouteRecovery(error: PlaybackException, mime: String?): Boolean {
+        if (!AudioOutputPolicy.canRetryPassthroughRoute(
+                AudioOutputMode.fromKey(PluxyApplication.audioOutputMode(this)),
+                passthroughRouteRetried, mime,
+                error.errorCode == PlaybackException.ERROR_CODE_AUDIO_TRACK_INIT_FAILED ||
+                    error.errorCode == PlaybackException.ERROR_CODE_AUDIO_TRACK_WRITE_FAILED,
+            )) return false
+        val owner = player ?: return false
+        val ownerItem = item.id
+        val ownerApi = api
+        passthroughRouteRetried = true
+        audioAdaptationPending = true
+        savedPositionMs = reliablePositionMs()
+        savedPlayWhenReady = owner.playWhenReady
+        setLoadingVisible(true)
+        setStatus("Rétablissement de la sortie audio…")
+        Logger.log("audio", "reprise passthrough originale sur sortie numérique, mime=$mime")
+        handler.post {
+            audioAdaptationPending = false
+            if (activityStarted && !isFinishing && !isDestroyed &&
+                player === owner && item.id == ownerItem && api === ownerApi
+            ) reprepareForStrategy(activeStrategy)
+        }
+        return true
     }
 
     private fun tryAudioAdaptation(mimeType: String?): Boolean {
@@ -2942,6 +2974,7 @@ class PlayerActivity : ThemedActivity() {
         onlineSubtitle = null
         subtitleSearchJob?.cancel()
         item = next
+        passthroughRouteRetried = false
         loadSkipChapters(serverUrl)
         audioFallbackLevel = 0
         failedAudioCodec = null

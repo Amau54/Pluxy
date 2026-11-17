@@ -6,6 +6,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.pm.ApplicationInfo
 import android.net.Uri
 import android.view.View
 import java.text.Collator
@@ -20,25 +21,39 @@ object TrailerPlayer {
 
     private data class Player(val packageName: String, val label: String, val intent: Intent)
 
+    private fun available(context: Context, info: android.content.pm.ActivityInfo): Boolean {
+        val manager = context.packageManager
+        // Android TV registers BrowserStub for web links even with no browser.
+        // It opens a blocked/unsupported activity instead of playing the trailer.
+        if (info.packageName == "com.google.android.tv.frameworkpackagestubs" ||
+            info.packageName == context.packageName || !info.exported || !info.enabled ||
+            !info.applicationInfo.enabled ||
+            info.applicationInfo.flags and ApplicationInfo.FLAG_SUSPENDED != 0) return false
+        fun enabled(setting: Int) = setting == PackageManager.COMPONENT_ENABLED_STATE_DEFAULT ||
+            setting == PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+        return runCatching {
+            enabled(manager.getApplicationEnabledSetting(info.packageName)) &&
+                enabled(manager.getComponentEnabledSetting(ComponentName(info.packageName, info.name))) &&
+                (info.permission == null || context.checkSelfPermission(info.permission) == PackageManager.PERMISSION_GRANTED)
+        }.getOrDefault(false)
+    }
+
     private fun players(context: Context, links: TrailerLinks): List<Player> {
         val manager = context.packageManager
         val results = linkedMapOf<String, Player>()
         val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse(links.web)).addCategory(Intent.CATEGORY_BROWSABLE)
         val flags = PackageManager.MATCH_DEFAULT_ONLY or PackageManager.MATCH_ALL
-        fun available(info: android.content.pm.ActivityInfo) = info.exported && info.enabled &&
-            info.applicationInfo.enabled && info.packageName != context.packageName &&
-            (info.permission == null || context.checkSelfPermission(info.permission) == PackageManager.PERMISSION_GRANTED)
         // Les liens vnd.youtube découvrent aussi les lecteurs sans lien web approuvé par Android.
         for (url in listOf(links.web, links.video)) {
             val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).addCategory(Intent.CATEGORY_BROWSABLE)
             val matches = manager.queryIntentActivities(intent, flags)
             for (match in matches) {
                 val info = match.activityInfo ?: continue
-                if (!available(info)) continue
+                if (!available(context, info)) continue
                 if (info.packageName in results) continue
                 // Une requête limitée à l'application évite le filtrage des domaines non approuvés.
                 val webActivity = manager.queryIntentActivities(Intent(webIntent).setPackage(info.packageName), flags)
-                    .firstOrNull { it.activityInfo?.let(::available) == true }?.activityInfo
+                    .firstOrNull { it.activityInfo?.let { activity -> available(context, activity) } == true }?.activityInfo
                 val target = webActivity ?: info
                 results[info.packageName] = Player(
                     info.packageName,
@@ -117,8 +132,15 @@ object TrailerPlayer {
 
     private fun launch(activity: Activity, anchor: View, links: TrailerLinks, player: Player) {
         if (activity.isFinishing || activity.isDestroyed) return
+        // The selected app may have been disabled while the choice menu was open.
+        val current = players(activity, links).firstOrNull { it.packageName == player.packageName }
+        if (current == null) {
+            if (selected(activity) == player.packageName) prefs(activity).edit().remove("package").apply()
+            chooseForPlayback(activity, anchor, links)
+            return
+        }
         try {
-            activity.startActivity(player.intent)
+            activity.startActivity(current.intent)
             if (!alwaysAsk(activity)) prefs(activity).edit().putString("package", player.packageName).apply()
         } catch (_: ActivityNotFoundException) {
             unavailable(activity, anchor, links, player)

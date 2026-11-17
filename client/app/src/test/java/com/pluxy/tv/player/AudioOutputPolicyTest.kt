@@ -61,4 +61,16 @@ class AudioOutputPolicyTest {
     @Test fun unknownSettingsRemainAutomatic() {
         assertEquals(AudioOutputMode.AUTO, AudioOutputMode.fromKey("unknown"))
     }
+
+    @Test fun passthroughRouteRecoveryIsBoundedAndDoesNotTranscode() {
+        assertTrue(AudioOutputPolicy.canRetryPassthroughRoute(AudioOutputMode.PASSTHROUGH, false, "audio/vnd.dts", true))
+        assertFalse(AudioOutputPolicy.canRetryPassthroughRoute(AudioOutputMode.PASSTHROUGH, true, "audio/vnd.dts", true))
+        assertFalse(AudioOutputPolicy.canRetryPassthroughRoute(AudioOutputMode.PASSTHROUGH, false, "audio/vnd.dts", false))
+        assertFalse(AudioOutputPolicy.canRetryPassthroughRoute(AudioOutputMode.AUTO, false, "audio/vnd.dts", true))
+        assertFalse(AudioOutputPolicy.canRetryPassthroughRoute(AudioOutputMode.COMPATIBLE, false, "audio/mp4a-latm", true))
+        assertFalse(AudioOutputPolicy.canRetryPassthroughRoute(AudioOutputMode.PASSTHROUGH, false, "video/hevc", true))
+        val caps = AudioOutputPolicy.capabilities(detected(), AudioOutputMode.PASSTHROUGH)
+        assertTrue(caps.audioPassthrough)
+        assertTrue(caps.supportedAudioCodecs.contains("dts"))
+    }
 }

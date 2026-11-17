@@ -42,6 +42,7 @@ object PluxyPlayerFactory {
         baseUrl: String = PluxyApplication.serverBaseUrl(context),
         sessionId: String? = null,
         sourceBitrateBps: Long = 0L,
+        preferDigitalAudioDevice: Boolean = false,
         onBytesTransferred: ((Int) -> Unit)? = null,
     ): ExoPlayer {
         // ---- 1. LoadControl : tampon adapté à la mémoire réelle ------------ //
@@ -99,8 +100,11 @@ object PluxyPlayerFactory {
                         }
                         val digital = manager?.getDevices(android.media.AudioManager.GET_DEVICES_OUTPUTS)
                             ?.filter { it.type in priorities }?.minByOrNull { priorities.indexOf(it.type) }
-                        if (digital != null) sink.setPreferredDevice(digital)
-                        com.pluxy.tv.util.Logger.log("audio", "passthrough statique Dolby/DTS, sortie préférée=${digital?.type ?: "système"}")
+                        // An ARC device can be enumerated without being a usable direct
+                        // AudioTrack route (notably on older TV firmware). Let Android
+                        // route first; explicit routing is a bounded recovery attempt.
+                        if (preferDigitalAudioDevice && digital != null) sink.setPreferredDevice(digital)
+                        com.pluxy.tv.util.Logger.log("audio", "passthrough original, routage=${if (preferDigitalAudioDevice) digital?.type ?: "système" else "système"}")
                     }
             }
         }
